@@ -10,3 +10,5 @@ wheels/
 .venv
 
 copilot-sdk_docs/
+
+.env.*

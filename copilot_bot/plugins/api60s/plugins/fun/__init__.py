@@ -53,7 +53,7 @@ async def handle_luck(event: Event):
     response = requests.get(
         f"{cfg.api60s_base_url}/v2/luck",
     )
-    user_luck = Luck.model_validate(response.json())
+    user_luck = Luck.model_validate(response.json()["data"])
 
     UserDailyLuckCache.set_user_luck_cache(event.get_user_id(), user_luck)
     await luck.finish(str(user_luck))
