@@ -18,7 +18,12 @@ __plugin_meta__ = PluginMetadata(
 cfg = get_plugin_config(Config)
 
 
-daily60s = on_command("每天60秒读懂世界", priority=2, aliases={"60s", "60秒", "日报"}, block=True)
+daily60s = on_command(
+    "每天60秒读懂世界",
+    priority=2,
+    aliases={"60s", "60秒", "日报"},
+    block=True,
+)
 
 
 @daily60s.handle()
@@ -37,3 +42,20 @@ async def handle_60s_onebot(bot: OneBot):
         params={"encoding": "image"},
     )
     await daily60s.finish(OneBotMessageSegment.image(response.content))
+
+
+epic = on_command(
+    "Epic",
+    aliases={"epic", "epic游戏"},
+    priority=2,
+    block=True,
+)
+
+
+@epic.handle()
+async def handle_epic():
+    response = requests.get(
+        f"{cfg.api60s_base_url}/v2/epic",
+        params={"encoding": "text"},
+    )
+    await epic.finish(response.text)

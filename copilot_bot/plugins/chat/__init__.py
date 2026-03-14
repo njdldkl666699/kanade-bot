@@ -1,5 +1,6 @@
 from nonebot import on_command, on_message
 from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
@@ -14,12 +15,21 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
-chat = on_message(rule=to_me(), priority=100000, block=True)
+### 聊天命令
+chat = on_message(
+    rule=to_me(),
+    priority=100000,
+    block=True,
+)
 
 
 @chat.handle()
-async def handle_chat(event: Event, message: str = EventPlainText()):
-    response = await copilot.send_and_wait(event.get_session_id(), {"prompt": message})
+async def handle_chat(event: Event, prompt: str = EventPlainText()):
+    # OneBot 消息事件，添加发送者昵称到提示词中
+    if isinstance(event, OneBotMessageEvent):
+        prompt = f"{event.sender.nickname}说：{prompt}"
+
+    response = await copilot.send_and_wait(event.get_session_id(), {"prompt": prompt})
     if response:
         await chat.finish(response.data.content)
     else:
@@ -30,19 +40,29 @@ def not_to_me(to_me: bool = EventToMe()):
     return not to_me
 
 
-chat_monitor = on_message(rule=not_to_me, priority=1, block=False)
+### 聊天监听命令
+# 用于监听非@消息并将其添加到会话缓冲区，以便在下一次@消息时一起发送给模型
+chat_monitor = on_message(
+    rule=not_to_me,
+    priority=1,
+    block=False,
+)
 
 
 @chat_monitor.handle()
-async def handle_chat_monitor(event: Event, message: str = EventPlainText()):
+async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
+    # OneBot 消息事件，添加发送者昵称到提示词中
+    if isinstance(event, OneBotMessageEvent):
+        prompt = f"{event.sender.nickname}说：{prompt}"
+
     # 将用户消息添加到会话缓冲区
-    await copilot.add_message(event.get_session_id(), message)
+    await copilot.add_message(event.get_session_id(), prompt)
 
 
+### 重置会话命令
 chat_reset = on_command(
-    "重置对话",
-    rule=to_me(),
-    aliases={"chat_reset", "chatreset", "重置会话"},
+    "重置会话",
+    aliases={"chat_reset", "chatreset", "重置对话"},
     priority=2,
     block=True,
 )

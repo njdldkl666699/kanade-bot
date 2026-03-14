@@ -35,7 +35,7 @@ class CopilotSessionManager:
         }
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
-        self.__sessions_message_buffer: dict[str, list[str]] = {}
+        self.__sessions_prompt_buffer: dict[str, list[str]] = {}
 
     async def send_and_wait(
         self, session_id: str, options: MessageOptions, timeout: float | None = None
@@ -46,23 +46,23 @@ class CopilotSessionManager:
             self.__sessions[session_id] = await self.__client.create_session(self.__config)
 
         # 将消息缓冲区中的消息添加到选项中
-        buffered_messages = self.__sessions_message_buffer.get(session_id, [])
+        buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
         if buffered_messages:
             options["prompt"] = (
                 f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
                 + f"$下面是这次的用户消息：\n{options['prompt']}"
             )
             # 清空消息缓冲区
-            self.__sessions_message_buffer[session_id] = []
+            self.__sessions_prompt_buffer[session_id] = []
 
         return await self.__sessions[session_id].send_and_wait(options, timeout)
 
-    async def add_message(self, session_id: str, message: str):
+    async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
-        if session_id not in self.__sessions_message_buffer:
-            self.__sessions_message_buffer[session_id] = []
+        if session_id not in self.__sessions_prompt_buffer:
+            self.__sessions_prompt_buffer[session_id] = []
 
-        self.__sessions_message_buffer[session_id].append(message)
+        self.__sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """重置会话"""
@@ -71,8 +71,8 @@ class CopilotSessionManager:
             await self.__sessions[session_id].disconnect()
             del self.__sessions[session_id]
         # 清空消息缓冲区
-        if session_id in self.__sessions_message_buffer:
-            del self.__sessions_message_buffer[session_id]
+        if session_id in self.__sessions_prompt_buffer:
+            del self.__sessions_prompt_buffer[session_id]
 
     async def __del__(self):
         if self.__sessions:
