@@ -5,7 +5,6 @@ from nonebot.adapters.console.message import MessageSegment as ConsoleMessageSeg
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11.message import MessageSegment as OneBotMessageSegment
 from nonebot.plugin import PluginMetadata
-from nonebot.rule import to_me
 
 from .config import Config
 
@@ -16,18 +15,16 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
-config = get_plugin_config(Config)
+cfg = get_plugin_config(Config)
 
 
-daily60s = on_command(
-    "每天60秒读懂世界", rule=to_me(), priority=1, aliases={"60s", "60秒"}, block=True
-)
+daily60s = on_command("每天60秒读懂世界", priority=2, aliases={"60s", "60秒", "日报"}, block=True)
 
 
 @daily60s.handle()
 async def handle_60s_console(bot: ConsoleBot):
     response = requests.get(
-        f"{config.api60s_base_url}/v2/60s",  # type: ignore
+        f"{cfg.api60s_base_url}/v2/60s",
         params={"encoding": "markdown"},
     )
     await daily60s.finish(ConsoleMessageSegment.markdown(response.text))
@@ -36,7 +33,7 @@ async def handle_60s_console(bot: ConsoleBot):
 @daily60s.handle()
 async def handle_60s_onebot(bot: OneBot):
     response = requests.get(
-        f"{config.api60s_base_url}/v2/60s",  # type: ignore
+        f"{cfg.api60s_base_url}/v2/60s",
         params={"encoding": "image"},
     )
     await daily60s.finish(OneBotMessageSegment.image(response.content))
