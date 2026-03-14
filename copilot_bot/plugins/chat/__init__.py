@@ -1,6 +1,13 @@
 from nonebot import on_command, on_message
 from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import (
+    MessageEvent as OneBotMessageEvent,
+    GroupMessageEvent as OneBotGroupMessageEvent,
+)
+from nonebot.adapters.console.event import (
+    MessageEvent as ConsoleMessageEvent,
+    PublicMessageEvent as ConsolePublicMessageEvent,
+)
 from nonebot.params import EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
@@ -15,6 +22,33 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
+
+def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str]:
+    """解析事件以获取会话ID和提示词"""
+    # 处理OneBot消息事件
+    if isinstance(event, OneBotMessageEvent):
+        if isinstance(event, OneBotGroupMessageEvent):
+            session_id = str(event.group_id)
+            prompt = f"{event.sender.nickname}说：{prompt}"
+        else:
+            # private，使用用户ID作为会话ID
+            session_id = event.get_session_id()
+        return session_id, prompt
+
+    # Console的消息事件
+    if isinstance(event, ConsoleMessageEvent):
+        if isinstance(event, ConsolePublicMessageEvent):
+            session_id = event.channel.id
+            prompt = f"{event.user.nickname}说：{prompt}"
+        else:
+            # private，使用用户ID作为会话ID
+            session_id = event.get_session_id()
+        return session_id, prompt
+
+    # 其他事件类型，直接使用事件的session_id
+    return event.get_session_id(), prompt
+
+
 ### 聊天命令
 chat = on_message(
     rule=to_me(),
@@ -25,11 +59,8 @@ chat = on_message(
 
 @chat.handle()
 async def handle_chat(event: Event, prompt: str = EventPlainText()):
-    # OneBot 消息事件，添加发送者昵称到提示词中
-    if isinstance(event, OneBotMessageEvent):
-        prompt = f"{event.sender.nickname}说：{prompt}"
-
-    response = await copilot.send_and_wait(event.get_session_id(), {"prompt": prompt})
+    session_id, prompt = resolve_session_id_and_prompt(event, prompt)
+    response = await copilot.send_and_wait(session_id, {"prompt": prompt})
     if response:
         await chat.finish(response.data.content)
     else:
@@ -51,12 +82,10 @@ chat_monitor = on_message(
 
 @chat_monitor.handle()
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
-    # OneBot 消息事件，添加发送者昵称到提示词中
-    if isinstance(event, OneBotMessageEvent):
-        prompt = f"{event.sender.nickname}说：{prompt}"
+    session_id, prompt = resolve_session_id_and_prompt(event, prompt)
 
     # 将用户消息添加到会话缓冲区
-    await copilot.add_message(event.get_session_id(), prompt)
+    await copilot.add_message(session_id, prompt)
 
 
 ### 重置会话命令
@@ -70,5 +99,7 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    await copilot.reset_session(event.get_session_id())
+    session_id, _ = resolve_session_id_and_prompt(event, "")
+
+    await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
