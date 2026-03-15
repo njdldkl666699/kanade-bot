@@ -1,4 +1,4 @@
-from nonebot import on_command, on_message
+from nonebot import on_command, on_fullmatch, on_message
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import (
     MessageEvent as OneBotMessageEvent,
@@ -8,6 +8,9 @@ from nonebot.adapters.console.event import (
     MessageEvent as ConsoleMessageEvent,
     PublicMessageEvent as ConsolePublicMessageEvent,
 )
+from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.console.bot import Bot as ConsoleBot
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
@@ -21,6 +24,33 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     config=Config,
 )
+
+
+ciallo = on_fullmatch(
+    ("Ciallo", "Ciallo～(∠・ω< )⌒☆", "Ciallo～(∠・ω< )⌒★"),
+    priority=2,
+    ignorecase=True,
+    block=True,
+)
+
+
+@ciallo.handle()
+async def handle_ciallo_console(bot: ConsoleBot):
+    await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
+
+
+@ciallo.handle()
+async def handle_ciallo_onebot(bot: OneBot):
+    message = MessageSegment(
+        "image",
+        {
+            "file": "2BD9A9D9F906F1B83A5886FA6660C8C0.jpg",
+            "summary": "&#91;动画表情&#93;",
+            "sub_type": 1,
+        },
+    )
+
+    await ciallo.finish(message)
 
 
 def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str]:
