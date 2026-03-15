@@ -17,7 +17,7 @@ from .config import Config
 cfg = get_plugin_config(Config)
 
 
-@define_tool(description="获取现在的本地日期时间，格式为yyyy-MM-dd HH:mm:ss")
+@define_tool(description="获取现在的日期时间，格式为yyyy-MM-dd HH:mm:ss，时区为本地时区")
 def get_datetime_now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
