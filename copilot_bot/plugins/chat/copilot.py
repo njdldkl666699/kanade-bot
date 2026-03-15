@@ -1,4 +1,3 @@
-from datetime import datetime
 from pathlib import Path
 
 from copilot import (
@@ -7,7 +6,6 @@ from copilot import (
     MessageOptions,
     PermissionHandler,
     SessionConfig,
-    define_tool,
 )
 from loguru import logger
 from nonebot import get_driver, get_plugin_config
@@ -15,11 +13,6 @@ from nonebot import get_driver, get_plugin_config
 from .config import Config
 
 cfg = get_plugin_config(Config)
-
-
-@define_tool(description="获取现在的日期时间，格式为yyyy-MM-dd HH:mm:ss，时区为本地时区")
-def get_datetime_now():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 class CopilotSessionManager:
@@ -32,14 +25,18 @@ class CopilotSessionManager:
                 "mode": "replace",
                 "content": Path(cfg.chat_system_message_path).read_text(encoding="utf-8"),
             },
-            "tools": [get_datetime_now],
+            "available_tools": [],
         }
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
         self.__sessions_prompt_buffer: dict[str, list[str]] = {}
 
     async def send_and_wait(
-        self, session_id: str, options: MessageOptions, timeout: float | None = None
+        self,
+        session_id: str,
+        options: MessageOptions,
+        timeout: float | None = None,
+        is_group: bool = False,
     ):
         """发送消息并等待响应"""
         # 如果会话不存在，则创建新会话
@@ -50,7 +47,8 @@ class CopilotSessionManager:
         buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
         if buffered_messages:
             options["prompt"] = (
-                f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
+                ("$现在的会话是群聊\n" if is_group else "")
+                + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
                 + f"$下面是这次的用户消息：\n{options['prompt']}"
             )
             # 清空消息缓冲区

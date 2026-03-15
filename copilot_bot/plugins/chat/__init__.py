@@ -52,25 +52,29 @@ async def handle_ciallo_onebot(bot: OneBot):
     await ciallo.finish(message)
 
 
-def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str]:
-    """解析事件以获取会话ID和提示词"""
+def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, bool]:
+    """解析事件以获取会话ID和提示词，并返回是否是群聊"""
     session_id = event.get_session_id()
     nickname: str | None = None
+    is_group = False
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
         nickname = event.sender.nickname
     if isinstance(event, OneBotGroupMessageEvent):
         session_id = str(event.group_id)
+        nickname = event.sender.card or event.sender.nickname
+        is_group = True
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
         nickname = event.user.nickname
     if isinstance(event, ConsolePublicMessageEvent):
         session_id = event.channel.id
+        is_group = True
 
     prompt = f"{nickname}说：{prompt}" if nickname else prompt
-    return session_id, prompt
+    return session_id, prompt, is_group
 
 
 ### 聊天命令
@@ -83,8 +87,12 @@ chat = on_message(
 
 @chat.handle()
 async def handle_chat(event: Event, prompt: str = EventPlainText()):
-    session_id, prompt = resolve_session_id_and_prompt(event, prompt)
-    response = await copilot.send_and_wait(session_id, {"prompt": prompt})
+    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
+    response = await copilot.send_and_wait(
+        session_id,
+        {"prompt": prompt},
+        is_group=is_group,
+    )
     if response:
         await chat.finish(response.data.content)
     else:
@@ -106,7 +114,7 @@ chat_monitor = on_message(
 
 @chat_monitor.handle()
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
-    session_id, prompt = resolve_session_id_and_prompt(event, prompt)
+    session_id, prompt, _ = resolve_session_id_and_prompt(event, prompt)
 
     # 将用户消息添加到会话缓冲区
     await copilot.add_message(session_id, prompt)
@@ -123,7 +131,7 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    session_id, _ = resolve_session_id_and_prompt(event, "")
+    session_id, _, _ = resolve_session_id_and_prompt(event, "")
 
     await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
