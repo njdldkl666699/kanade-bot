@@ -13,7 +13,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
 from .config import Config
-from .session import copilot
+from .copilot import copilot
 
 __plugin_meta__ = PluginMetadata(
     name="chat",
@@ -25,28 +25,23 @@ __plugin_meta__ = PluginMetadata(
 
 def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str]:
     """解析事件以获取会话ID和提示词"""
+    session_id = event.get_session_id()
+    nickname: str | None = None
+
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
-        if isinstance(event, OneBotGroupMessageEvent):
-            session_id = str(event.group_id)
-            prompt = f"{event.sender.nickname}说：{prompt}"
-        else:
-            # private，使用用户ID作为会话ID
-            session_id = event.get_session_id()
-        return session_id, prompt
+        nickname = event.sender.nickname
+    if isinstance(event, OneBotGroupMessageEvent):
+        session_id = str(event.group_id)
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
-        if isinstance(event, ConsolePublicMessageEvent):
-            session_id = event.channel.id
-            prompt = f"{event.user.nickname}说：{prompt}"
-        else:
-            # private，使用用户ID作为会话ID
-            session_id = event.get_session_id()
-        return session_id, prompt
+        nickname = event.user.nickname
+    if isinstance(event, ConsolePublicMessageEvent):
+        session_id = event.channel.id
 
-    # 其他事件类型，直接使用事件的session_id
-    return event.get_session_id(), prompt
+    prompt = f"{nickname}说：{prompt}" if nickname else prompt
+    return session_id, prompt
 
 
 ### 聊天命令

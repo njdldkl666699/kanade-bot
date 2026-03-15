@@ -1,9 +1,9 @@
-import requests
-from nonebot import get_plugin_config, on_command
+from nonebot import on_command
 from nonebot.adapters import Event, Message
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
+from copilot_bot.plugins.api60s.client import client
 from copilot_bot.plugins.api60s.plugins.fun.cache import Luck, UserDailyLuckCache
 
 from .config import Config
@@ -14,8 +14,6 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     config=Config,
 )
-
-cfg = get_plugin_config(Config)
 
 
 hitokoto = on_command(
@@ -28,8 +26,8 @@ hitokoto = on_command(
 
 @hitokoto.handle()
 async def handle_hitokoto():
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/hitokoto",
+    response = await client.get(
+        "/v2/hitokoto",
         params={"encoding": "text"},
     )
     await hitokoto.finish(response.text)
@@ -50,9 +48,7 @@ async def handle_luck(event: Event):
         await luck.finish(str(cache_luck))
         return
 
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/luck",
-    )
+    response = await client.get("/v2/luck")
     user_luck = Luck.model_validate(response.json()["data"])
 
     UserDailyLuckCache.set_user_luck_cache(event.get_user_id(), user_luck)
@@ -69,8 +65,8 @@ fabing = on_command(
 
 @fabing.handle()
 async def handle_fabing(arg_msg: Message = CommandArg()):
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/fabing",
+    response = await client.get(
+        "/v2/fabing",
         params={
             "name": arg_msg.extract_plain_text(),
             "encoding": "text",
@@ -89,8 +85,8 @@ answer = on_command(
 
 @answer.handle()
 async def handle_answer():
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/answer",
+    response = await client.get(
+        "/v2/answer",
         params={"encoding": "text"},
     )
     await answer.finish(response.text)
@@ -106,8 +102,8 @@ kfc = on_command(
 
 @kfc.handle()
 async def handle_kfc():
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/kfc",
+    response = await client.get(
+        "/v2/kfc",
         params={"encoding": "text"},
     )
     await kfc.finish(response.text)

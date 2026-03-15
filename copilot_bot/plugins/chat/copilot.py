@@ -9,21 +9,22 @@ from copilot import (
     SessionConfig,
     define_tool,
 )
-from nonebot import get_plugin_config
+from loguru import logger
+from nonebot import get_driver, get_plugin_config
 
 from .config import Config
 
 cfg = get_plugin_config(Config)
 
 
-@define_tool(description="获取当前日期和时间，格式为yyyy-MM-dd HH:mm:ss")
+@define_tool(description="获取现在的本地日期时间，格式为yyyy-MM-dd HH:mm:ss")
 def get_datetime_now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 class CopilotSessionManager:
     def __init__(self):
-        self.__client = CopilotClient()
+        self._client = CopilotClient()
         self.__config: SessionConfig = {
             "model": cfg.chat_model,
             "on_permission_request": PermissionHandler.approve_all,
@@ -43,7 +44,7 @@ class CopilotSessionManager:
         """发送消息并等待响应"""
         # 如果会话不存在，则创建新会话
         if session_id not in self.__sessions:
-            self.__sessions[session_id] = await self.__client.create_session(self.__config)
+            self.__sessions[session_id] = await self._client.create_session(self.__config)
 
         # 将消息缓冲区中的消息添加到选项中
         buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
@@ -74,12 +75,20 @@ class CopilotSessionManager:
         if session_id in self.__sessions_prompt_buffer:
             del self.__sessions_prompt_buffer[session_id]
 
-    async def __del__(self):
-        if self.__sessions:
-            for session in self.__sessions.values():
-                await session.disconnect()
-        if self.__client is not None:
-            await self.__client.stop()
-
 
 copilot = CopilotSessionManager()
+
+
+driver = get_driver()
+
+
+@driver.on_startup
+async def startup():
+    await copilot._client.start()
+    logger.info("Copilot客户端已启动")
+
+
+@driver.on_shutdown
+async def shutdown():
+    await copilot._client.stop()
+    logger.info("Copilot客户端已关闭")

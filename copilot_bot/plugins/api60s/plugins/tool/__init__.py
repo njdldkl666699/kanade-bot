@@ -1,9 +1,9 @@
-import requests
-from nonebot import get_plugin_config, on_command
+from nonebot import on_command
 from nonebot.adapters import Message
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
+from copilot_bot.plugins.api60s.client import client
 from copilot_bot.plugins.api60s.argparser import parse_arg_message
 
 from .config import Config
@@ -14,8 +14,6 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     config=Config,
 )
-
-cfg = get_plugin_config(Config)
 
 
 weather = on_command(
@@ -29,8 +27,8 @@ weather = on_command(
 
 @weather.handle()
 async def handle_weather(args: Message = CommandArg()):
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/weather",
+    response = await client.get(
+        "/v2/weather",
         params={
             "query": args.extract_plain_text(),
             "encoding": "text",
@@ -50,8 +48,8 @@ weather_forecast = on_command(
 @weather_forecast.handle()
 async def handle_weather_forecast(arg_msg: Message = CommandArg()):
     args = parse_arg_message(arg_msg, {"query": str, "days": int})
-    response = requests.get(
-        f"{cfg.api60s_base_url}/v2/weather/forecast",
+    response = await client.get(
+        "/v2/weather/forecast",
         params={
             "query": args["query"],
             "days": args["days"],
