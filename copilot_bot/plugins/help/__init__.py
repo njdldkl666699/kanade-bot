@@ -44,9 +44,7 @@ async def handle_help_onebot(bot: OneBot, arg_msg: Message = CommandArg()):
         image_path = cfg.help_image_light_path
 
     try:
-        with open(image_path, "rb") as f:
-            image_data = f.read()
-        await help.finish(OneBotMessageSegment.image(image_data))
+        await help.finish(OneBotMessageSegment.image(Path(image_path)))
     except FileNotFoundError:
         help_doc = Path(cfg.help_markdown_path).read_text(encoding="utf-8")
         await help.finish(OneBotMessageSegment.text(help_doc))

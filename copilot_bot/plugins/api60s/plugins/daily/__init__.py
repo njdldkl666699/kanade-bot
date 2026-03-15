@@ -36,11 +36,9 @@ async def handle_60s_console(bot: ConsoleBot):
 
 @daily60s.handle()
 async def handle_60s_onebot(bot: OneBot):
-    response = await client.get(
-        "/v2/60s",
-        params={"encoding": "image"},
-    )
-    await daily60s.finish(OneBotMessageSegment.image(response.content))
+    response = await client.get("/v2/60s")
+    image_url = response.json()["data"]["image"]
+    await daily60s.finish(OneBotMessageSegment.image(image_url))
 
 
 epic = on_command(
