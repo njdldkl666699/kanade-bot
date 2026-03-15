@@ -45,11 +45,10 @@ async def handle_ciallo_onebot(bot: OneBot):
         "image",
         {
             "file": "2BD9A9D9F906F1B83A5886FA6660C8C0.jpg",
-            "summary": "&#91;动画表情&#93;",
+            "summary": "[动画表情]",
             "sub_type": 1,
         },
     )
-
     await ciallo.finish(message)
 
 
