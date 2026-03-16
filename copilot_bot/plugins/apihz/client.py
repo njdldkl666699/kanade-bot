@@ -7,8 +7,7 @@ cfg = get_plugin_config(Config)
 
 client = AsyncClient(
     base_url=cfg.apihz_api_url,
-    # TODO nonebot对env变量的解析会移除引号，导致无法使用纯数字字符串，暂时手动转换
-    params={"id": str(cfg.apihz_id), "key": cfg.apihz_key},
+    params={"id": cfg.apihz_id, "key": cfg.apihz_key},
 )
 
 driver = get_driver()
