@@ -12,10 +12,10 @@ driver = get_driver()
 
 @driver.on_startup
 async def startup():
-    logger.info("HTTP客户端已启动")
+    logger.info("API60s HTTP客户端已启动")
 
 
 @driver.on_shutdown
 async def shutdown():
     await client.aclose()
-    logger.info("HTTP客户端已关闭")
+    logger.info("API60s HTTP客户端已关闭")

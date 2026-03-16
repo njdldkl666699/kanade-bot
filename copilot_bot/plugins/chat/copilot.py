@@ -6,6 +6,7 @@ from copilot import (
     MessageOptions,
     PermissionHandler,
     SessionConfig,
+    SessionEvent,
 )
 from loguru import logger
 from nonebot import get_driver, get_plugin_config
@@ -25,7 +26,7 @@ class CopilotSessionManager:
                 "mode": "replace",
                 "content": Path(cfg.chat_system_message_path).read_text(encoding="utf-8"),
             },
-            "available_tools": [],
+            "available_tools": ["web", "todo"],
         }
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
@@ -37,8 +38,8 @@ class CopilotSessionManager:
         options: MessageOptions,
         timeout: float | None = None,
         is_group: bool = False,
-    ):
-        """发送消息并等待响应"""
+    ) -> tuple[SessionEvent | None, bool]:
+        """发送消息并等待响应，返回响应事件和是否是新会话"""
         # 如果会话不存在，则创建新会话
         if session_id not in self.__sessions:
             self.__sessions[session_id] = await self._client.create_session(self.__config)
@@ -54,7 +55,20 @@ class CopilotSessionManager:
             # 清空消息缓冲区
             self.__sessions_prompt_buffer[session_id] = []
 
-        return await self.__sessions[session_id].send_and_wait(options, timeout)
+        session_event: SessionEvent | None = None
+        new_session = False
+        try:
+            session_event = await self.__sessions[session_id].send_and_wait(options, timeout)
+        except Exception as e:
+            # Copilot SDK 问题，会话空闲35分钟会被自动关闭，他妈的
+            logger.warning(f"发送消息或等待响应时发生错误: {e}")
+            # 重置会话并重试一次
+            await self.reset_session(session_id)
+            self.__sessions[session_id] = await self._client.create_session(self.__config)
+            session_event = await self.__sessions[session_id].send_and_wait(options, timeout)
+            new_session = True
+
+        return session_event, new_session
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""

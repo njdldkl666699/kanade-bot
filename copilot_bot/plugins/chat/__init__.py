@@ -88,11 +88,13 @@ chat = on_message(
 @chat.handle()
 async def handle_chat(event: Event, prompt: str = EventPlainText()):
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
-    response = await copilot.send_and_wait(
+    response, new_session = await copilot.send_and_wait(
         session_id,
         {"prompt": prompt},
         is_group=is_group,
     )
+    if new_session:
+        await chat.send("会话过期，开启了新会话")
     if response:
         await chat.finish(response.data.content)
     else:
