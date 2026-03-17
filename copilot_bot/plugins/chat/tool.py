@@ -33,7 +33,6 @@ class TavilySearchParams(BaseModel):
 )
 async def tavily_search(params: TavilySearchParams):
     """Run a Tavily web search."""
-    logger.info(f"模型调用了工具 {tavily_search.name}，查询内容：{params.query}")
     response = await client.post(
         "/search",
         json={
@@ -44,5 +43,10 @@ async def tavily_search(params: TavilySearchParams):
             "exclude_domains": ["cndn.net"],
         },
     )
-    logger.info(f"工具 {tavily_search.name} 返回了结果，状态码：{response.status_code}")
+    logger.info(
+        "模型调用工具{}，查询内容：{}，返回了结果，状态码：{}",
+        tavily_search.name,
+        params.query,
+        response.status_code,
+    )
     return response.json()

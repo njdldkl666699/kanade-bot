@@ -1,7 +1,7 @@
 import re
 
-from nonebot import on_command, on_fullmatch, on_message
-from nonebot.adapters import Event
+from nonebot import get_driver, on_command, on_fullmatch, on_message
+from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import (
     MessageEvent as OneBotMessageEvent,
     GroupMessageEvent as OneBotGroupMessageEvent,
@@ -13,9 +13,11 @@ from nonebot.adapters.console.event import (
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.params import EventPlainText, EventToMe
+from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
+
+from copilot_bot.plugins.chat.ban import add_user_to_ban_list, is_user_banned
 
 from .config import Config
 from .copilot import copilot
@@ -89,15 +91,24 @@ chat = on_message(
 
 @chat.handle()
 async def handle_chat(event: Event, prompt: str = EventPlainText()):
+    # 检查用户是否在聊天黑名单中
+    user_id = event.get_user_id()
+    if isinstance(event, ConsoleMessageEvent) and is_user_banned(user_id, "console"):
+        await chat.finish()
+    if isinstance(event, OneBotMessageEvent) and is_user_banned(user_id, "onebot"):
+        await chat.finish()
+
+    # 解析会话ID和提示词
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
     response, new_session = await copilot.send_and_wait(
         session_id,
         {"prompt": prompt},
         is_group=is_group,
     )
+
     if new_session:
         await chat.send("会话过期，开启了新会话")
-    if response and response.data and response.data.content:
+    if response and response.data.content:
         content = response.data.content
         # 按两个及以上换行拆分，单个换行保持原样
         chunks = [chunk for chunk in re.split(r"(?:\r?\n){2,}", content) if chunk.strip()]
@@ -144,3 +155,62 @@ async def handle_chat_reset(event: Event):
 
     await copilot.clear_session(session_id)
     await chat_reset.finish("会话已重置")
+
+
+### 聊天黑名单
+global_config = get_driver().config
+
+chat_ban = on_command(
+    "聊天拉黑",
+    aliases={"chat_ban", "chatban"},
+    priority=2,
+    block=True,
+)
+
+
+@chat_ban.handle()
+async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await chat_ban.finish()
+
+    user_id = arg_msg.extract_plain_text().strip()
+    if not user_id:
+        await chat_ban.finish()
+
+    if isinstance(event, ConsoleMessageEvent):
+        add_user_to_ban_list(user_id, "console")
+    elif isinstance(event, OneBotMessageEvent):
+        add_user_to_ban_list(user_id, "onebot")
+    else:
+        await chat_ban.finish()
+
+    await chat_ban.finish(f"已将用户 {user_id} 添加到聊天黑名单")
+
+
+chat_unban = on_command(
+    "聊天解除拉黑",
+    aliases={"chat_unban", "chatunban"},
+    priority=2,
+    block=True,
+)
+
+
+@chat_unban.handle()
+async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await chat_unban.finish()
+
+    user_id = arg_msg.extract_plain_text().strip()
+    if not user_id:
+        await chat_unban.finish()
+
+    if isinstance(event, ConsoleMessageEvent):
+        add_user_to_ban_list(user_id, "console")
+    elif isinstance(event, OneBotMessageEvent):
+        add_user_to_ban_list(user_id, "onebot")
+    else:
+        await chat_unban.finish()
+
+    await chat_unban.finish(f"已将用户 {user_id} 从聊天黑名单中移除")
