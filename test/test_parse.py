@@ -5,8 +5,8 @@ def main():
     response = httpx.get(
         "https://cn.apihz.cn/api/zici/mosi.php",
         params={
-            "id": "10006249",
-            "key": "b98d38bf7b5accbf9d1dfa9afea9ac7c",
+            "id": "xxxxx",
+            "key": "xxxxxxxxxxxxxxxxxxx",
             "type": 0,
             "words": "你好",
         },
@@ -15,5 +15,18 @@ def main():
     print(response.json())
 
 
+def test_baidu_search():
+    response = httpx.get(
+        "https://cn.apihz.cn/api/wangzhan/soubaidu.php",
+        params={
+            "id": "xxxxxx",
+            "key": "xxxxxxxxxxxxxxxxx",
+            "words": "OpenClaw",
+            "page": 1,
+        },
+    )
+    print(response.json())
+
+
 if __name__ == "__main__":
-    main()
+    test_baidu_search()

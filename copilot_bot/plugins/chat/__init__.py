@@ -1,3 +1,5 @@
+import re
+
 from nonebot import on_command, on_fullmatch, on_message
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import (
@@ -95,8 +97,13 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
     )
     if new_session:
         await chat.send("会话过期，开启了新会话")
-    if response:
-        await chat.finish(response.data.content)
+    if response and response.data and response.data.content:
+        content = response.data.content
+        # 按两个及以上换行拆分，单个换行保持原样
+        chunks = [chunk for chunk in re.split(r"(?:\r?\n){2,}", content) if chunk.strip()]
+        for chunk in chunks:
+            await chat.send(chunk)
+        await chat.finish()
     else:
         await chat.finish("模型未响应，请稍后再试")
 
@@ -135,5 +142,5 @@ chat_reset = on_command(
 async def handle_chat_reset(event: Event):
     session_id, _, _ = resolve_session_id_and_prompt(event, "")
 
-    await copilot.reset_session(session_id)
+    await copilot.clear_session(session_id)
     await chat_reset.finish("会话已重置")
