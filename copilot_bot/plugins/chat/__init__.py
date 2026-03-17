@@ -18,7 +18,11 @@ from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from copilot_bot.plugins.chat.ban import add_user_to_ban_list, is_user_banned
+from copilot_bot.plugins.chat.ban import (
+    add_user_to_ban_list,
+    is_user_banned,
+    remove_user_from_ban_list,
+)
 
 from .config import Config
 from .copilot import copilot
@@ -106,6 +110,7 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
     response, new_session = await copilot.send_and_wait(
         session_id,
         {"prompt": prompt},
+        timeout=300,
         is_group=is_group,
     )
 
@@ -120,7 +125,8 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
             for chunk in chunks:
                 await chat.send(chunk)
             await chat.finish()
-        # 消息数>3，Console合并成一条发送
+        # 消息数>3
+        # Console合并成一条发送
         if isinstance(event, ConsoleMessageEvent):
             await chat.finish(content)
         # OneBot分成多条，合并转发
@@ -222,9 +228,9 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
         await chat_unban.finish()
 
     if isinstance(event, ConsoleMessageEvent):
-        add_user_to_ban_list(user_id, "console")
+        remove_user_from_ban_list(user_id, "console")
     elif isinstance(event, OneBotMessageEvent):
-        add_user_to_ban_list(user_id, "onebot")
+        remove_user_from_ban_list(user_id, "onebot")
     else:
         await chat_unban.finish()
 
