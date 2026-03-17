@@ -9,6 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
-copilot-sdk_docs/
-
 .env.*
+copilot-sdk_docs/
+chat_ban.json

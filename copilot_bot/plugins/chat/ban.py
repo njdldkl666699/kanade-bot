@@ -16,7 +16,17 @@ class BanList(BaseModel):
 
 
 def get_ban_list():
-    return BanList.model_validate_json(Path(cfg.chat_ban_path).read_text(encoding="utf-8"))
+    ban_path = Path(cfg.chat_ban_path)
+    if not ban_path.exists():
+        ban_path.parent.mkdir(parents=True, exist_ok=True)
+        default_ban_list = BanList(console=set(), onebot=set())
+        ban_path.write_text(
+            default_ban_list.model_dump_json(indent=4, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return default_ban_list
+
+    return BanList.model_validate_json(ban_path.read_text(encoding="utf-8"))
 
 
 def is_user_banned(user_id: str, platform: Literal["console", "onebot"]) -> bool:
