@@ -1,10 +1,11 @@
 import re
 
-from nonebot import get_driver, on_command, on_fullmatch, on_message
+from nonebot import get_driver, get_plugin_config, on_command, on_fullmatch, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import (
     MessageEvent as OneBotMessageEvent,
     GroupMessageEvent as OneBotGroupMessageEvent,
+    Message as OneBotMessage,
 )
 from nonebot.adapters.console.event import (
     MessageEvent as ConsoleMessageEvent,
@@ -28,6 +29,8 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     config=Config,
 )
+
+cfg = get_plugin_config(Config)
 
 
 ciallo = on_fullmatch(
@@ -112,8 +115,20 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
         content = response.data.content
         # 按两个及以上换行拆分，单个换行保持原样
         chunks = [chunk for chunk in re.split(r"(?:\r?\n){2,}", content) if chunk.strip()]
-        for chunk in chunks:
-            await chat.send(chunk)
+        # 消息数<=3，按条发送
+        if len(chunks) <= 3:
+            for chunk in chunks:
+                await chat.send(chunk)
+            await chat.finish()
+        # 消息数>3，Console合并成一条发送
+        if isinstance(event, ConsoleMessageEvent):
+            await chat.finish(content)
+        # OneBot分成多条，合并转发
+        if isinstance(event, OneBotMessageEvent):
+            message = OneBotMessage()
+            for chunk in chunks:
+                message += MessageSegment.node_custom(cfg.chat_bot_id, cfg.chat_bot_nickname, chunk)
+            await chat.finish(message)
         await chat.finish()
     else:
         await chat.finish("模型未响应，请稍后再试")
