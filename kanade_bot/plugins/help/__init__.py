@@ -27,8 +27,8 @@ async def handle_help():
 
 
 version = on_command(
-    "版本",
-    aliases={"version", "v", "版本信息"},
+    "Kanade版本",
+    aliases={"kanade_version"},
     priority=2,
     block=True,
 )

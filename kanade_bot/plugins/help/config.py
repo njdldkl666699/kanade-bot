@@ -16,7 +16,7 @@ driver = get_driver()
 
 @driver.on_startup
 async def on_startup():
-    global version
+    global PROJECT_VERSION
     project_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    project_version = project_data["project"]["version"]
-    logger.info(f"Kanade Bot version: {project_version}")
+    PROJECT_VERSION = project_data["project"]["version"]
+    logger.info(f"Kanade Bot version: {PROJECT_VERSION}")
