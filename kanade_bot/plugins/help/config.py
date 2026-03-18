@@ -1,7 +1,7 @@
 from pathlib import Path
 import tomllib
 
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from pydantic import BaseModel
 
 
@@ -19,4 +19,4 @@ async def on_startup():
     global version
     project_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     project_version = project_data["project"]["version"]
-    print(f"Kanade Bot version: {project_version}")
+    logger.info(f"Kanade Bot version: {project_version}")

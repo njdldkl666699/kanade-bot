@@ -10,7 +10,7 @@ from copilot import (
     SessionConfig,
     SessionEvent,
 )
-from copilot.generated.rpc import SessionAgentSelectParams
+from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
 from loguru import logger
 from nonebot import get_driver, get_plugin_config
 
@@ -82,7 +82,11 @@ class CopilotSessionManager:
 
     async def _create_session(self, session_id: str) -> CopilotSession:
         session = await self._client.create_session(self.__config)
+        result = await session.rpc.model.switch_to(SessionModelSwitchToParams("gpt-4.1"))
+        logger.info(f"会话{session_id}已创建，切换模型结果: {result.model_id}")
         await session.rpc.agent.select(SessionAgentSelectParams("Kanade"))
+        result = await session.rpc.model.switch_to(SessionModelSwitchToParams("gpt-4.1"))
+        logger.info(f"已切换到Kanade Agent，切换模型结果: {result.model_id}")
         self.__sessions[session_id] = session
         return session
 
