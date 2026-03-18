@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from copilot_bot.plugins.api60s.client import client
+from kanade_bot.plugins.api60s.client import client
 
 
 class TranslateLang(BaseModel):

@@ -14,7 +14,7 @@ from copilot.generated.rpc import SessionAgentSelectParams
 from loguru import logger
 from nonebot import get_driver, get_plugin_config
 
-from copilot_bot.plugins.chat.tool import tavily_search
+from kanade_bot.plugins.chat.tool import tavily_search
 
 from .config import Config
 

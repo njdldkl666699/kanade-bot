@@ -3,8 +3,8 @@ from nonebot.adapters import Event, Message
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from copilot_bot.plugins.api60s.client import client
-from copilot_bot.plugins.api60s.plugins.fun.cache import Luck, UserDailyLuckCache
+from kanade_bot.plugins.api60s.client import client
+from kanade_bot.plugins.api60s.plugins.fun.cache import Luck, UserDailyLuckCache
 
 from .config import Config
 

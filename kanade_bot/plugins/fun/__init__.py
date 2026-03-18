@@ -6,7 +6,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from copilot_bot.plugins.fun.music import get_music_list_names, get_random_music
+from kanade_bot.plugins.fun.music import get_music_list_names, get_random_music
 
 from .config import Config
 

@@ -12,7 +12,7 @@ from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from copilot_bot.plugins.chat.ban import (
+from kanade_bot.plugins.chat.ban import (
     add_user_to_ban_list,
     is_user_banned,
     remove_user_from_ban_list,

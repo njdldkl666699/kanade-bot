@@ -5,7 +5,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11.message import MessageSegment as OneBotMessageSegment
 from nonebot.plugin import PluginMetadata
 
-from copilot_bot.plugins.api60s.client import client
+from kanade_bot.plugins.api60s.client import client
 
 from .config import Config
 

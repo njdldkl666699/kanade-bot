@@ -3,8 +3,8 @@ from nonebot.adapters import Message
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from copilot_bot.plugins.api60s.client import client
-from copilot_bot.plugins.argparser import parse_arg_message
+from kanade_bot.plugins.api60s.client import client
+from kanade_bot.plugins.argparser import parse_arg_message
 
 from .cache import TranslateLang, TranslateLangCache
 from .config import Config
