@@ -80,7 +80,7 @@ driver = get_driver()
 @driver.on_startup
 async def load_music_list():
     global list_cache
-    path = Path(cfg.fun_music_lists_path)
+    path = Path(cfg.fun_music_list_path)
     lists = json.load(path.open("r", encoding="utf-8"))["data"]
     logger.info(f"正在加载音乐列表，路径: {path}, 共 {len(lists)} 个列表")
     for list in lists:
