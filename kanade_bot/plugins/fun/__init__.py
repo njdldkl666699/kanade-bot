@@ -61,7 +61,7 @@ async def handle_music_listen(bot: ConsoleBot, arg_msg: Message = CommandArg()):
         list_name, music = get_random_music(list_query)
     except ValueError as e:
         await music_listen.finish(str(e))
-    await music_listen.finish(f"听{list_name}歌单的\n{music.to_pretty_string()}")
+    await music_listen.finish(f"听 {list_name} 歌单的\n{music.to_pretty_string()}")
 
 
 @music_listen.handle()
@@ -71,7 +71,7 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
         list_name, music = get_random_music(list_query)
     except ValueError as e:
         await music_listen.finish(str(e))
-    list_message = MessageSegment.text(f"听{list_name}歌单的\n")
+    list_message = MessageSegment.text(f"听 {list_name} 歌单的\n")
     message = MessageSegment("music")
 
     match music.source:

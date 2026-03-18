@@ -13,15 +13,15 @@ cfg = get_plugin_config(Config)
 
 class MusicQuality(BaseModel):
     type: str
-    size: str
-    hash: str | None
+    size: str | None = None
+    hash: str | None = None
 
 
 class MusicMeta(BaseModel):
     song_id: str | int
     album_name: str
     pic_url: str | None
-    qualitys: list[MusicQuality] | None
+    qualitys: list[MusicQuality] | None = None
 
     model_config = {"alias_generator": to_camel, "validate_by_name": True}
 
@@ -82,7 +82,7 @@ async def load_music_list():
     global list_cache
     path = Path(cfg.fun_music_list_path)
     lists = json.load(path.open("r", encoding="utf-8"))["data"]
-    logger.info(f"正在加载音乐列表，路径: {path}, 共 {len(lists)} 个列表")
+    logger.info(f"正在加载音乐列表，路径: {path.absolute()}, 共 {len(lists)} 个列表")
     for list in lists:
         name = list["name"]
         if name not in {"list__name_default", "list__name_love"}:
