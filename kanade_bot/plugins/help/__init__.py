@@ -1,7 +1,10 @@
+import tomllib
+from pathlib import Path
+
 from nonebot import get_plugin_config, on_command
 from nonebot.plugin import PluginMetadata
 
-from .config import PROJECT_VERSION, Config
+from .config import Config
 
 __plugin_meta__ = PluginMetadata(
     name="help",
@@ -36,4 +39,7 @@ version = on_command(
 
 @version.handle()
 async def handle_version():
-    await version.finish("宵崎奏Bot 版本: " + PROJECT_VERSION)
+    pyproject_content = Path("pyproject.toml").read_text(encoding="utf-8")
+    project_data = tomllib.loads(pyproject_content)
+    project_version = project_data["project"]["version"]
+    await version.finish(f"宵崎奏Bot 版本: {project_version}")
