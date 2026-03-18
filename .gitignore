@@ -10,5 +10,6 @@ wheels/
 .venv
 
 .env.*
+!.env.example
 copilot-sdk_docs/
 chat_ban.json
