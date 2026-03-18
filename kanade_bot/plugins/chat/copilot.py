@@ -121,7 +121,7 @@ class CopilotSessionManager:
                 for session_id in list(self.__sessions.keys()):
                     await self._ping_if_idle(session_id)
         except asyncio.CancelledError:
-            logger.debug("Copilot会话保活任务已停止")
+            logger.info("Copilot会话保活任务已停止")
             raise
 
     def start_keepalive(self):

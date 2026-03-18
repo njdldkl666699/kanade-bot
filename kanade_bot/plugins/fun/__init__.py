@@ -87,17 +87,18 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
             message.data["audio"] = f"https://kuwo.cn/play_detail/{music.meta.song_id}"
             message.data["title"] = f"{music.name} - {music.singer}"
             message.data["image"] = music.meta.pic_url
-        case "kg" if qualities := music.meta.qualitys:
-            hash = None
-            for quality in qualities:
-                if quality.hash:
-                    hash = quality.hash
-                    break
-            message.data["url"] = f"https://www.kugou.com/song/#hash={hash}"
-            message.data["audio"] = f"https://www.kugou.com/song/#hash={hash}"
-            message.data["type"] = "custom"
-            message.data["title"] = f"{music.name} - {music.singer}"
-            message.data["image"] = music.meta.pic_url
+        # case "kg" if qualities := music.meta.qualitys:
+        #     # kg暂未找到方法，改为文本消息
+        #     hash = None
+        #     for quality in qualities:
+        #         if quality.hash:
+        #             hash = quality.hash
+        #             break
+        #     message.data["url"] = f"https://www.kugou.com/song/#hash={hash}"
+        #     message.data["audio"] = f"https://www.kugou.com/song/#hash={hash}"
+        #     message.data["type"] = "custom"
+        #     message.data["title"] = f"{music.name} - {music.singer}"
+        #     message.data["image"] = music.meta.pic_url
         case _:
             text_message = music.to_pretty_string()
             await music_listen.finish(list_message + text_message)

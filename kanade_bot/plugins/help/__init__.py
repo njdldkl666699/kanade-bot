@@ -1,7 +1,7 @@
 from nonebot import get_plugin_config, on_command
 from nonebot.plugin import PluginMetadata
 
-from .config import Config
+from .config import PROJECT_VERSION, Config
 
 __plugin_meta__ = PluginMetadata(
     name="help",
@@ -24,3 +24,16 @@ help = on_command(
 @help.handle()
 async def handle_help():
     await help.finish("宵崎奏Bot 帮助文档链接：\n" + cfg.help_link)
+
+
+version = on_command(
+    "版本",
+    aliases={"version", "v", "版本信息"},
+    priority=2,
+    block=True,
+)
+
+
+@version.handle()
+async def handle_version():
+    await version.finish("宵崎奏Bot 版本: " + PROJECT_VERSION)
