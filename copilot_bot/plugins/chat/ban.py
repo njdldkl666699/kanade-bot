@@ -3,6 +3,7 @@ from typing import Literal
 
 from nonebot import get_plugin_config
 from pydantic import BaseModel
+
 from .config import Config
 
 cfg = get_plugin_config(Config)

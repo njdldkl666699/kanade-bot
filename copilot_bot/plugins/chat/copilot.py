@@ -103,7 +103,7 @@ class CopilotSessionManager:
                 return
 
             try:
-                logger.debug(f"会话{session_id}空闲 {idle_duration}，发送保活ping")
+                logger.info(f"会话{session_id}空闲 {idle_duration}，发送保活ping")
                 await session.send_and_wait({"prompt": "$ping"}, timeout=15)
             except Exception as e:
                 logger.warning(f"会话{session_id}保活ping失败: {e}")

@@ -2,6 +2,7 @@ from copilot import define_tool
 from httpx import AsyncClient
 from nonebot import get_plugin_config, logger
 from pydantic import BaseModel, Field
+
 from .config import Config
 
 cfg = get_plugin_config(Config)
