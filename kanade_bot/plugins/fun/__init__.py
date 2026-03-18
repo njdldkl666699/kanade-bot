@@ -117,5 +117,5 @@ async def handle_music_list():
     await music_list.finish(
         "可用的歌单列表：\n"
         + "\n".join(get_music_list_names())
-        + f"\n完整歌单见：{cfg.fun_music_list_link}"
+        + f"\n\n完整歌单见：{cfg.fun_music_list_link}"
     )
