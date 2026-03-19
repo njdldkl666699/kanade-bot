@@ -42,4 +42,4 @@ async def handle_version():
     pyproject_content = Path("pyproject.toml").read_text(encoding="utf-8")
     project_data = tomllib.loads(pyproject_content)
     project_version = project_data["project"]["version"]
-    await version.finish(f"宵崎奏Bot 版本: v{project_version}")
+    await version.finish(f"宵崎奏Bot 版本: {project_version}")

@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "1.0.1"
+version = "v1.1.0"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.12, <4.0"
@@ -12,6 +12,7 @@ dependencies = [
     "github-copilot-sdk>=0.1.33rc0",
     "nonebot-plugin-apscheduler>=0.5.0",
     "httpx>=0.28.1",
+    "nonebot-plugin-course-schedule>=1.1.0",
 ]
 
 [tool.nonebot]
@@ -31,3 +32,4 @@ nonebot-adapter-console = [
 "@local" = []
 nonebot-plugin-status = ["nonebot_plugin_status"]
 nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
+nonebot-plugin-course-schedule = ["nonebot_plugin_course_schedule"]

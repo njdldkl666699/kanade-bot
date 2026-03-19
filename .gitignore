@@ -9,7 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
+# 配置文件
 .env.*
 !.env.example
+
+# 杂项
 copilot-sdk_docs/
 chat_ban.json
+config/
