@@ -5,12 +5,11 @@ from pathlib import Path
 from copilot import (
     CopilotClient,
     CopilotSession,
-    MessageOptions,
     PermissionHandler,
     SessionConfig,
     SessionEvent,
 )
-from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
+from copilot.generated.rpc import SessionAgentSelectParams
 from loguru import logger
 from nonebot import get_driver, get_plugin_config
 
@@ -82,11 +81,9 @@ class CopilotSessionManager:
 
     async def _create_session(self, session_id: str) -> CopilotSession:
         session = await self._client.create_session(self.__config)
-        result = await session.rpc.model.switch_to(SessionModelSwitchToParams("gpt-4.1"))
-        logger.info(f"会话{session_id}已创建，切换模型结果: {result.model_id}")
+        await session.set_model(cfg.chat_model)
         await session.rpc.agent.select(SessionAgentSelectParams("Kanade"))
-        result = await session.rpc.model.switch_to(SessionModelSwitchToParams("gpt-4.1"))
-        logger.info(f"已切换到Kanade Agent，切换模型结果: {result.model_id}")
+        await session.set_model(cfg.chat_model)
         self.__sessions[session_id] = session
         return session
 
@@ -108,7 +105,7 @@ class CopilotSessionManager:
 
             try:
                 logger.info(f"会话{session_id}空闲 {idle_duration}，发送保活ping")
-                await session.send_and_wait({"prompt": "$ping"}, timeout=15)
+                await session.send_and_wait("$ping")
             except Exception as e:
                 logger.warning(f"会话{session_id}保活ping失败: {e}")
                 return
@@ -148,8 +145,8 @@ class CopilotSessionManager:
     async def send_and_wait(
         self,
         session_id: str,
-        options: MessageOptions,
-        timeout: float | None = None,
+        prompt: str,
+        timeout: float = 60,
         is_group: bool = False,
     ) -> tuple[SessionEvent | None, bool]:
         """发送消息并等待响应，返回响应事件和是否是新会话"""
@@ -162,10 +159,10 @@ class CopilotSessionManager:
             # 将消息缓冲区中的消息添加到选项中
             buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
             if buffered_messages:
-                options["prompt"] = (
+                prompt = (
                     ("$现在的会话是群聊\n" if is_group else "")
                     + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
-                    + f"$下面是这次的用户消息：\n{options['prompt']}"
+                    + f"$下面是这次的用户消息：\n{prompt}"
                 )
                 # 清空消息缓冲区
                 self.__sessions_prompt_buffer[session_id] = []
@@ -177,14 +174,14 @@ class CopilotSessionManager:
             new_session = False
             session = self.__sessions[session_id]
             try:
-                session_event = await session.send_and_wait(options, timeout)
+                session_event = await session.send_and_wait(prompt, timeout=timeout)
             except Exception as e:
                 # 见(说明2.)
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
                 # 重置会话并重试一次
                 await self.clear_session(session_id)
                 session = await self._create_session(session_id)
-                session_event = await session.send_and_wait(options, timeout)
+                session_event = await session.send_and_wait(prompt, timeout=timeout)
                 new_session = True
 
             return session_event, new_session

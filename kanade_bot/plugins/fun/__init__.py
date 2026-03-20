@@ -71,7 +71,8 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
         list_name, music = get_random_music(list_query)
     except ValueError as e:
         await music_listen.finish(str(e))
-    list_message = MessageSegment.text(f"听 {list_name} 歌单的\n")
+
+    await music_listen.send(f"听 {list_name} 歌单的\n")
     message = MessageSegment("music")
 
     match music.source:
@@ -101,8 +102,8 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
         #     message.data["image"] = music.meta.pic_url
         case _:
             text_message = music.to_pretty_string()
-            await music_listen.finish(list_message + text_message)
-    await music_listen.finish(list_message + message)
+            await music_listen.finish(text_message)
+    await music_listen.finish(message)
 
 
 music_list = on_command(

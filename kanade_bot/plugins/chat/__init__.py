@@ -77,7 +77,7 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
     response, new_session = await copilot.send_and_wait(
         session_id,
-        {"prompt": prompt},
+        prompt,
         timeout=300,
         is_group=is_group,
     )
