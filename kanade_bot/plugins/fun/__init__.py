@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
+from kanade_bot.plugins.util import parse_arg_message
 
 from .config import Config
 from .music import get_music_list_names, get_random_music
@@ -42,16 +42,13 @@ ciallo = on_fullmatch(
 
 @ciallo.handle()
 async def handle_ciallo_console(bot: ConsoleBot):
-    await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
+    await ciallo.finish("Mikudayo~")
 
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    ciallo_image_path = Path(cfg.fun_ciallo_image_path)
-    if not ciallo_image_path.is_file():
-        await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
-
-    await ciallo.finish(OneBotMessageSegmentMeme(ciallo_image_path))
+    message = MessageSegment.image(Path("./Mikudayo.png"))
+    await ciallo.finish(message)
 
 
 plus_one = on_message(priority=5, block=False)

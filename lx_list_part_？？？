@@ -1,0 +1,348 @@
+{
+    "type": "playListPart_v2",
+    "data": {
+        "name": "？？？",
+        "id": "userlist_1774086130775",
+        "locationUpdateTime": null,
+        "list": [
+            {
+                "id": "tx_0020Nusb3QJGn9",
+                "name": "只因你太美",
+                "singer": "SWIN-S",
+                "source": "tx",
+                "interval": "03:39",
+                "meta": {
+                    "songId": "0020Nusb3QJGn9",
+                    "albumName": "New World",
+                    "picUrl": "https://y.gtimg.cn/music/photo_new/T002R500x500M000000njTPs2T8kRO.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "3.35 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "8.39 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "30.17 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "128k": {
+                            "size": "3.35 MB"
+                        },
+                        "320k": {
+                            "size": "8.39 MB"
+                        },
+                        "flac": {
+                            "size": "30.17 MB"
+                        }
+                    },
+                    "albumId": "000njTPs2T8kRO",
+                    "strMediaMid": "003Yn1vu1BzjDo",
+                    "id": 109538549,
+                    "albumMid": "000njTPs2T8kRO"
+                }
+            },
+            {
+                "id": "kw_41232783",
+                "name": "Never Gonna Give You Up",
+                "singer": "Rick Astley",
+                "source": "kw",
+                "interval": "03:33",
+                "meta": {
+                    "songId": "41232783",
+                    "albumName": "Double 80's",
+                    "picUrl": "http://img1.kwcdn.kuwo.cn/star/albumcover/500/17/7/4294767804.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "3.27Mb"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "8.16Mb"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "45.14Mb"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "45.14MB"
+                        },
+                        "320k": {
+                            "size": "8.16MB"
+                        },
+                        "128k": {
+                            "size": "3.27MB"
+                        }
+                    },
+                    "albumId": "620972"
+                }
+            },
+            {
+                "id": "wy_28546263",
+                "name": "ステージ：コミカル (サンドキャニオン)",
+                "singer": "石川淳",
+                "source": "wy",
+                "interval": "03:02",
+                "meta": {
+                    "songId": 28546263,
+                    "albumName": "星のカービィ3 オリジナルサウンドトラック",
+                    "picUrl": "http://p1.music.126.net/v1l0YFq0zgCvP-TXcJZTNQ==/109951164105245610.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "2.79 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "6.97 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "17.11 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "17.11 MB"
+                        },
+                        "320k": {
+                            "size": "6.97 MB"
+                        },
+                        "128k": {
+                            "size": "2.79 MB"
+                        }
+                    },
+                    "albumId": 79422970
+                }
+            },
+            {
+                "id": "wy_5111082",
+                "name": "Funky Town",
+                "singer": "Lipps Inc.",
+                "source": "wy",
+                "interval": "03:57",
+                "meta": {
+                    "songId": 5111082,
+                    "albumName": "Die Groessten Nr 1 Hits",
+                    "picUrl": "http://p2.music.126.net/f_ZL6fH1bjE8ncsV7joqCw==/1803199069564602.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "3.62 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "9.06 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "28.75 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "28.75 MB"
+                        },
+                        "320k": {
+                            "size": "9.06 MB"
+                        },
+                        "128k": {
+                            "size": "3.62 MB"
+                        }
+                    },
+                    "albumId": 504511
+                }
+            },
+            {
+                "id": "wy_1815378685",
+                "name": "Goyang Ubur Ubur",
+                "singer": "Hendro Engkeng、Diego Takupaz",
+                "source": "wy",
+                "interval": "04:21",
+                "meta": {
+                    "songId": 1815378685,
+                    "albumName": "",
+                    "picUrl": "http://p2.music.126.net/h49qRnbcolmQU7sSHujpxg==/109951165825498553.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "3.99 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "9.97 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "46.62 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "46.62 MB"
+                        },
+                        "320k": {
+                            "size": "9.97 MB"
+                        },
+                        "128k": {
+                            "size": "3.99 MB"
+                        }
+                    },
+                    "albumId": 0
+                }
+            },
+            {
+                "id": "wy_34341062",
+                "name": "最终鬼畜蓝蓝路",
+                "singer": "群星",
+                "source": "wy",
+                "interval": "05:18",
+                "meta": {
+                    "songId": 34341062,
+                    "albumName": "热门华语280",
+                    "picUrl": "http://p2.music.126.net/cpoUinrExafBHL5Nv5iDHQ==/109951166361218466.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "4.86 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "12.15 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "320k": {
+                            "size": "12.15 MB"
+                        },
+                        "128k": {
+                            "size": "4.86 MB"
+                        }
+                    },
+                    "albumId": 3275736
+                }
+            },
+            {
+                "id": "wy_2097191802",
+                "name": "もぺもぺ",
+                "singer": "LeaF",
+                "source": "wy",
+                "interval": "01:52",
+                "meta": {
+                    "songId": 2097191802,
+                    "albumName": "もペもペ",
+                    "picUrl": "http://p2.music.126.net/0RGwsyD_FQ03BhWrc87guQ==/109951169036045445.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "1.71 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "4.28 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "22.31 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "22.31 MB"
+                        },
+                        "320k": {
+                            "size": "4.28 MB"
+                        },
+                        "128k": {
+                            "size": "1.71 MB"
+                        }
+                    },
+                    "albumId": 178435584
+                }
+            },
+            {
+                "id": "wy_523658868",
+                "name": "Doki Doki Literature Club!",
+                "singer": "Dan Salvato",
+                "source": "wy",
+                "interval": "02:07",
+                "meta": {
+                    "songId": 523658868,
+                    "albumName": "Doki Doki Literature Club! (Original Soundtrack)",
+                    "picUrl": "http://p2.music.126.net/vnVhaD1lN84jAgGhF5TbTA==/109951170678982618.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "1.95 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "4.88 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "10.76 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "10.76 MB"
+                        },
+                        "320k": {
+                            "size": "4.88 MB"
+                        },
+                        "128k": {
+                            "size": "1.95 MB"
+                        }
+                    },
+                    "albumId": 36875829
+                }
+            },
+            {
+                "id": "wy_2688710019",
+                "name": "徳川カップヌードル禁止令",
+                "singer": "草薙寧々、ネネロボ、ミクダヨー、鏡音レン、KAITO",
+                "source": "wy",
+                "interval": "03:26",
+                "meta": {
+                    "songId": 2688710019,
+                    "albumName": "徳川カップヌードル禁止令",
+                    "picUrl": "http://p1.music.126.net/JwXdJZjLwsN2fJ79S4uZ8g==/109951170652678160.jpg",
+                    "qualitys": [
+                        {
+                            "type": "128k",
+                            "size": "3.15 MB"
+                        },
+                        {
+                            "type": "320k",
+                            "size": "7.87 MB"
+                        },
+                        {
+                            "type": "flac",
+                            "size": "27.89 MB"
+                        }
+                    ],
+                    "_qualitys": {
+                        "flac": {
+                            "size": "27.89 MB"
+                        },
+                        "320k": {
+                            "size": "7.87 MB"
+                        },
+                        "128k": {
+                            "size": "3.15 MB"
+                        }
+                    },
+                    "albumId": 267174167
+                }
+            }
+        ]
+    }
+}
