@@ -5,8 +5,8 @@ from pathlib import Path
 from copilot import (
     CopilotClient,
     CopilotSession,
+    CustomAgentConfig,
     PermissionHandler,
-    SessionConfig,
     SessionEvent,
 )
 from copilot.generated.rpc import SessionAgentSelectParams
@@ -42,21 +42,13 @@ class CopilotSessionManager:
 
     def __init__(self):
         self._client = CopilotClient()
-        self.__config: SessionConfig = {
-            "model": cfg.chat_model,
-            "on_permission_request": PermissionHandler.approve_all,
-            "custom_agents": [
-                {
-                    "name": "Kanade",
-                    "display_name": "宵崎奏",
-                    "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
-                    "tools": ["read", "search", "web", "todo", tavily_search.name],
-                    "prompt": Path(cfg.chat_system_message_path).read_text(encoding="utf-8"),
-                }
-            ],
-            "agent": "Kanade",
-            "tools": [tavily_search],
-            "available_tools": ["read", "search", "web", "todo", tavily_search.name],
+        self.__tools: list[str] = ["read", "search", "web", "todo", tavily_search.name]
+        self.__custom_agent_config: CustomAgentConfig = {
+            "name": "Kanade",
+            "display_name": "宵崎奏",
+            "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
+            "tools": self.__tools,
+            "prompt": Path(cfg.chat_system_message_path).read_text(encoding="utf-8"),
         }
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
@@ -80,7 +72,14 @@ class CopilotSessionManager:
         return self.__session_locks[session_id]
 
     async def _create_session(self, session_id: str) -> CopilotSession:
-        session = await self._client.create_session(self.__config)
+        session = await self._client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model=cfg.chat_model,
+            tools=[tavily_search],
+            available_tools=self.__tools,
+            custom_agents=[self.__custom_agent_config],
+            agent="Kanade",
+        )
         await session.set_model(cfg.chat_model)
         await session.rpc.agent.select(SessionAgentSelectParams("Kanade"))
         await session.set_model(cfg.chat_model)
