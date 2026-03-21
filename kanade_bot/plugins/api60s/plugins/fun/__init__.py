@@ -1,5 +1,8 @@
 from nonebot import on_command
 from nonebot.adapters import Event, Message
+from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
@@ -63,12 +66,29 @@ fabing = on_command(
 )
 
 
+def resolve_nickname(event: Event) -> str | None:
+    nickname: str | None = None
+
+    # 处理OneBot消息事件
+    if isinstance(event, OneBotMessageEvent):
+        nickname = event.sender.nickname
+    if isinstance(event, OneBotGroupMessageEvent):
+        nickname = event.sender.card or event.sender.nickname
+
+    # Console的消息事件
+    if isinstance(event, ConsoleMessageEvent):
+        nickname = event.user.nickname
+
+    return nickname
+
+
 @fabing.handle()
-async def handle_fabing(arg_msg: Message = CommandArg()):
+async def handle_fabing(event: Event, arg_msg: Message = CommandArg()):
+    nickname = resolve_nickname(event) or arg_msg.extract_plain_text().strip()
     response = await client.get(
         "/v2/fabing",
         params={
-            "name": arg_msg.extract_plain_text(),
+            "name": nickname,
             "encoding": "text",
         },
     )

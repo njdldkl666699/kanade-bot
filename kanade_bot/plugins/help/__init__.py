@@ -26,7 +26,14 @@ help = on_command(
 
 @help.handle()
 async def handle_help():
-    await help.finish("宵崎奏Bot 帮助文档链接：\n" + cfg.help_link)
+    fool_tips = """\n这些命令好像发生了异变！\n
+/kanade_verion
+/发病 
+/status 或 拍一拍Bot
+/听什么
+Ciallo
+"""
+    await help.finish("Mikudayo Bot 帮助文档链接：\n" + cfg.help_link + fool_tips)
 
 
 version = on_command(
