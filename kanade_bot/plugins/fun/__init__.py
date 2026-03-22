@@ -147,3 +147,31 @@ async def _(arg_msg: Message = CommandArg()):
         await thunder_link_parse.finish(decoded_str)
     except Exception as e:
         await thunder_link_parse.finish(f"解析失败: {e}")
+
+
+pjsk_skill_multiplier = on_command(
+    "技能倍率",
+    aliases={"倍率"},
+    priority=2,
+    block=True,
+)
+
+
+@pjsk_skill_multiplier.handle()
+async def _(arg_msg: Message = CommandArg()):
+    args = arg_msg.extract_plain_text().strip().split()
+    multipliers = [int(arg) for arg in args if arg.isdigit()]
+    if len(multipliers) != 5:
+        await pjsk_skill_multiplier.finish("请输入5个技能倍率，格式如：/倍率 100 100 100 100 100")
+
+    captain = multipliers[0]
+    members = sum(multipliers[1:]) / 5
+    total_multiplier = captain + members
+    await pjsk_skill_multiplier.finish(
+        f"""您的卡组技能效果如下
+车头{captain}
+内部{members}
+倍率{total_multiplier + 1}
+技能实际值为{total_multiplier / 100}%
+"""
+    )
