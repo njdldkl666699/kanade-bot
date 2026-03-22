@@ -171,7 +171,7 @@ async def _(arg_msg: Message = CommandArg()):
         f"""您的卡组技能效果如下
 车头{captain}
 内部{members}
-倍率{total_multiplier + 1}
-技能实际值为{total_multiplier / 100}%
+倍率{total_multiplier / 100 + 1}
+技能实际值为{total_multiplier}%
 """
     )
