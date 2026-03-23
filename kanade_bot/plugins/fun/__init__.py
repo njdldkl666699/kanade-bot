@@ -168,10 +168,9 @@ async def _(arg_msg: Message = CommandArg()):
     members = sum(multipliers[1:]) / 5
     total_multiplier = captain + members
     await pjsk_skill_multiplier.finish(
-        f"""您的卡组技能效果如下
-车头{captain}
-内部{members}
-倍率{total_multiplier / 100 + 1}
-技能实际值为{total_multiplier}%
-"""
+        "您的卡组技能效果如下\n"
+        f"车头: {captain}%\n"
+        f"内部: {members}%\n"
+        f"倍率: {total_multiplier / 100 + 1}\n"
+        f"技能实际值为: {total_multiplier}%"
     )
