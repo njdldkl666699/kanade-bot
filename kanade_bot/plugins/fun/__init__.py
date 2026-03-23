@@ -38,8 +38,9 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    message = MessageSegment.image(Path("./Mikudayo.png"))
-    await ciallo.finish(message)
+    message = MessageSegment.text("Mikudayo~")
+    image = MessageSegment.image(Path("./Mikudayo.png"))
+    await ciallo.finish(message + image)
 
 
 music_listen = on_command(
