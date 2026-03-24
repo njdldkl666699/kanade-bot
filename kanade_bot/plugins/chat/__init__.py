@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.matcher import Matcher
 from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
@@ -118,6 +119,64 @@ def split_content_preserving_code_blocks(content):
     return chunks
 
 
+async def send_message_in_chunks(
+    matcher: type[Matcher],
+    event: Event,
+    session_id: str,
+    prompt: str = EventPlainText(),
+    is_group: bool = False,
+):
+    # 处理消息中的图片附件
+    attachments: list[Attachment] = []
+    # 1. 回复的消息中的图片
+    if isinstance(event, OneBotMessageEvent) and event.reply:
+        reply_message_attachments = await resolve_message_images(event.reply.message)
+        attachments.extend(reply_message_attachments)
+    # 2. 发送的消息中的图片
+    message = event.get_message()
+    if isinstance(message, OneBotMessage):
+        message_attachments = await resolve_message_images(message)
+        attachments.extend(message_attachments)
+
+    # 处理引用（回复）消息中的文本内容
+    reply_text: str | None = None
+    if isinstance(event, OneBotMessageEvent) and event.reply:
+        reply_text = event.reply.message.extract_plain_text().strip()
+
+    response, new_session = await copilot.send_and_wait(
+        session_id,
+        prompt,
+        is_group=is_group,
+        reply_text=reply_text,
+        attachments=attachments,
+        timeout=300,
+    )
+    if new_session:
+        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
+
+    if response and response.data.content:
+        content = response.data.content
+        chunks = split_content_preserving_code_blocks(content)
+        # 消息数<=3，按条发送
+        if len(chunks) <= 3:
+            for chunk in chunks:
+                await matcher.send(chunk)
+            await matcher.finish()
+        # 消息数>3
+        # Console合并成一条发送
+        if isinstance(event, ConsoleMessageEvent):
+            await matcher.finish(content)
+        # OneBot分成多条，合并转发
+        if isinstance(event, OneBotMessageEvent):
+            message = OneBotMessage()
+            for chunk in chunks:
+                message += MessageSegment.node_custom(cfg.chat_bot_id, cfg.chat_bot_nickname, chunk)
+            await matcher.finish(message)
+        await matcher.finish()
+    else:
+        await matcher.finish("模型未响应，请稍后再试")
+
+
 ### 聊天命令
 chat = on_message(
     rule=to_me(),
@@ -137,50 +196,7 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
 
     # 解析会话ID和提示词
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
-
-    # 处理消息中的图片附件
-    attachments: list[Attachment] = []
-    # 1. 回复的消息中的图片
-    if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply_message_attachments = await resolve_message_images(event.reply.message)
-        attachments.extend(reply_message_attachments)
-    # 2. 发送的消息中的图片
-    message = event.get_message()
-    if isinstance(message, OneBotMessage):
-        message_attachments = await resolve_message_images(message)
-        attachments.extend(message_attachments)
-
-    response, new_session = await copilot.send_and_wait(
-        session_id,
-        prompt,
-        attachments=attachments,
-        timeout=300,
-        is_group=is_group,
-    )
-    if new_session:
-        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
-
-    if response and response.data.content:
-        content = response.data.content
-        chunks = split_content_preserving_code_blocks(content)
-        # 消息数<=3，按条发送
-        if len(chunks) <= 3:
-            for chunk in chunks:
-                await chat.send(chunk)
-            await chat.finish()
-        # 消息数>3
-        # Console合并成一条发送
-        if isinstance(event, ConsoleMessageEvent):
-            await chat.finish(content)
-        # OneBot分成多条，合并转发
-        if isinstance(event, OneBotMessageEvent):
-            message = OneBotMessage()
-            for chunk in chunks:
-                message += MessageSegment.node_custom(cfg.chat_bot_id, cfg.chat_bot_nickname, chunk)
-            await chat.finish(message)
-        await chat.finish()
-    else:
-        await chat.finish("模型未响应，请稍后再试")
+    await send_message_in_chunks(chat, event, session_id, prompt, is_group)
 
 
 def not_to_me(to_me: bool = EventToMe()):
@@ -198,9 +214,17 @@ chat_monitor = on_message(
 
 @chat_monitor.handle()
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
-    session_id, prompt, _ = resolve_session_id_and_prompt(event, prompt)
+    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
 
-    # 将用户消息添加到会话缓冲区
+    # 如果缓冲区大小超过限制，主动发送消息
+    size = copilot.get_session_prompt_buffer_size(session_id)
+    cfg_size = cfg.chat_prompt_buffer_size
+    # cfg_size <= 0表示不限制缓冲区大小
+    if cfg_size > 0 and size >= cfg_size:
+        logger.info(f"会话{session_id}的消息缓冲区已达{size}条，主动发送消息")
+        await send_message_in_chunks(chat_monitor, event, session_id, prompt, is_group)
+        # return
+    # 否则将用户消息添加到会话缓冲区
     await copilot.add_message(session_id, prompt)
 
 

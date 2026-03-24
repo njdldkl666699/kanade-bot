@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class Config(BaseModel):
     chat_model: str
     chat_system_message_path: str
+    chat_prompt_buffer_size: int
     chat_tavily_api_key: str
     chat_ban_path: str
     chat_bot_id: int

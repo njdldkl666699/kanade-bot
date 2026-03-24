@@ -112,9 +112,11 @@ class CopilotSessionManager:
         self,
         session_id: str,
         prompt: str,
+        *,
+        is_group: bool = False,
+        reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
         timeout: float = 60,
-        is_group: bool = False,
     ) -> tuple[SessionEvent | None, bool]:
         """发送消息并等待响应，返回响应事件和是否是新会话"""
         # 从缓存中获取会话对象，并尝试发送消息
@@ -135,7 +137,9 @@ class CopilotSessionManager:
             prompt = (
                 ("$现在的会话是群聊\n" if is_group else "")
                 + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
-                + f"$下面是这次的用户消息：\n{prompt}"
+                + (f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "")
+                + f"$下面是这次的用户消息：\n{prompt}\n\n"
+                + ("$用户附带了图片" if attachments else "")
             )
             # 清空消息缓冲区
             self.__sessions_prompt_buffer[session_id] = []
@@ -149,6 +153,12 @@ class CopilotSessionManager:
             logger.warning(f"发送消息或等待响应时发生错误: {e}")
 
         return session_event, new_session
+
+    def get_session_prompt_buffer_size(self, session_id: str) -> int:
+        """获取会话消息缓冲区大小"""
+        if session_id not in self.__sessions_prompt_buffer:
+            self.__sessions_prompt_buffer[session_id] = []
+        return len(self.__sessions_prompt_buffer[session_id])
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
