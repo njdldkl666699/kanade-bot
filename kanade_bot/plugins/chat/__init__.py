@@ -1,8 +1,8 @@
-from base64 import b64encode
 import re
+from base64 import b64encode
 
 from copilot import Attachment
-from nonebot import get_driver, get_plugin_config, on_command, on_message
+from nonebot import get_driver, get_plugin_config, logger, on_command, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -20,9 +20,9 @@ from kanade_bot.plugins.chat.ban import (
     remove_user_from_ban_list,
 )
 
+from .client import client
 from .config import Config
 from .copilot import copilot
-from .client import client
 
 __plugin_meta__ = PluginMetadata(
     name="chat",
@@ -51,12 +51,71 @@ def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
         nickname = event.user.nickname
+        session_id = "console_private"
     if isinstance(event, ConsolePublicMessageEvent):
         session_id = event.channel.id
         is_group = True
 
     prompt = f"{nickname}说：{prompt}" if nickname else prompt
     return session_id, prompt, is_group
+
+
+async def resolve_message_images(message: OneBotMessage) -> list[Attachment]:
+    """解析消息中的图片并返回附件列表"""
+    attachments: list[Attachment] = []
+    for segment in message:
+        if segment.type != "image":
+            continue
+
+        displayName: str = segment.data["file"] or "image.png"
+        url: str | None = segment.data["url"]
+        if not url:
+            continue
+
+        response = await client.get(url)
+        response.raise_for_status()
+        data = b64encode(response.content).decode()
+        attachments.append(
+            {
+                "type": "blob",
+                "data": data,
+                "mimeType": "image/png",
+                "displayName": displayName,
+            }
+        )
+    return attachments
+
+
+def split_content_preserving_code_blocks(content):
+    # 用于存储最终的块
+    chunks = []
+
+    # 找到所有代码块的位置，将它们替换为占位符
+    code_blocks = []
+
+    # 匹配 ```...``` 代码块（支持带语言标识）
+    def replace_code_block(match):
+        code_blocks.append(match.group(0))
+        # 返回一个唯一占位符
+        return f"__CODE_BLOCK_{len(code_blocks) - 1}__"
+
+    # 先保护代码块，将代码块替换为占位符
+    content_with_placeholders = re.sub(r"```[\s\S]*?```", replace_code_block, content)
+
+    # 按两个及以上换行拆分（代码块已被保护）
+    temp_chunks = [
+        chunk for chunk in re.split(r"(?:\r?\n){2,}", content_with_placeholders) if chunk.strip()
+    ]
+
+    # 恢复每个块中的代码块
+    for chunk in temp_chunks:
+        restored_chunk = chunk
+        # 替换回代码块（使用正则确保只替换占位符）
+        for i, code_block in enumerate(code_blocks):
+            restored_chunk = restored_chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
+        chunks.append(restored_chunk)
+
+    return chunks
 
 
 ### 聊天命令
@@ -79,29 +138,17 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
     # 解析会话ID和提示词
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
 
-    message = event.get_message()
+    # 处理消息中的图片附件
     attachments: list[Attachment] = []
+    # 1. 回复的消息中的图片
+    if isinstance(event, OneBotMessageEvent) and event.reply:
+        reply_message_attachments = await resolve_message_images(event.reply.message)
+        attachments.extend(reply_message_attachments)
+    # 2. 发送的消息中的图片
+    message = event.get_message()
     if isinstance(message, OneBotMessage):
-        for segment in message:
-            if segment.type != "image":
-                continue
-
-            displayName: str = segment.data["file"] or "image.png"
-            url: str | None = segment.data["url"]
-            if not url:
-                continue
-
-            response = await client.get(url)
-            response.raise_for_status()
-            data = b64encode(response.content).decode()
-            attachments.append(
-                {
-                    "type": "blob",
-                    "data": data,
-                    "mimeType": "image/png",
-                    "displayName": displayName,
-                }
-            )
+        message_attachments = await resolve_message_images(message)
+        attachments.extend(message_attachments)
 
     response, new_session = await copilot.send_and_wait(
         session_id,
@@ -110,13 +157,12 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
         timeout=300,
         is_group=is_group,
     )
-
     if new_session:
-        await chat.send("会话过期，开启了新会话")
+        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
+
     if response and response.data.content:
         content = response.data.content
-        # 按两个及以上换行拆分，单个换行保持原样
-        chunks = [chunk for chunk in re.split(r"(?:\r?\n){2,}", content) if chunk.strip()]
+        chunks = split_content_preserving_code_blocks(content)
         # 消息数<=3，按条发送
         if len(chunks) <= 3:
             for chunk in chunks:
@@ -171,12 +217,17 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
+    admin_operates = False
     admin_id = event.get_user_id()
     if admin_id not in global_config.superusers:
+        admin_operates = False
+    if isinstance(event, ConsoleMessageEvent):
+        admin_operates = True
+    if not admin_operates:
         await chat_reset.finish()
 
     session_id, _, _ = resolve_session_id_and_prompt(event, "")
-    await copilot.clear_session(session_id)
+    await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
 
 
