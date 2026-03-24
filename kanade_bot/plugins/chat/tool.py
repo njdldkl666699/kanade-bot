@@ -23,14 +23,10 @@ class TavilySearchParams(BaseModel):
 
 @define_tool(
     "tavily_search",
-    description=(
-        "A web search tool. Provide a query string to get search results. "
-        "This tool is relatively slow and usually takes about 10 seconds, "
-        "so you need to wait until it returns results before calling it again. "
-        "If you need more information about the same query, "
-        "call the fetch tool to extract content from the URLs in the results, "
-        "not call it again to search. "
-    ),
+    description="一个网络搜索工具。提供一个查询字符串来获取搜索结果。"
+    "这个工具相对较慢，通常需要大约10秒钟，所以你需要等到它返回结果后才能再次调用它。"
+    "如果你需要关于同一查询的更多信息，调用web_fetch工具从结果中的URL提取内容，"
+    "而不是再次调用它进行搜索。",
 )
 async def tavily_search(params: TavilySearchParams):
     """Run a Tavily web search."""

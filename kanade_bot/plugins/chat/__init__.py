@@ -1,5 +1,7 @@
+from base64 import b64encode
 import re
 
+from copilot import Attachment
 from nonebot import get_driver, get_plugin_config, on_command, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -20,6 +22,7 @@ from kanade_bot.plugins.chat.ban import (
 
 from .config import Config
 from .copilot import copilot
+from .client import client
 
 __plugin_meta__ = PluginMetadata(
     name="chat",
@@ -75,9 +78,35 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
 
     # 解析会话ID和提示词
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
+
+    message = event.get_message()
+    attachments: list[Attachment] = []
+    if isinstance(message, OneBotMessage):
+        for segment in message:
+            if segment.type != "image":
+                continue
+
+            displayName: str = segment.data["file"] or "image.png"
+            url: str | None = segment.data["url"]
+            if not url:
+                continue
+
+            response = await client.get(url)
+            response.raise_for_status()
+            data = b64encode(response.content).decode()
+            attachments.append(
+                {
+                    "type": "blob",
+                    "data": data,
+                    "mimeType": "image/png",
+                    "displayName": displayName,
+                }
+            )
+
     response, new_session = await copilot.send_and_wait(
         session_id,
         prompt,
+        attachments=attachments,
         timeout=300,
         is_group=is_group,
     )

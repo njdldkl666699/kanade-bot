@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from copilot import (
+    Attachment,
     CopilotClient,
     CopilotSession,
     CustomAgentConfig,
@@ -42,7 +43,18 @@ class CopilotSessionManager:
 
     def __init__(self):
         self._client = CopilotClient()
-        self.__tools: list[str] = ["read", "search", "web", "todo", tavily_search.name]
+        self.__tools: list[str] = [
+            "store_memory",
+            "view",
+            "read",
+            "grep",
+            "glob",
+            "search",
+            "web_search",
+            "web_fetch",
+            "todo",
+            tavily_search.name,
+        ]
         self.__custom_agent_config: CustomAgentConfig = {
             "name": "Kanade",
             "display_name": "宵崎奏",
@@ -145,6 +157,7 @@ class CopilotSessionManager:
         self,
         session_id: str,
         prompt: str,
+        attachments: list[Attachment] | None = None,
         timeout: float = 60,
         is_group: bool = False,
     ) -> tuple[SessionEvent | None, bool]:
@@ -173,14 +186,18 @@ class CopilotSessionManager:
             new_session = False
             session = self.__sessions[session_id]
             try:
-                session_event = await session.send_and_wait(prompt, timeout=timeout)
+                session_event = await session.send_and_wait(
+                    prompt, attachments=attachments, timeout=timeout
+                )
             except Exception as e:
                 # 见(说明2.)
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
                 # 重置会话并重试一次
                 await self.clear_session(session_id)
                 session = await self._create_session(session_id)
-                session_event = await session.send_and_wait(prompt, timeout=timeout)
+                session_event = await session.send_and_wait(
+                    prompt, attachments=attachments, timeout=timeout
+                )
                 new_session = True
 
             return session_event, new_session

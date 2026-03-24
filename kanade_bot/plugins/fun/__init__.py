@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 
 from nonebot import get_plugin_config, on_command, on_fullmatch
 from nonebot.adapters import Message
@@ -37,14 +38,9 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    message = MessageSegment(
-        "image",
-        {
-            "file": "2BD9A9D9F906F1B83A5886FA6660C8C0.jpg",
-            "summary": "[动画表情]",
-            "sub_type": 1,
-        },
-    )
+    message = MessageSegment.image(Path(cfg.fun_ciallo_image_path))
+    message.data["summary"] = "[动画表情]"
+    message.data["sub_type"] = 1
     await ciallo.finish(message)
 
 
