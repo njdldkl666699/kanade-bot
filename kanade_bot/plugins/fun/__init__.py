@@ -38,7 +38,11 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    message = MessageSegment.image(Path(cfg.fun_ciallo_image_path))
+    ciallo_image_path = Path(cfg.fun_ciallo_image_path)
+    if not ciallo_image_path.is_file():
+        await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
+
+    message = MessageSegment.image(ciallo_image_path)
     message.data["summary"] = "[动画表情]"
     message.data["sub_type"] = 1
     await ciallo.finish(message)

@@ -43,12 +43,19 @@ class CopilotSessionManager:
             "todo",
             tavily_search.name,
         ]
+        system_prompt_path = Path(cfg.chat_system_prompt_path)
+        system_prompt = ""
+        if not system_prompt_path.is_file():
+            logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
+        else:
+            system_prompt = system_prompt_path.read_text(encoding="utf-8")
+
         self.__custom_agent_config: CustomAgentConfig = {
             "name": "Kanade",
             "display_name": "宵崎奏",
             "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
             "tools": self.__tools,
-            "prompt": Path(cfg.chat_system_message_path).read_text(encoding="utf-8"),
+            "prompt": system_prompt,
         }
         self.__session_config = {
             "on_permission_request": PermissionHandler.approve_all,
