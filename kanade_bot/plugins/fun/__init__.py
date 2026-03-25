@@ -249,7 +249,6 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
     args = parse_arg_message(arg_msg, {"query": str, "number": int})
     query = args["query"]
     number = args["number"]
-    logger.info(f"查询唱歌，查询={query}，歌曲序号={number}")
 
     song_path = get_or_random_sing_song(query, number)
     if not song_path:
@@ -279,7 +278,6 @@ async def _(arg_msg: Message = CommandArg()):
     args = parse_arg_message(arg_msg, {"page": int, "query": str})
     page = args["page"] or 1
     query = args["query"] or None
-    logger.info(f"查询唱歌列表，页码={page}，查询={query}")
 
     total_pages = get_sing_song_pages()
     if total_pages == 0:
