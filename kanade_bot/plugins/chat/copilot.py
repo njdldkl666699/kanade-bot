@@ -1,4 +1,6 @@
+from asyncio import Lock
 from pathlib import Path
+
 
 from copilot import (
     Attachment,
@@ -69,6 +71,8 @@ class CopilotSessionManager:
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
         self.__sessions_prompt_buffer: dict[str, list[str]] = {}
+        # 会话锁，确保同一时间只有一个协程在操作sessions
+        self.__sessions_lock = Lock()
 
     def _get_session_shutdown_hook(self, session_id: str):
         def on_session_shutdown(event: SessionEvent):
@@ -126,40 +130,41 @@ class CopilotSessionManager:
         timeout: float = 60,
     ) -> tuple[SessionEvent | None, bool]:
         """发送消息并等待响应，返回响应事件和是否是新会话"""
-        # 从缓存中获取会话对象，并尝试发送消息
-        session = self.__sessions.get(session_id)
-        new_session = False
-        if not session:
-            # 如果会话不存在，优先恢复会话，恢复失败再创建新会话
-            session, new_session = await self._resume_or_create_session(session_id)
-            self.__sessions[session_id] = session
+        async with self.__sessions_lock:
+            # 从缓存中获取会话对象，并尝试发送消息
+            session = self.__sessions.get(session_id)
+            new_session = False
+            if not session:
+                # 如果会话不存在，优先恢复会话，恢复失败再创建新会话
+                session, new_session = await self._resume_or_create_session(session_id)
+                self.__sessions[session_id] = session
 
-        # 如果是新会话，则清空缓冲区
-        if new_session:
-            self.__sessions_prompt_buffer[session_id] = []
+            # 如果是新会话，则清空缓冲区
+            if new_session:
+                self.__sessions_prompt_buffer[session_id] = []
 
-        # 将消息缓冲区中的消息添加到选项中
-        buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
-        if buffered_messages:
-            prompt = (
-                ("$现在的会话是群聊\n" if is_group else "")
-                + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
-                + (f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "")
-                + f"$下面是这次的用户消息：\n{prompt}\n\n"
-                + ("$用户附带了图片" if attachments else "")
-            )
-            # 清空消息缓冲区
-            self.__sessions_prompt_buffer[session_id] = []
+            # 将消息缓冲区中的消息添加到选项中
+            buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
+            if buffered_messages:
+                prompt = (
+                    ("$现在的会话是群聊\n" if is_group else "")
+                    + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
+                    + (f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "")
+                    + f"$下面是这次的用户消息：\n{prompt}\n\n"
+                    + ("$用户附带了图片" if attachments else "")
+                )
+                # 清空消息缓冲区
+                self.__sessions_prompt_buffer[session_id] = []
 
-        session_event: SessionEvent | None = None
-        try:
-            session_event = await session.send_and_wait(
-                prompt, attachments=attachments, timeout=timeout
-            )
-        except Exception as e:
-            logger.warning(f"发送消息或等待响应时发生错误: {e}")
+            session_event: SessionEvent | None = None
+            try:
+                session_event = await session.send_and_wait(
+                    prompt, attachments=attachments, timeout=timeout
+                )
+            except Exception as e:
+                logger.warning(f"发送消息或等待响应时发生错误: {e}")
 
-        return session_event, new_session
+            return session_event, new_session
 
     def get_session_prompt_buffer_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""

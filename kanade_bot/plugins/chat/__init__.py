@@ -43,18 +43,19 @@ def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, 
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
+        session_id = f"qq-private-{event.user_id}"
         nickname = event.sender.nickname
     if isinstance(event, OneBotGroupMessageEvent):
-        session_id = str(event.group_id)
+        session_id = f"qq-group-{event.group_id}"
         nickname = event.sender.card or event.sender.nickname
         is_group = True
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
         nickname = event.user.nickname
-        session_id = "console_private"
+        session_id = f"console-private-{event.user.id}"
     if isinstance(event, ConsolePublicMessageEvent):
-        session_id = event.channel.id
+        session_id = f"console-group-{event.channel.id}"
         is_group = True
 
     prompt = f"{nickname}说：{prompt}" if nickname else prompt

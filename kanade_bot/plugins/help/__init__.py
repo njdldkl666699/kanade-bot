@@ -2,6 +2,7 @@ import tomllib
 from pathlib import Path
 
 from nonebot import get_plugin_config, on_command
+from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
 from .config import Config
@@ -25,8 +26,9 @@ help = on_command(
 
 
 @help.handle()
-async def handle_help():
-    await help.finish("宵崎奏Bot 帮助文档链接：\n" + cfg.help_link)
+async def handle_help(arg_msg: str = CommandArg()):
+    if not arg_msg.strip():
+        await help.finish("宵崎奏Bot 帮助文档链接：\n" + cfg.help_link)
 
 
 version = on_command(

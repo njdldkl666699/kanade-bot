@@ -74,7 +74,7 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
     except ValueError as e:
         await music_listen.finish(str(e))
 
-    await music_listen.send(f"听 {list_name} 歌单的\n")
+    await music_listen.send(f"听 {list_name} 歌单的")
     message = MessageSegment("music")
 
     match music.source:
