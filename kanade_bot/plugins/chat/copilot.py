@@ -2,6 +2,7 @@ from asyncio import Lock
 from datetime import datetime
 from pathlib import Path
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from copilot import (
     Attachment,
     CopilotClient,
@@ -37,7 +38,7 @@ GitHub CLI强制执行30分钟的会话超时，如果在30分钟内没有人类
 class CopilotSessionManager:
     SESSION_TIMEOUT_SECONDS = 30 * 60  # 30分钟会话超时
 
-    def __init__(self):
+    def __init__(self, scheduler: AsyncIOScheduler):
         self._client = CopilotClient()
         self.__tools: list[str] = [
             "store_memory",
@@ -51,6 +52,7 @@ class CopilotSessionManager:
             "todo",
             tavily_search.name,
         ]
+
         system_prompt_path = Path(cfg.chat_system_prompt_path)
         system_prompt = ""
         if not system_prompt_path.is_file():
@@ -65,6 +67,7 @@ class CopilotSessionManager:
             "tools": self.__tools,
             "prompt": system_prompt,
         }
+
         self.__session_config = {
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.chat_model,
@@ -73,14 +76,18 @@ class CopilotSessionManager:
             "custom_agents": [self.__custom_agent_config],
             "agent": self.__custom_agent_config["name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
         }
+
         # 会话对象缓存，键为会话ID，值为CopilotSession对象
         self.__sessions: dict[str, CopilotSession] = {}
-        # 会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间
-        self.__sesssions_last_active_time: dict[str, datetime] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
         self.__sessions_prompt_buffer: dict[str, list[str]] = {}
+
+        # 会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间
+        self.__sesssions_last_active_time: dict[str, datetime] = {}
         # 会话锁，确保同一时间只有一个协程在操作sessions
         self.__sessions_lock = Lock()
+
+        scheduler.add_job(self.check_sessions_timeout, "interval", minutes=1)
 
     async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
@@ -178,7 +185,6 @@ class CopilotSessionManager:
 
         return on_session_shutdown
 
-    @scheduler.scheduled_job("interval", minutes=1)
     async def check_sessions_timeout(self):
         """定时检查会话超时，超时则删除会话对象"""
         async with self.__sessions_lock:
@@ -231,7 +237,7 @@ class CopilotSessionManager:
             del self.__sesssions_last_active_time[session_id]
 
 
-copilot = CopilotSessionManager()
+copilot = CopilotSessionManager(scheduler)
 
 
 driver = get_driver()
