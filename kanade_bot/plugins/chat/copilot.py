@@ -16,13 +16,12 @@ from copilot.generated.session_events import SessionEventType
 from loguru import logger
 from nonebot import get_driver, get_plugin_config, require
 
-from kanade_bot.plugins.chat.tool import tavily_search
+from .config import Config
+from .tool import tavily_search
 
 require("nonebot_plugin_apscheduler")
 
 from nonebot_plugin_apscheduler import scheduler
-
-from .config import Config
 
 cfg = get_plugin_config(Config)
 

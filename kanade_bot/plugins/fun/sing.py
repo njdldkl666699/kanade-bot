@@ -56,7 +56,8 @@ def random_clip_song(song_path: Path) -> AudioSegment:
     """随机裁剪长度为clip_length_ms的片段"""
     audio = AudioSegment.from_file(song_path)
     audio_length = len(audio)
-    clip_length_ms = cfg.fun_sing_clip_length_ms
+    # 随机裁剪长度
+    clip_length_ms = random.randint(5000, 15000)
     if audio_length <= clip_length_ms:
         return audio
 

@@ -12,7 +12,5 @@ class Config(BaseModel):
     """+1功能的触发阈值，单位为条消息，小于等于0表示禁用"""
     fun_sing_directory: str = ""
     """唱歌功能的歌曲文件目录，目录下是每首歌的MP3文件"""
-    fun_sing_clip_length_ms: int = 5000
-    """唱歌功能的歌曲裁剪长度，单位为毫秒"""
     fun_sing_page_size: int = 10
     """唱歌功能的歌曲列表分页大小，每页显示多少首歌"""
