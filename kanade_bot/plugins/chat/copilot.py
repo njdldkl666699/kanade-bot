@@ -71,6 +71,7 @@ class CopilotSessionManager:
         self.__session_config = {
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.chat_model,
+            "reasoning_effort": "low",
             "tools": [tavily_search],
             "available_tools": self.__tools,
             "custom_agents": [self.__custom_agent_config],
@@ -81,13 +82,15 @@ class CopilotSessionManager:
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
         self.__sessions_prompt_buffer: dict[str, list[str]] = {}
-
         # 会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间
-        self.__sesssions_last_active_time: dict[str, datetime] = {}
-        # 会话锁，确保同一时间只有一个协程在操作sessions
-        self.__sessions_lock = Lock()
+        self.__sessions_last_active_time: dict[str, datetime] = {}
 
-        scheduler.add_job(self.check_sessions_timeout, "interval", minutes=1)
+        # 会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象
+        self.__session_locks: dict[str, Lock] = {}
+        # 全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全
+        self.__global_lock = Lock()
+
+        scheduler.add_job(self._check_sessions_timeout, "interval", minutes=1)
 
     async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
@@ -139,7 +142,7 @@ class CopilotSessionManager:
         timeout: float = 60,
     ) -> tuple[SessionEvent | None, bool]:
         """发送消息并等待响应，返回响应事件和是否是新会话"""
-        async with self.__sessions_lock:
+        async with self.__global_lock:
             # 从缓存中获取会话对象，并尝试发送消息
             session = self.__sessions.get(session_id)
             new_session = False
@@ -165,19 +168,34 @@ class CopilotSessionManager:
                 # 清空消息缓冲区
                 self.__sessions_prompt_buffer[session_id] = []
 
+        async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
                 session_event = await session.send_and_wait(
                     prompt, attachments=attachments, timeout=timeout
                 )
-                self.update_session_active_time(session_id)
             except Exception as e:
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
 
-            return session_event, new_session
+        # 更新会话最后活跃时间
+        async with self.__global_lock:
+            self.__sessions_last_active_time[session_id] = datetime.now()
+
+        return session_event, new_session
+
+    async def _ensure_session_lock(self, session_id: str) -> Lock:
+        """确保会话锁存在并返回"""
+        # 不要在持有全局锁的情况下调用此函数，以避免死锁
+        if session_id not in self.__session_locks:
+            # 略微提高性能，避免不必要的锁竞争
+            async with self.__global_lock:
+                if session_id not in self.__session_locks:
+                    self.__session_locks[session_id] = Lock()
+        return self.__session_locks[session_id]
 
     def _get_session_shutdown_hook(self, session_id: str):
         ###### 暂时是不生效的，等待SDK修复相关问题 ######
+        # 暂时线程不安全
         def on_session_shutdown(event: SessionEvent):
             if event.type == SessionEventType.SESSION_SHUTDOWN:
                 logger.info(f"会话{session_id}已结束，关闭类型：{event.data.shutdown_type}")
@@ -185,56 +203,60 @@ class CopilotSessionManager:
 
         return on_session_shutdown
 
-    async def check_sessions_timeout(self):
+    async def _check_sessions_timeout(self):
         """定时检查会话超时，超时则删除会话对象"""
-        async with self.__sessions_lock:
-            now = datetime.now()
-            timeout_sessions = []
-            for session_id, last_active in self.__sesssions_last_active_time.items():
-                if (now - last_active).total_seconds() > self.SESSION_TIMEOUT_SECONDS:
-                    timeout_sessions.append(session_id)
+        now = datetime.now()
+        timeout_sessions = []
+        for session_id, last_active in self.__sessions_last_active_time.items():
+            if (now - last_active).total_seconds() > self.SESSION_TIMEOUT_SECONDS:
+                timeout_sessions.append(session_id)
 
-            for session_id in timeout_sessions:
-                logger.info(f"会话{session_id}已超时，将删除缓存")
+        for session_id in timeout_sessions:
+            logger.info(f"会话{session_id}已超时，将删除缓存")
+            async with self.__global_lock:
                 try:
                     await self.__sessions[session_id].disconnect()
                     del self.__sessions[session_id]
                 except RuntimeError as e:
                     logger.warning(f"删除会话{session_id}时发生错误: {e}")
-                del self.__sesssions_last_active_time[session_id]
-
-    def update_session_active_time(self, session_id: str):
-        """更新会话最后活跃时间"""
-        self.__sesssions_last_active_time[session_id] = datetime.now()
+                del self.__sessions_last_active_time[session_id]
 
     def get_session_prompt_buffer_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""
-        if session_id not in self.__sessions_prompt_buffer:
-            self.__sessions_prompt_buffer[session_id] = []
-        return len(self.__sessions_prompt_buffer[session_id])
+        return len(self.__sessions_prompt_buffer.get(session_id, []))
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
         if session_id not in self.__sessions_prompt_buffer:
-            self.__sessions_prompt_buffer[session_id] = []
-        self.__sessions_prompt_buffer[session_id].append(prompt)
+            async with self.__global_lock:
+                if session_id not in self.__sessions_prompt_buffer:
+                    self.__sessions_prompt_buffer[session_id] = []
+        async with await self._ensure_session_lock(session_id):
+            self.__sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """删除会话，清空缓冲区。**此操作不可逆**"""
-        # 断开并删除现有会话
-        try:
-            if session_id in self.__sessions:
-                await self.__sessions[session_id].disconnect()
-                del self.__sessions[session_id]
-            await self._client.delete_session(session_id)
-        except RuntimeError as e:
-            logger.warning(f"删除会话{session_id}时发生错误: {e}")
-        # 清空消息缓冲区
-        if session_id in self.__sessions_prompt_buffer:
-            del self.__sessions_prompt_buffer[session_id]
-        # 删除活跃时间记录
-        if session_id in self.__sesssions_last_active_time:
-            del self.__sesssions_last_active_time[session_id]
+        # 修改操作，需要获取全局锁，确保__sessions字典和_client对象的线程安全
+        # 需要获取会话锁，确保同一时间只有一个协程在操作同一个会话
+        session_lock = await self._ensure_session_lock(session_id)
+        async with self.__global_lock, session_lock:
+            # 断开并删除现有会话
+            try:
+                if session_id in self.__sessions:
+                    await self.__sessions[session_id].disconnect()
+                    del self.__sessions[session_id]
+                await self._client.delete_session(session_id)
+            except RuntimeError as e:
+                logger.warning(f"删除会话{session_id}时发生错误: {e}")
+            # 清空消息缓冲区
+            if session_id in self.__sessions_prompt_buffer:
+                del self.__sessions_prompt_buffer[session_id]
+            # 删除活跃时间记录
+            if session_id in self.__sessions_last_active_time:
+                del self.__sessions_last_active_time[session_id]
+            # 删除会话锁
+            if session_id in self.__session_locks:
+                del self.__session_locks[session_id]
 
 
 copilot = CopilotSessionManager(scheduler)
