@@ -17,3 +17,5 @@ wheels/
 copilot-sdk_docs/
 chat_ban.json
 config/
+chat_configs.json
+sing_songs/
