@@ -1,66 +1,72 @@
-from pathlib import Path
 from typing import Literal
 
-from nonebot import get_plugin_config
-from pydantic import BaseModel
+from nonebot.adapters import Event
+from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
+from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 
-from .config import Config
+from .config import PlatformType, configs, write_chat_config
 
-cfg = get_plugin_config(Config)
-
-
-class BanList(BaseModel):
-    """聊天拉黑列表，包含Console和OneBot两部分"""
-
-    console: set[str]
-    onebot: set[str]
+type BanType = Literal["user", "group"]
 
 
-def get_ban_list():
-    ban_path = Path(cfg.chat_ban_path)
-    if not ban_path.exists():
-        ban_path.parent.mkdir(parents=True, exist_ok=True)
-        default_ban_list = BanList(console=set(), onebot=set())
-        ban_path.write_text(
-            default_ban_list.model_dump_json(indent=4, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return default_ban_list
+def get_ban_list(ban_type: BanType, platform: PlatformType):
+    ban_list: set[str] = set()
 
-    return BanList.model_validate_json(ban_path.read_text(encoding="utf-8"))
-
-
-def is_user_banned(user_id: str, platform: Literal["console", "onebot"]) -> bool:
-    ban_list = get_ban_list()
     if platform == "console":
-        return user_id in ban_list.console
+        config = configs.console
     elif platform == "onebot":
-        return user_id in ban_list.onebot
+        config = configs.onebot
+
+    if ban_type == "user":
+        ban_list = config.banned_users
+    elif ban_type == "group":
+        ban_list = config.banned_groups
+
+    return ban_list
+
+
+def is_banned(id: str, ban_type: BanType, platform: PlatformType) -> bool:
+    return id in get_ban_list(ban_type, platform)
+
+
+def is_event_banned(event: Event):
+    """检查用户或群聊是否在聊天黑名单中"""
+    # 确定平台类型
+    platform: PlatformType | None = None
+    if isinstance(event, ConsoleMessageEvent):
+        platform = "console"
+    elif isinstance(event, OneBotMessageEvent):
+        platform = "onebot"
     else:
-        raise ValueError("Invalid platform. Must be 'console' or 'onebot'.")
+        return False
+
+    # 检查群聊是否在聊天黑名单中
+    ban_type = "group"
+    group_id: str | None = None
+    if isinstance(event, ConsolePublicMessageEvent):
+        group_id = event.channel.id
+    elif isinstance(event, OneBotGroupMessageEvent):
+        group_id = str(event.group_id)
+
+    if group_id and is_banned(group_id, ban_type, platform):
+        return True
+
+    # 检查用户是否在聊天黑名单中
+    ban_type = "user"
+    user_id: str = event.get_user_id()
+    if user_id and is_banned(user_id, ban_type, platform):
+        return True
 
 
-def add_user_to_ban_list(user_id: str, platform: Literal["console", "onebot"]):
-    ban_list = get_ban_list()
-    if platform == "console":
-        ban_list.console.add(user_id)
-    elif platform == "onebot":
-        ban_list.onebot.add(user_id)
-    else:
-        raise ValueError("Invalid platform. Must be 'console' or 'onebot'.")
-    Path(cfg.chat_ban_path).write_text(
-        ban_list.model_dump_json(indent=4, ensure_ascii=False), encoding="utf-8"
-    )
+def add_to_ban_list(id: str, ban_type: BanType, platform: PlatformType):
+    ban_list = get_ban_list(ban_type, platform)
+    ban_list.add(id)
+    write_chat_config()
 
 
-def remove_user_from_ban_list(user_id: str, platform: Literal["console", "onebot"]):
-    ban_list = get_ban_list()
-    if platform == "console":
-        ban_list.console.discard(user_id)
-    elif platform == "onebot":
-        ban_list.onebot.discard(user_id)
-    else:
-        raise ValueError("Invalid platform. Must be 'console' or 'onebot'.")
-    Path(cfg.chat_ban_path).write_text(
-        ban_list.model_dump_json(indent=4, ensure_ascii=False), encoding="utf-8"
-    )
+def remove_from_ban_list(id: str, ban_type: BanType, platform: PlatformType):
+    ban_list = get_ban_list(ban_type, platform)
+    ban_list.discard(id)
+    write_chat_config()

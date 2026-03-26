@@ -15,6 +15,6 @@ wheels/
 
 # 杂项
 copilot-sdk_docs/
-chat_ban.json
+chat_configs.json
 config/
 sing_songs/

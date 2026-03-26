@@ -15,12 +15,14 @@ from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from kanade_bot.plugins.chat.ban import (
-    add_user_to_ban_list,
-    is_user_banned,
-    remove_user_from_ban_list,
-)
+from kanade_bot.plugins.argparser import parse_arg_message
+from kanade_bot.plugins.chat.auto_reply import should_auto_reply
 
+from .ban import (
+    add_to_ban_list,
+    is_event_banned,
+    remove_from_ban_list,
+)
 from .client import client
 from .config import Config
 from .copilot import copilot
@@ -188,12 +190,9 @@ chat = on_message(
 
 @chat.handle()
 async def handle_chat(event: Event, prompt: str = EventPlainText()):
-    # 检查用户是否在聊天黑名单中
-    user_id = event.get_user_id()
-    if isinstance(event, ConsoleMessageEvent) and is_user_banned(user_id, "console"):
-        await chat.finish()
-    if isinstance(event, OneBotMessageEvent) and is_user_banned(user_id, "onebot"):
-        await chat.finish()
+    # 检查用户或群聊是否在聊天黑名单中
+    if is_event_banned(event):
+        return
 
     # 解析会话ID和提示词
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
@@ -217,16 +216,20 @@ chat_monitor = on_message(
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
 
-    # 如果缓冲区大小超过限制，主动发送消息
-    size = copilot.get_session_prompt_buffer_size(session_id)
-    cfg_size = cfg.chat_prompt_buffer_size
-    # cfg_size <= 0表示不限制缓冲区大小
-    if cfg_size > 0 and size >= cfg_size:
-        logger.info(f"会话{session_id}的消息缓冲区已达{size}条，主动发送消息")
-        await send_message_in_chunks(chat_monitor, event, session_id, prompt, is_group)
-        # return
-    # 否则将用户消息添加到会话缓冲区
+    # 将用户消息添加到会话缓冲区
     await copilot.add_message(session_id, prompt)
+
+    if isinstance(event, ConsolePublicMessageEvent):
+        group_id = event.channel.id
+        platform = "console"
+    elif isinstance(event, OneBotGroupMessageEvent):
+        group_id = str(event.group_id)
+        platform = "onebot"
+    else:
+        return
+
+    if is_group and should_auto_reply(group_id, platform, session_id):
+        await send_message_in_chunks(chat, event, session_id, prompt, is_group)
 
 
 global_config = get_driver().config
@@ -271,18 +274,19 @@ async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
     if admin_id not in global_config.superusers:
         await chat_ban.finish()
 
-    user_id = arg_msg.extract_plain_text().strip()
-    if not user_id:
-        await chat_ban.finish()
+    args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
+    id = args.get("id", "").strip()
+    ban_type = args.get("ban_type", "user").strip().lower()
 
     if isinstance(event, ConsoleMessageEvent):
-        add_user_to_ban_list(user_id, "console")
+        add_to_ban_list(id, ban_type, "console")
     elif isinstance(event, OneBotMessageEvent):
-        add_user_to_ban_list(user_id, "onebot")
+        add_to_ban_list(id, ban_type, "onebot")
     else:
         await chat_ban.finish()
 
-    await chat_ban.finish(f"已将用户 {user_id} 添加到聊天黑名单")
+    type_text = "用户" if ban_type == "user" else "群聊"
+    await chat_ban.finish(f"已将{type_text} {id} 添加到聊天黑名单")
 
 
 chat_unban = on_command(
@@ -299,15 +303,16 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
     if admin_id not in global_config.superusers:
         await chat_unban.finish()
 
-    user_id = arg_msg.extract_plain_text().strip()
-    if not user_id:
-        await chat_unban.finish()
+    args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
+    id = args.get("id", "").strip()
+    ban_type = args.get("ban_type", "user").strip().lower()
 
     if isinstance(event, ConsoleMessageEvent):
-        remove_user_from_ban_list(user_id, "console")
+        remove_from_ban_list(id, ban_type, "console")
     elif isinstance(event, OneBotMessageEvent):
-        remove_user_from_ban_list(user_id, "onebot")
+        remove_from_ban_list(id, ban_type, "onebot")
     else:
         await chat_unban.finish()
 
-    await chat_unban.finish(f"已将用户 {user_id} 从聊天黑名单中移除")
+    type_text = "用户" if ban_type == "user" else "群聊"
+    await chat_unban.finish(f"已将{type_text} {id} 从聊天黑名单中移除")
