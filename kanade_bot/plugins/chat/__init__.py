@@ -244,8 +244,8 @@ chat_reset = on_command(
 async def handle_chat_reset(event: Event):
     admin_operates = False
     admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        admin_operates = False
+    if admin_id in global_config.superusers:
+        admin_operates = True
     if isinstance(event, ConsoleMessageEvent):
         admin_operates = True
     if not admin_operates:
