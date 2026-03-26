@@ -1,4 +1,5 @@
 from asyncio import Lock
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from copilot import (
     CustomAgentConfig,
     PermissionHandler,
     SessionEvent,
+    SystemMessageConfig,
 )
 from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
 from copilot.generated.session_events import SessionEventType
@@ -39,7 +41,7 @@ class CopilotSessionManager:
 
     def __init__(self, scheduler: AsyncIOScheduler):
         self._client = CopilotClient()
-        self.__tools: list[str] = [
+        tools: list[str] = [
             "store_memory",
             "view",
             "read",
@@ -59,12 +61,17 @@ class CopilotSessionManager:
         else:
             system_prompt = system_prompt_path.read_text(encoding="utf-8")
 
-        self.__custom_agent_config: CustomAgentConfig = {
+        custom_agent_config: CustomAgentConfig = {
             "name": "Kanade",
             "display_name": "宵崎奏",
             "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
-            "tools": self.__tools,
+            "tools": tools,
             "prompt": system_prompt,
+        }
+
+        system_message: SystemMessageConfig = {
+            "mode": "append",
+            "content": "回复用户的消息时，请始终使用Kanade SubAgent进行回复，当发生会话压缩后，也立即切换到Kanade SubAgent进行回复",
         }
 
         self.__session_config = {
@@ -72,9 +79,10 @@ class CopilotSessionManager:
             "model": cfg.chat_model,
             "reasoning_effort": "low",
             "tools": [tavily_search],
-            "available_tools": self.__tools,
-            "custom_agents": [self.__custom_agent_config],
-            "agent": self.__custom_agent_config["name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            "available_tools": [*tools, "read_agent", "list_agents", "task"],
+            "custom_agents": [custom_agent_config],
+            "agent": custom_agent_config["name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            "system_message": system_message,
         }
 
         # 会话对象缓存，键为会话ID，值为CopilotSession对象
@@ -107,6 +115,7 @@ class CopilotSessionManager:
         # 注册会话结束事件的回调函数，确保会话结束时能正确清理缓存
         ### 暂时不生效
         session.on(self._get_session_shutdown_hook(session_id))
+        session.on(self._get_session_compaction_complete_hook(session_id))
 
         current_agent = (await session.rpc.agent.get_current()).agent
         if not current_agent or current_agent.name != self.__session_config["agent"]:
@@ -201,6 +210,43 @@ class CopilotSessionManager:
                 del self.__sessions[session_id]
 
         return on_session_shutdown
+
+    def _get_session_compaction_complete_hook(self, session_id: str):
+        """获取会话压缩完成事件的回调函数"""
+
+        def on_session_compaction_complete(event: SessionEvent):
+            if event.type == SessionEventType.SESSION_COMPACTION_COMPLETE:
+                logger.info(f"会话{session_id}已完成压缩，检查Agent状态")
+                # 在会话压缩完成后，检查Agent状态是否正常
+                session = self.__sessions.get(session_id)
+                if not session:
+                    logger.warning(f"会话{session_id}对象不存在，无法检查Agent状态")
+                    return
+
+                # 获取当前线程的事件循环
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    # 没有运行中的循环，创建新的
+                    logger.info("当前线程没有运行中的事件循环，将创建新的事件循环")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                task = loop.create_task(session.rpc.agent.get_current())
+                current_agent = loop.run_until_complete(task).agent
+                if not current_agent or current_agent.name != self.__session_config["agent"]:
+                    logger.warning(
+                        "会话{} Agent状态异常，期望{}，但实际是{}，可能是会话压缩导致的，将重新设置",
+                        session_id,
+                        self.__session_config["agent"],
+                        current_agent.name if current_agent else "None",
+                    )
+                    loop.run_until_complete(
+                        session.rpc.agent.select(
+                            SessionAgentSelectParams(self.__session_config["agent"])
+                        )
+                    )
+
+        return on_session_compaction_complete
 
     async def _check_sessions_timeout(self):
         """定时检查会话超时，超时则删除会话对象"""
