@@ -126,7 +126,7 @@ async def send_message_in_chunks(
     matcher: type[Matcher],
     event: Event,
     session_id: str,
-    prompt: str = EventPlainText(),
+    prompt: str | None,
     is_group: bool = False,
 ):
     # 处理消息中的图片附件
@@ -229,7 +229,7 @@ async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
         return
 
     if is_group and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, event, session_id, prompt, is_group)
+        await send_message_in_chunks(chat, event, session_id, None, is_group)
 
 
 global_config = get_driver().config

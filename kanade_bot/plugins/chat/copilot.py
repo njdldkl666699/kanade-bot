@@ -143,14 +143,18 @@ class CopilotSessionManager:
     async def send_and_wait(
         self,
         session_id: str,
-        prompt: str,
+        prompt: str | None,
         *,
         is_group: bool = False,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
         timeout: float = 60,
     ) -> tuple[SessionEvent | None, bool]:
-        """发送消息并等待响应，返回响应事件和是否是新会话"""
+        """发送消息并等待响应，返回响应事件和是否是新会话
+
+        prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
+        仅使用缓冲区中的消息和引用消息；如果缓冲区也没有消息，则不发送任何消息
+        """
         async with self.__global_lock:
             # 从缓存中获取会话对象，并尝试发送消息
             session = self.__sessions.get(session_id)
@@ -166,22 +170,26 @@ class CopilotSessionManager:
 
             # 将消息缓冲区中的消息添加到选项中
             buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
-            if buffered_messages:
-                prompt = (
-                    ("$现在的会话是群聊\n" if is_group else "")
-                    + f"$下面是上次对话和这次对话之间的消息：\n{'\n'.join(buffered_messages)}\n\n"
-                    + (f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "")
-                    + f"$下面是这次的用户消息：\n{prompt}\n\n"
-                    + ("$用户附带了图片" if attachments else "")
-                )
-                # 清空消息缓冲区
-                self.__sessions_prompt_buffer[session_id] = []
+            if not buffered_messages and prompt is None:
+                # 没有新的用户消息，也没有缓冲消息，不发送任何消息
+                return None, new_session
+
+            group_prompt = "$现在的会话是群聊\n" if is_group else ""
+            buffered_messages_prompt = "\n".join(buffered_messages) if buffered_messages else ""
+            reply_prompt = f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else ""
+            user_prompt = f"$下面是这次的用户消息：\n{prompt}\n\n" if prompt else ""
+            attachments_prompt = "$用户附带了图片" if attachments else ""
+
+            send_prompt = f"{group_prompt}{reply_prompt}{buffered_messages_prompt}{user_prompt}{attachments_prompt}".strip()
+
+            # 清空消息缓冲区
+            self.__sessions_prompt_buffer[session_id] = []
 
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
                 session_event = await session.send_and_wait(
-                    prompt, attachments=attachments, timeout=timeout
+                    send_prompt, attachments=attachments, timeout=timeout
                 )
             except Exception as e:
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
