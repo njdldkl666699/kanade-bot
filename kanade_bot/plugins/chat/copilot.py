@@ -1,5 +1,5 @@
-from asyncio import Lock
 import asyncio
+from asyncio import Lock
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +11,7 @@ from copilot import (
     CustomAgentConfig,
     PermissionHandler,
     SessionEvent,
+    StopError,
     SystemMessageConfig,
 )
 from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
@@ -318,5 +319,8 @@ async def startup():
 
 @driver.on_shutdown
 async def shutdown():
-    await copilot._client.stop()
+    try:
+        await copilot._client.stop()
+    except* StopError as eg:
+        logger.warning(f"停止Copilot客户端时发生错误: {eg.message}")
     logger.info("Copilot客户端已关闭")
