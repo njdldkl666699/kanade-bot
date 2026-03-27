@@ -233,15 +233,9 @@ class CopilotSessionManager:
                     return
 
                 # 获取当前线程的事件循环
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    # 没有运行中的循环，创建新的
-                    logger.info("当前线程没有运行中的事件循环，将创建新的事件循环")
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                task = loop.create_task(session.rpc.agent.get_current())
-                current_agent = loop.run_until_complete(task).agent
+                loop = asyncio.get_running_loop()
+                future = asyncio.run_coroutine_threadsafe(session.rpc.agent.get_current(), loop)
+                current_agent = future.result().agent
                 if not current_agent or current_agent.name != self.__session_config["agent"]:
                     logger.warning(
                         "会话{} Agent状态异常，期望{}，但实际是{}，可能是会话压缩导致的，将重新设置",
@@ -249,11 +243,13 @@ class CopilotSessionManager:
                         self.__session_config["agent"],
                         current_agent.name if current_agent else "None",
                     )
-                    loop.run_until_complete(
+                    future = asyncio.run_coroutine_threadsafe(
                         session.rpc.agent.select(
                             SessionAgentSelectParams(self.__session_config["agent"])
-                        )
+                        ),
+                        loop,
                     )
+                    future.result()
 
         return on_session_compaction_complete
 
@@ -267,7 +263,8 @@ class CopilotSessionManager:
 
         for session_id in timeout_sessions:
             logger.info(f"会话{session_id}已超时，将删除缓存")
-            async with self.__global_lock:
+            session_lock = await self._ensure_session_lock(session_id)
+            async with self.__global_lock, session_lock:
                 try:
                     await self.__sessions[session_id].disconnect()
                     del self.__sessions[session_id]

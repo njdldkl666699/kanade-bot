@@ -68,7 +68,7 @@ def _ensure_get_chat_config() -> ChatConfigs:
         path.parent.mkdir(parents=True, exist_ok=True)
         default_configs = ChatConfigs()
         path.write_text(
-            default_configs.model_dump_json(indent=4, ensure_ascii=False),
+            default_configs.model_dump_json(indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         return default_configs
