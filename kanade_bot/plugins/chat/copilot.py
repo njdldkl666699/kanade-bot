@@ -226,32 +226,50 @@ class CopilotSessionManager:
         def on_session_compaction_complete(event: SessionEvent):
             if event.type == SessionEventType.SESSION_COMPACTION_COMPLETE:
                 logger.info(f"会话{session_id}已完成压缩，检查Agent状态")
-                # 在会话压缩完成后，检查Agent状态是否正常
-                session = self.__sessions.get(session_id)
-                if not session:
-                    logger.warning(f"会话{session_id}对象不存在，无法检查Agent状态")
-                    return
+
+                # 无法使用异步函数作为回调函数，
+                # 因此在回调函数中创建一个异步任务来检查和修复Agent状态，
+                # 避免阻塞事件处理线程
 
                 # 获取当前线程的事件循环
-                loop = asyncio.get_running_loop()
-                future = asyncio.run_coroutine_threadsafe(session.rpc.agent.get_current(), loop)
-                current_agent = future.result().agent
-                if not current_agent or current_agent.name != self.__session_config["agent"]:
-                    logger.warning(
-                        "会话{} Agent状态异常，期望{}，但实际是{}，可能是会话压缩导致的，将重新设置",
-                        session_id,
-                        self.__session_config["agent"],
-                        current_agent.name if current_agent else "None",
-                    )
-                    future = asyncio.run_coroutine_threadsafe(
-                        session.rpc.agent.select(
-                            SessionAgentSelectParams(self.__session_config["agent"])
-                        ),
-                        loop,
-                    )
-                    future.result()
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    # 如果没有运行中的循环，创建一个新的
+                    logger.warning("当前线程没有运行中的事件循环，将创建新的来处理会话压缩完成事件")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                # 创建异步任务而不等待结果，避免阻塞
+                asyncio.run_coroutine_threadsafe(
+                    self._check_fix_agent_after_compaction(session_id), loop
+                )
 
         return on_session_compaction_complete
+
+    async def _check_fix_agent_after_compaction(self, session_id: str):
+        """检查会话压缩完成后Agent状态是否正常，如果不正常则修复"""
+        session = self.__sessions.get(session_id)
+        if not session:
+            logger.warning(f"会话{session_id}对象不存在，无法检查Agent状态")
+            return
+
+        try:
+            # 获取当前Agent
+            current_agent = (await session.rpc.agent.get_current()).agent
+            if current_agent and current_agent.name == self.__session_config["agent"]:
+                logger.info(f"会话{session_id} Agent状态正常，无需修改")
+                return
+
+            logger.warning(
+                "会话{} Agent状态异常，期望{}，但实际是{}，会话压缩导致的，将重新设置",
+                session_id,
+                self.__session_config["agent"],
+                current_agent.name if current_agent else "None",
+            )
+            await session.rpc.agent.select(SessionAgentSelectParams(self.__session_config["agent"]))
+        except Exception as e:
+            logger.warning(f"检查或修复会话{session_id} Agent状态时发生错误: {e}")
 
     async def _check_sessions_timeout(self):
         """定时检查会话超时，超时则删除会话对象"""
