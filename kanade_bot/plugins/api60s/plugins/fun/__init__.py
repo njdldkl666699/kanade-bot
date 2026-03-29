@@ -107,3 +107,20 @@ async def handle_kfc():
         params={"encoding": "text"},
     )
     await kfc.finish(response.text)
+
+
+dad_joke = on_command(
+    "随机冷笑话",
+    aliases={"冷笑话", "dadjoke", "dad_joke"},
+    priority=2,
+    block=True,
+)
+
+
+@dad_joke.handle()
+async def handle_dad_joke():
+    response = await client.get(
+        "/v2/dad-joke",
+        params={"encoding": "text"},
+    )
+    await dad_joke.finish(response.text)
