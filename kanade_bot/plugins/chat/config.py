@@ -61,7 +61,7 @@ class ChatConfigs(BaseModel):
 cfg = get_plugin_config(Config)
 
 
-def _ensure_get_chat_config() -> ChatConfigs:
+def _ensure_chat_configs() -> ChatConfigs:
     """确保聊天配置文件存在并返回配置对象，如果文件不存在则创建默认配置文件并返回默认配置对象"""
     path = Path(cfg.chat_configs_path)
     if not path.exists():
@@ -76,7 +76,7 @@ def _ensure_get_chat_config() -> ChatConfigs:
     return ChatConfigs.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-configs = _ensure_get_chat_config()
+configs = _ensure_chat_configs()
 
 
 def write_chat_config():

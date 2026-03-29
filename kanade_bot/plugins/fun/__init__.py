@@ -1,4 +1,3 @@
-import base64
 from io import BytesIO
 from pathlib import Path
 
@@ -56,6 +55,56 @@ async def handle_ciallo_onebot(bot: OneBot):
     message.data["summary"] = "[动画表情]"
     message.data["sub_type"] = 1
     await ciallo.finish(message)
+
+
+plus_one = on_message(priority=5, block=False)
+group_message_cache: dict[str | int, list[str]] = {}
+
+
+@plus_one.handle()
+async def _(event: Event):
+    # 获取触发阈值
+    threshold = cfg.fun_plus_one_threshold
+    if threshold <= 0:
+        return
+
+    # 仅处理群聊消息
+    group_id = None
+    if isinstance(event, ConsolePublicMessageEvent):
+        group_id = event.channel.id
+    elif isinstance(event, OneBotGroupMessageEvent):
+        group_id = event.group_id
+    else:
+        return
+
+    # 获取群聊记录
+    if group_id not in group_message_cache:
+        group_message_cache[group_id] = []
+    messages = group_message_cache[group_id]
+
+    # 获取当前信息
+    message = event.get_message()
+    if len(message) != 1 or not message[0].is_text():
+        return
+
+    # 仅处理一段文本消息
+    new_text: str | None = message[0].data.get("text")
+    if not new_text:
+        return
+
+    # 比对当前消息和上一条消息
+    last_text = messages[-1] if messages else None
+    # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
+    if new_text != last_text:
+        messages.clear()
+    messages.append(new_text)
+
+    # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
+    if len(messages) >= threshold:
+        await plus_one.send(new_text)
+        messages.clear()
+
+    group_message_cache[group_id] = messages
 
 
 music_listen = on_command(
@@ -133,107 +182,6 @@ async def handle_music_list():
         + "\n".join(get_music_list_names())
         + f"\n\n完整歌单见：{cfg.fun_music_list_link}"
     )
-
-
-thunder_link_parse = on_command(
-    "迅雷链接解析",
-    aliases={"thunder_parse", "thunder_link_parse"},
-    priority=2,
-    block=True,
-)
-
-
-@thunder_link_parse.handle()
-async def _(arg_msg: Message = CommandArg()):
-    thunder_link = arg_msg.extract_plain_text().strip()
-    if not thunder_link.startswith("thunder://"):
-        await thunder_link_parse.finish("请输入有效的迅雷链接")
-
-    try:
-        decoded_bytes = base64.b64decode(thunder_link[10:])
-        decoded_str = decoded_bytes.decode("utf-8")
-        if decoded_str.startswith("AA") and decoded_str.endswith("ZZ"):
-            decoded_str = decoded_str[2:-2]
-        await thunder_link_parse.finish(decoded_str)
-    except Exception as e:
-        await thunder_link_parse.finish(f"解析失败: {e}")
-
-
-pjsk_skill_multiplier = on_command(
-    "技能倍率",
-    aliases={"倍率"},
-    priority=2,
-    block=True,
-)
-
-
-@pjsk_skill_multiplier.handle()
-async def _(arg_msg: Message = CommandArg()):
-    args = arg_msg.extract_plain_text().strip().split()
-    multipliers = [int(arg) for arg in args if arg.isdigit()]
-    if len(multipliers) != 5:
-        await pjsk_skill_multiplier.finish("请输入5个技能倍率，格式如：/倍率 100 100 100 100 100")
-
-    captain = multipliers[0]
-    members = sum(multipliers[1:]) / 5
-    total_multiplier = captain + members
-    await pjsk_skill_multiplier.finish(
-        "您的卡组技能效果如下\n"
-        f"车头: {captain}%\n"
-        f"内部: {members}%\n"
-        f"倍率: {total_multiplier / 100 + 1}\n"
-        f"技能实际值为: {total_multiplier}%"
-    )
-
-
-plus_one = on_message(priority=5, block=False)
-group_message_cache: dict[str | int, list[str]] = {}
-
-
-@plus_one.handle()
-async def _(event: Event):
-    # 获取触发阈值
-    threshold = cfg.fun_plus_one_threshold
-    if threshold <= 0:
-        return
-
-    # 仅处理群聊消息
-    group_id = None
-    if isinstance(event, ConsolePublicMessageEvent):
-        group_id = event.channel.id
-    elif isinstance(event, OneBotGroupMessageEvent):
-        group_id = event.group_id
-    else:
-        return
-
-    # 获取群聊记录
-    if group_id not in group_message_cache:
-        group_message_cache[group_id] = []
-    messages = group_message_cache[group_id]
-
-    # 获取当前信息
-    message = event.get_message()
-    if len(message) != 1 or not message[0].is_text():
-        return
-
-    # 仅处理一段文本消息
-    new_text: str | None = message[0].data.get("text")
-    if not new_text:
-        return
-
-    # 比对当前消息和上一条消息
-    last_text = messages[-1] if messages else None
-    # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
-    if new_text != last_text:
-        messages.clear()
-    messages.append(new_text)
-
-    # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
-    if len(messages) >= threshold:
-        await plus_one.send(new_text)
-        messages.clear()
-
-    group_message_cache[group_id] = messages
 
 
 sing_song = on_command(
