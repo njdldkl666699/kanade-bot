@@ -166,7 +166,24 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
     await chat_unban.finish(f"已将{type_text} {id} 从聊天黑名单中移除")
 
 
-### 添加表情命令
+### 表情相关命令
+list_memes = on_command(
+    "表情包列表",
+    aliases={"list_memes", "listmemes"},
+    priority=2,
+    block=True,
+)
+
+
+@list_memes.handle()
+async def handle_list_memes():
+    if not configs.memes:
+        await list_memes.finish("当前没有表情包")
+
+    meme_list = "\n".join(f"{name}: {description}" for name, description in configs.memes.items())
+    await list_memes.finish(f"当前表情包列表：\n{meme_list}")
+
+
 add_meme = on_command(
     "添加表情",
     aliases={"add_meme", "addmeme"},
