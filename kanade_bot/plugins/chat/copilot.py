@@ -20,7 +20,7 @@ from loguru import logger
 from nonebot import get_driver, get_plugin_config, require
 
 from .config import Config
-from .tool import tavily_search
+from .tool import list_memes, tavily_search
 
 require("nonebot_plugin_apscheduler")
 
@@ -53,6 +53,7 @@ class CopilotSessionManager:
             "web_fetch",
             "todo",
             tavily_search.name,
+            list_memes.name,
         ]
 
         system_prompt_path = Path(cfg.chat_system_prompt_path)
@@ -79,7 +80,7 @@ class CopilotSessionManager:
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.chat_model,
             "reasoning_effort": "low",
-            "tools": [tavily_search],
+            "tools": [tavily_search, list_memes],
             "available_tools": [*tools, "read_agent", "list_agents", "task"],
             "custom_agents": [custom_agent_config],
             "agent": custom_agent_config["name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]

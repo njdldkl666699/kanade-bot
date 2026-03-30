@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from kanade_bot.plugins.argparser import parse_arg_message
+from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
 
 from .config import Config
 from .music import get_music_list_names, get_random_music
@@ -51,10 +51,7 @@ async def handle_ciallo_onebot(bot: OneBot):
     if not ciallo_image_path.is_file():
         await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
 
-    message = MessageSegment.image(ciallo_image_path)
-    message.data["summary"] = "[动画表情]"
-    message.data["sub_type"] = 1
-    await ciallo.finish(message)
+    await ciallo.finish(OneBotMessageSegmentMeme(ciallo_image_path))
 
 
 plus_one = on_message(priority=5, block=False)

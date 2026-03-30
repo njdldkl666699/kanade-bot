@@ -1,31 +1,23 @@
-import re
-from base64 import b64encode
+import uuid
+from pathlib import Path
 
-from copilot import Attachment
-from nonebot import get_driver, get_plugin_config, logger, on_command, on_message
+from nonebot import get_driver, get_plugin_config, on_command, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.matcher import Matcher
 from nonebot.params import CommandArg, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from kanade_bot.plugins.argparser import parse_arg_message
-from kanade_bot.plugins.chat.auto_reply import should_auto_reply
+from kanade_bot.plugins.util import parse_arg_message
 
-from .ban import (
-    add_to_ban_list,
-    is_event_banned,
-    remove_from_ban_list,
-)
-from .client import client
-from .config import Config
+from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
+from .client import file_client as client
+from .config import Config, configs, write_chat_config
 from .copilot import copilot
+from .util import resolve_session_id_and_prompt, send_message_in_chunks, should_auto_reply
 
 __plugin_meta__ = PluginMetadata(
     name="chat",
@@ -35,150 +27,6 @@ __plugin_meta__ = PluginMetadata(
 )
 
 cfg = get_plugin_config(Config)
-
-
-def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, bool]:
-    """解析事件以获取会话ID和提示词，并返回是否是群聊"""
-    session_id = event.get_session_id()
-    nickname: str | None = None
-    is_group = False
-
-    # 处理OneBot消息事件
-    if isinstance(event, OneBotMessageEvent):
-        session_id = f"qq-private-{event.user_id}"
-        nickname = event.sender.nickname
-    if isinstance(event, OneBotGroupMessageEvent):
-        session_id = f"qq-group-{event.group_id}"
-        nickname = event.sender.card or event.sender.nickname
-        is_group = True
-
-    # Console的消息事件
-    if isinstance(event, ConsoleMessageEvent):
-        nickname = event.user.nickname
-        session_id = f"console-private-{event.user.id}"
-    if isinstance(event, ConsolePublicMessageEvent):
-        session_id = f"console-group-{event.channel.id}"
-        is_group = True
-
-    prompt = f"{nickname}说：{prompt}" if nickname else prompt
-    return session_id, prompt, is_group
-
-
-async def resolve_message_images(message: OneBotMessage) -> list[Attachment]:
-    """解析消息中的图片并返回附件列表"""
-    attachments: list[Attachment] = []
-    for segment in message:
-        if segment.type != "image":
-            continue
-
-        displayName: str = segment.data["file"] or "image.png"
-        url: str | None = segment.data["url"]
-        if not url:
-            continue
-
-        response = await client.get(url)
-        response.raise_for_status()
-        data = b64encode(response.content).decode()
-        attachments.append(
-            {
-                "type": "blob",
-                "data": data,
-                "mimeType": "image/png",
-                "displayName": displayName,
-            }
-        )
-    return attachments
-
-
-def split_content_preserving_code_blocks(content):
-    # 用于存储最终的块
-    chunks = []
-
-    # 找到所有代码块的位置，将它们替换为占位符
-    code_blocks = []
-
-    # 匹配 ```...``` 代码块（支持带语言标识）
-    def replace_code_block(match):
-        code_blocks.append(match.group(0))
-        # 返回一个唯一占位符
-        return f"__CODE_BLOCK_{len(code_blocks) - 1}__"
-
-    # 先保护代码块，将代码块替换为占位符
-    content_with_placeholders = re.sub(r"```[\s\S]*?```", replace_code_block, content)
-
-    # 按两个及以上换行拆分（代码块已被保护）
-    temp_chunks = [
-        chunk for chunk in re.split(r"(?:\r?\n){2,}", content_with_placeholders) if chunk.strip()
-    ]
-
-    # 恢复每个块中的代码块
-    for chunk in temp_chunks:
-        restored_chunk = chunk
-        # 替换回代码块（使用正则确保只替换占位符）
-        for i, code_block in enumerate(code_blocks):
-            restored_chunk = restored_chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
-        chunks.append(restored_chunk)
-
-    return chunks
-
-
-async def send_message_in_chunks(
-    matcher: type[Matcher],
-    event: Event,
-    session_id: str,
-    prompt: str | None,
-    is_group: bool = False,
-):
-    # 处理消息中的图片附件
-    attachments: list[Attachment] = []
-    # 1. 回复的消息中的图片
-    if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply_message_attachments = await resolve_message_images(event.reply.message)
-        attachments.extend(reply_message_attachments)
-    # 2. 发送的消息中的图片
-    message = event.get_message()
-    if isinstance(message, OneBotMessage):
-        message_attachments = await resolve_message_images(message)
-        attachments.extend(message_attachments)
-
-    # 处理引用（回复）消息中的文本内容
-    reply_text: str | None = None
-    if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply_text = event.reply.message.extract_plain_text().strip()
-
-    response, new_session = await copilot.send_and_wait(
-        session_id,
-        prompt,
-        is_group=is_group,
-        reply_text=reply_text,
-        attachments=attachments,
-        timeout=300,
-    )
-    if new_session:
-        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
-
-    if response and response.data.content:
-        content = response.data.content
-        chunks = split_content_preserving_code_blocks(content)
-        # 消息数<=3，按条发送
-        if len(chunks) <= 3:
-            for chunk in chunks:
-                await matcher.send(chunk)
-            await matcher.finish()
-        # 消息数>3
-        # Console合并成一条发送
-        if isinstance(event, ConsoleMessageEvent):
-            await matcher.finish(content)
-        # OneBot分成多条，合并转发
-        if isinstance(event, OneBotMessageEvent):
-            message = OneBotMessage()
-            for chunk in chunks:
-                message += MessageSegment.node_custom(cfg.chat_bot_id, cfg.chat_bot_nickname, chunk)
-            await matcher.finish(message)
-        await matcher.finish()
-    else:
-        await matcher.finish("模型未响应，请稍后再试")
-
 
 ### 聊天命令
 chat = on_message(
@@ -316,3 +164,55 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
 
     type_text = "用户" if ban_type == "user" else "群聊"
     await chat_unban.finish(f"已将{type_text} {id} 从聊天黑名单中移除")
+
+
+### 添加表情命令
+add_meme = on_command(
+    "添加表情",
+    aliases={"add_meme", "addmeme"},
+    priority=2,
+    block=True,
+)
+
+
+@add_meme.handle()
+async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
+    if event.get_user_id() not in global_config.superusers:
+        await add_meme.finish()
+
+    args = parse_arg_message(arg_msg, {"name": str, "description": str})
+    name: str | None = args.get("name") or None
+    if not name:
+        await add_meme.finish("请输入表情包名称")
+    description = args.get("description") or None
+
+    # 获取引用图片的第一张
+    if not event.reply:
+        await add_meme.finish()
+    message = event.reply.message
+    image_url: str | None = None
+    for segment in message:
+        if segment.type == "image":
+            image_url = segment.data.get("url")
+            break
+    if not image_url:
+        await add_meme.finish()
+
+    # 下载图片
+    response = await client.get(image_url)
+    response.raise_for_status()
+    image = response.content
+    # 确保表情包目录存在
+    meme_path = Path(cfg.memes_storage_path) / name
+    meme_path.mkdir(parents=True, exist_ok=True)
+    # 保存图片到表情包目录
+    image_path = meme_path / f"{uuid.uuid4()}.png"
+    image_path.write_bytes(image)
+
+    # 将表情包信息添加（或更新）到配置中
+    memes = configs.memes
+    # 如果表情包名称不存在，或新描述不为空，则更新配置文件
+    if name not in memes or description:
+        memes[name] = description
+        write_chat_config()
+    await add_meme.finish(f"已添加表情包 {name}")

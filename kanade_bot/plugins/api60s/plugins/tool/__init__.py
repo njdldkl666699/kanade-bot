@@ -6,7 +6,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.typing import T_State
 
 from kanade_bot.plugins.api60s.client import client
-from kanade_bot.plugins.argparser import parse_arg_message
+from kanade_bot.plugins.util import parse_arg_message
 
 from .cache import TranslateLang, TranslateLangCache
 from .config import Config

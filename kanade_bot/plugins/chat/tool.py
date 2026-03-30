@@ -1,35 +1,25 @@
 from copilot import define_tool
-from httpx import AsyncClient
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from pydantic import BaseModel, Field
 
-from .config import Config
-
-cfg = get_plugin_config(Config)
-
-
-client = AsyncClient(
-    base_url="https://api.tavily.com",
-    headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg.chat_tavily_api_key}",
-    },
-)
+from .client import tavily_client as client
+from .config import configs
 
 
 class TavilySearchParams(BaseModel):
-    query: str = Field(description="string query to search")
+    query: str = Field(description="要搜索的查询字符串")
 
 
 @define_tool(
     "tavily_search",
-    description="一个网络搜索工具。提供一个查询字符串来获取搜索结果。"
-    "这个工具相对较慢，通常需要大约10秒钟，所以你需要等到它返回结果后才能再次调用它。"
-    "如果你需要关于同一查询的更多信息，调用web_fetch工具从结果中的URL提取内容，"
-    "而不是再次调用它进行搜索。",
+    description="""一个网络搜索工具。
+提供一个查询字符串来获取搜索结果。
+必须等到它返回结果后才能再次调用它。
+如果你需要关于同一查询的更多信息，
+调用web_fetch工具从结果中的URL提取内容，
+而不是再次调用它进行搜索。""",
 )
 async def tavily_search(params: TavilySearchParams):
-    """Run a Tavily web search."""
     response = await client.post(
         "/search",
         json={
@@ -47,3 +37,13 @@ async def tavily_search(params: TavilySearchParams):
         response.status_code,
     )
     return response.json()
+
+
+@define_tool(
+    "list_memes",
+    description="""列出当前可用的表情包字典，键为表情包名称，值为表情包描述。
+需要在回复的消息中使用表情包时，只需使用{{表情包名称}}的格式引用它们，
+例如{{开心}}，发送时将自动替换为相应的表情包图片。""",
+)
+async def list_memes():
+    return configs.memes
