@@ -15,7 +15,7 @@ class Config(BaseModel):
 
     chat_configs_path: str = "chat_configs.json"
     """聊天配置文件路径"""
-    memes_storage_path: str = "memes"
+    chat_memes_path: str = "memes"
     """表情包存储路径"""
 
     chat_bot_id: int
@@ -66,7 +66,7 @@ class ChatConfigs(BaseModel):
 
     每个表情包为一个字典，key为表情包名称，value为表情包描述。
 
-    每个表情包在`MEMES_STORAGE_PATH`目录下有一个同名子目录，存放该表情包的图片。
+    每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。
     """
 
 

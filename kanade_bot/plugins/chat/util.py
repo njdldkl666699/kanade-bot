@@ -142,7 +142,7 @@ async def finish_onebot_message(matcher: type[Matcher], chunks: list[str]):
         if meme_name not in configs.memes:
             return ""
 
-        meme_path = Path(cfg.memes_storage_path) / meme_name
+        meme_path = Path(cfg.chat_memes_path) / meme_name
         if not meme_path.is_dir():
             return ""
 
