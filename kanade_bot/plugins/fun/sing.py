@@ -49,6 +49,8 @@ def get_or_random_sing_song(query: str | None = None, number: int | None = None)
             return None
 
     # 随机选择一首歌曲
+    if not song_files:
+        return None
     return random.choice(song_files)
 
 
