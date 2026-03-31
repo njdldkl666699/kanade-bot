@@ -55,7 +55,7 @@ def not_to_me(to_me: bool = EventToMe()):
 # 用于监听非@消息并将其添加到会话缓冲区，以便在下一次@消息时一起发送给模型
 chat_monitor = on_message(
     rule=not_to_me,
-    priority=1,
+    priority=3,
     block=False,
 )
 
@@ -63,9 +63,6 @@ chat_monitor = on_message(
 @chat_monitor.handle()
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
     session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
-
-    # 将用户消息添加到会话缓冲区
-    await copilot.add_message(session_id, prompt)
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -77,7 +74,10 @@ async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
         return
 
     if is_group and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, event, session_id, None, is_group)
+        await send_message_in_chunks(chat, event, session_id, prompt, is_group)
+
+    # 将用户消息添加到会话缓冲区
+    await copilot.add_message(session_id, prompt)
 
 
 global_config = get_driver().config

@@ -181,7 +181,7 @@ class CopilotSessionManager:
             user_prompt = f"$下面是这次的用户消息：\n{prompt}\n\n" if prompt else ""
             attachments_prompt = "$用户附带了图片" if attachments else ""
 
-            send_prompt = f"{group_prompt}{reply_prompt}{buffered_messages_prompt}{user_prompt}{attachments_prompt}".strip()
+            send_prompt = f"{group_prompt}{buffered_messages_prompt}{user_prompt}{reply_prompt}{attachments_prompt}".strip()
 
             # 清空消息缓冲区
             self.__sessions_prompt_buffer[session_id] = []
