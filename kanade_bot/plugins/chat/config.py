@@ -13,6 +13,8 @@ class Config(BaseModel):
     chat_tavily_api_key: str
     """Tavily API Key"""
 
+    chat_session_prompt_buffer_max_size: int = 100
+    """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
     chat_configs_path: str = "chat_configs.json"
     """聊天配置文件路径"""
     chat_memes_path: str = "memes"

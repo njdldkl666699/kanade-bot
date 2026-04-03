@@ -22,7 +22,7 @@ def get_sing_song_pages():
 def list_sing_songs(query: str | None = None, page: int = 1) -> list[Path]:
     """列出符合query条件的歌曲文件，分页展示，每页10首"""
     if query:
-        filtered_songs = [song for song in sing_songs if query in song.stem]
+        filtered_songs = [song for song in sing_songs if query.lower() in song.stem.lower()]
     else:
         filtered_songs = sing_songs
 
@@ -36,7 +36,7 @@ def list_sing_songs(query: str | None = None, page: int = 1) -> list[Path]:
 def get_or_random_sing_song(query: str | None = None, number: int | None = None) -> Path | None:
     """列出符合query条件的歌曲文件，并返回随机或指定序号的歌曲文件路径"""
     if query:
-        song_files = [song for song in sing_songs if query in song.stem]
+        song_files = [song for song in sing_songs if query.lower() in song.stem.lower()]
     else:
         song_files = sing_songs
 

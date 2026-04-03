@@ -1,5 +1,6 @@
 import asyncio
 from asyncio import Lock
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -90,7 +91,7 @@ class CopilotSessionManager:
         # 会话对象缓存，键为会话ID，值为CopilotSession对象
         self.__sessions: dict[str, CopilotSession] = {}
         # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
-        self.__sessions_prompt_buffer: dict[str, list[str]] = {}
+        self.__sessions_prompt_buffer: dict[str, deque[str]] = {}
         # 会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间
         self.__sessions_last_active_time: dict[str, datetime] = {}
 
@@ -167,7 +168,9 @@ class CopilotSessionManager:
 
             # 如果是新会话，则清空缓冲区
             if new_session:
-                self.__sessions_prompt_buffer[session_id] = []
+                self.__sessions_prompt_buffer[session_id] = deque(
+                    maxlen=cfg.chat_session_prompt_buffer_max_size
+                )
 
             # 将消息缓冲区中的消息添加到选项中
             buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
@@ -184,7 +187,7 @@ class CopilotSessionManager:
             send_prompt = f"{group_prompt}{buffered_messages_prompt}{user_prompt}{reply_prompt}{attachments_prompt}".strip()
 
             # 清空消息缓冲区
-            self.__sessions_prompt_buffer[session_id] = []
+            self.__sessions_prompt_buffer[session_id].clear()
 
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
@@ -300,8 +303,11 @@ class CopilotSessionManager:
         if session_id not in self.__sessions_prompt_buffer:
             async with self.__global_lock:
                 if session_id not in self.__sessions_prompt_buffer:
-                    self.__sessions_prompt_buffer[session_id] = []
+                    self.__sessions_prompt_buffer[session_id] = deque(
+                        maxlen=cfg.chat_session_prompt_buffer_max_size
+                    )
         async with await self._ensure_session_lock(session_id):
+            # deque(maxlen)会在溢出时自动丢弃最早的消息
             self.__sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
