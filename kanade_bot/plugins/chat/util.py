@@ -3,7 +3,7 @@ import re
 from base64 import b64encode
 from pathlib import Path
 
-from copilot import Attachment
+from copilot.session import Attachment
 from nonebot import get_plugin_config, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent

@@ -125,7 +125,7 @@ async def handle_fanyi(state: T_State, event: Event, arg_msg: Message = CommandA
         state["from_query"] = from_query
         state["to_query"] = to_query
         await fanyi.pause("请发送一条消息以进行翻译。")
-        return
+        # return
 
     # 回复消息中的文本作为要翻译的内容
     text = event.reply.message.extract_plain_text()

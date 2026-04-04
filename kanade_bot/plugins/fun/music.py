@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 import random
+from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
 from pydantic import BaseModel
@@ -33,7 +33,8 @@ class Music(BaseModel):
     interval: str
     meta: MusicMeta
 
-    def to_pretty_string(self) -> str:
+    @property
+    def pretty_string(self) -> str:
         album_name = self.meta.album_name.strip()
 
         return (
@@ -78,7 +79,7 @@ driver = get_driver()
 
 
 @driver.on_startup
-async def load_music_list():
+def load_music_list():
     global list_cache
     path = Path(cfg.fun_music_list_path)
     lists = json.load(path.open("r", encoding="utf-8"))["data"]

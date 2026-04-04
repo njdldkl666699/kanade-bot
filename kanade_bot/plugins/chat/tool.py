@@ -45,5 +45,5 @@ async def tavily_search(params: TavilySearchParams):
 需要在回复的消息中使用表情包时，只需使用{{表情包名称}}的格式引用它们，
 例如{{开心}}，发送时将自动替换为相应的表情包图片。""",
 )
-async def list_memes():
+def list_memes():
     return configs.memes

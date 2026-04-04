@@ -1,19 +1,21 @@
 from io import BytesIO
 from pathlib import Path
 
-from nonebot import get_plugin_config, on_command, on_fullmatch, on_message
+from nonebot import get_driver, get_plugin_config, logger, on_command, on_fullmatch, on_message
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.params import CommandArg
+from nonebot.params import CommandArg, EventPlainText
 from nonebot.plugin import PluginMetadata
+from nonebot.typing import T_State
 
 from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
 
 from .config import Config
+from .lyric import LyricLine, add_song_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
 from .sing import (
     get_or_random_sing_song,
@@ -104,6 +106,7 @@ async def _(event: Event):
     group_message_cache[group_id] = messages
 
 
+# 音乐推荐
 music_listen = on_command(
     "音乐推荐",
     aliases={"听什么", "whattolisten", "what_to_listen"},
@@ -119,7 +122,7 @@ async def handle_music_listen(bot: ConsoleBot, arg_msg: Message = CommandArg()):
         list_name, music = get_random_music(list_query)
     except ValueError as e:
         await music_listen.finish(str(e))
-    await music_listen.finish(f"听 {list_name} 歌单的\n{music.to_pretty_string()}")
+    await music_listen.finish(f"听 {list_name} 歌单的\n{music.pretty_string}")
 
 
 @music_listen.handle()
@@ -159,7 +162,7 @@ async def handle_music_listen_onebot(bot: OneBot, arg_msg: Message = CommandArg(
         #     message.data["title"] = f"{music.name} - {music.singer}"
         #     message.data["image"] = music.meta.pic_url
         case _:
-            text_message = music.to_pretty_string()
+            text_message = music.pretty_string
             await music_listen.finish(text_message)
     await music_listen.finish(message)
 
@@ -181,6 +184,7 @@ async def handle_music_list():
     )
 
 
+# 唱歌
 sing_song = on_command(
     "唱一首歌",
     aliases={"sing_song", "sing", "唱一句", "唱一首"},
@@ -238,3 +242,111 @@ async def _(arg_msg: Message = CommandArg()):
         f"符合条件的歌曲列表（{page}/{total_pages} 页）:\n"
         + "\n".join(f"{i}. {song.stem}" for i, song in enumerate(songs, start_number))
     )
+
+
+# 歌词
+random_lyric = on_command(
+    "随机歌词",
+    aliases={"lyric", "random_lyric"},
+    priority=2,
+    block=True,
+)
+
+
+@random_lyric.handle()
+async def _(arg_msg: Message = CommandArg()):
+    args = parse_arg_message(arg_msg, {"query": str, "length": int, "show_song": bool})
+    query: str | None = args["query"]
+    length: int | None = args["length"]
+    show_song: bool = args["show_song"] or True
+    logger.info(f"查询歌词，参数：query={query}, length={length}, show_song={show_song}")
+
+    result = get_random_lyric(query, length)
+    if not result:
+        await random_lyric.finish("没有找到符合条件的歌曲")
+
+    song_name, lyric_lines = result
+    lyric_text = "\n".join(
+        line.pretty_string if isinstance(line, LyricLine) else line for line in lyric_lines
+    )
+
+    if show_song:
+        await random_lyric.finish(f"{lyric_text}\n\t——{song_name}")
+    else:
+        await random_lyric.finish(lyric_text)
+
+
+add_lyric = on_command(
+    "添加歌词",
+    aliases={"add_lyric"},
+    priority=2,
+    block=True,
+)
+
+
+@add_lyric.handle()
+async def _(state: T_State, event: ConsolePublicMessageEvent, arg_msg: Message = CommandArg()):
+    song_name = arg_msg.extract_plain_text().strip()
+    if not song_name:
+        await add_lyric.finish("请输入歌曲名称")
+
+    state["song_name"] = song_name
+    await add_lyric.pause("请发送歌词")
+
+
+@add_lyric.handle()
+async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    song_name = arg_msg.extract_plain_text().strip()
+    if not song_name:
+        await add_lyric.finish("请输入歌曲名称")
+
+    if event.reply is None:
+        state["song_name"] = song_name
+        await add_lyric.pause("请发送歌词")
+
+    lyric = event.reply.message.extract_plain_text().strip()
+    if not lyric:
+        state["song_name"] = song_name
+        await add_lyric.pause("请发送歌词")
+
+    add_song_lyric_txt(song_name, lyric)
+    await add_lyric.finish(f"已添加歌曲 {song_name}")
+
+
+@add_lyric.handle()
+async def _(state: T_State, message: str = EventPlainText()):
+    song_name = state.get("song_name")
+    if not song_name:
+        await add_lyric.finish("发生错误，请重新添加歌词")
+
+    try:
+        add_song_lyric_txt(song_name, message)
+    except ValueError as e:
+        await add_lyric.finish(str(e))
+
+    await add_lyric.finish(f"已添加歌曲 {song_name}")
+
+
+global_config = get_driver().config
+
+remove_lyric = on_command(
+    "删除歌词",
+    aliases={"remove_lyric", "del_lyric"},
+    priority=2,
+    block=True,
+)
+
+
+@remove_lyric.handle()
+async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await remove_lyric.finish()
+
+    song_name = arg_msg.extract_plain_text().strip()
+    try:
+        remove_song_lyric(song_name)
+    except ValueError as e:
+        await remove_lyric.finish(str(e))
+
+    await remove_lyric.finish(f"已删除歌曲 {song_name}")

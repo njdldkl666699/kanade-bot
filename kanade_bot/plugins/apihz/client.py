@@ -14,7 +14,7 @@ driver = get_driver()
 
 
 @driver.on_startup
-async def startup():
+def startup():
     logger.info("接口盒子 HTTP客户端已启动")
 
 

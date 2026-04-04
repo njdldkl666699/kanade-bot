@@ -8,7 +8,7 @@ from pydantic import BaseModel
 class Config(BaseModel):
     chat_model: str = "gpt-4.1"
     """模型ID，需要支持图片输入"""
-    chat_system_prompt_path: str = ""
+    chat_system_prompt_path: str
     """系统提示词文件路径"""
     chat_tavily_api_key: str
     """Tavily API Key"""

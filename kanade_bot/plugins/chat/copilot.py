@@ -5,18 +5,11 @@ from datetime import datetime
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from copilot import (
-    Attachment,
-    CopilotClient,
-    CopilotSession,
-    CustomAgentConfig,
-    PermissionHandler,
-    SessionEvent,
-    StopError,
-    SystemMessageConfig,
-)
+from copilot import CopilotClient, CopilotSession
+from copilot.client import StopError
 from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
-from copilot.generated.session_events import SessionEventType
+from copilot.generated.session_events import SessionEvent, SessionEventType
+from copilot.session import Attachment, CustomAgentConfig, PermissionHandler, SystemMessageConfig
 from loguru import logger
 from nonebot import get_driver, get_plugin_config, require
 

@@ -11,7 +11,7 @@ driver = get_driver()
 
 
 @driver.on_startup
-async def startup():
+def startup():
     logger.info("API60s HTTP客户端已启动")
 
 
