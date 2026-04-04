@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "2.4.0"
+version = "2.4.1"
 source = { virtual = "." }
 dependencies = [
     { name = "audioop-lts" },
@@ -330,9 +330,6 @@ wheels = [
 [package.optional-dependencies]
 linkify = [
     { name = "linkify-it-py" },
-]
-plugins = [
-    { name = "mdit-py-plugins" },
 ]
 
 [[package]]
@@ -526,16 +523,16 @@ wheels = [
 
 [[package]]
 name = "nonebot-adapter-console"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nonebot2" },
     { name = "nonechat" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/10/38/94ae8349fbed019b4aca74e916df37d5678e04641eb24098f7c5caa50265/nonebot_adapter_console-0.9.0.tar.gz", hash = "sha256:d68ee2d2960575d729c81fd5d94d9a52425758e366ec4fc5b8c675a874caed1a", size = 8953, upload-time = "2025-07-25T14:59:02.368Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/e3/abd2192ba5b7f839a3f3bebed70e333e69ad0ceb3ad8338928b4fe3064cb/nonebot_adapter_console-0.10.0.tar.gz", hash = "sha256:aeb813038dd9e3403da5099d140b664582cb3d05471a2697ae27fe3e69843a47", size = 9012, upload-time = "2026-04-04T11:31:49.876Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/5d/450172177e95e0082ef02bda6885e2566ebf618a5d3fdc7cdedcfc0f0932/nonebot_adapter_console-0.9.0-py3-none-any.whl", hash = "sha256:1f41b53a6ffdcef8c0cfe69e3675158b36792db4fb04163931d48fc052f1ad04", size = 11268, upload-time = "2025-07-25T14:59:01.609Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/1b/c6e8452d4a4816230550d5b2e3aab8758fa2f652b33527f217852aa82910/nonebot_adapter_console-0.10.0-py3-none-any.whl", hash = "sha256:e8a8817866ace0e0df08a8c5d3cde558302f4c4d5b7c1a7eaff0af191dcbf024", size = 11306, upload-time = "2026-04-04T11:31:48.946Z" },
 ]
 
 [[package]]
@@ -609,14 +606,14 @@ fastapi = [
 
 [[package]]
 name = "nonechat"
-version = "0.6.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "textual" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/14/4ef5d6b9569315a36160cbb4f43837ba1452df08229fa47654928111f7a3/nonechat-0.6.1.tar.gz", hash = "sha256:4cf39badc4af1ebf72062dac879bd8f0a0063ce4f8e53e9679988b2ec6667117", size = 19294, upload-time = "2025-07-24T06:57:45.696Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/da/c04ce4be5a12ccb55bd696ca36e34350bbbe848faf18c25fb303c3214340/nonechat-0.7.0.tar.gz", hash = "sha256:9e3dfbd9a6d53a0f6f7e26430b4f5092f60d18a658a28d571736098dff7ba67b", size = 19226, upload-time = "2026-04-04T11:11:09.45Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/d5/8f30606713bea1d862477c67f5f4c8bda562c752d72321630b6269cd920f/nonechat-0.6.1-py3-none-any.whl", hash = "sha256:899f26416e01cc0f3beb4798e8ce73a47bac4627b610a0609fe07f6d8246bf0c", size = 28454, upload-time = "2025-07-24T06:57:44.226Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/df/f93835a97deeb63ff01373bd0cdccd8d58e94bbdbd1a0dd03aefd432f874/nonechat-0.7.0-py3-none-any.whl", hash = "sha256:b77039722498eb8c0aba25fdd8873c263d265100add116e24ffeed7ecf90a4a2", size = 28307, upload-time = "2026-04-04T11:11:08.58Z" },
 ]
 
 [[package]]
@@ -900,17 +897,19 @@ wheels = [
 
 [[package]]
 name = "textual"
-version = "3.7.1"
+version = "8.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markdown-it-py", extra = ["linkify", "plugins"] },
+    { name = "markdown-it-py", extra = ["linkify"] },
+    { name = "mdit-py-plugins" },
     { name = "platformdirs" },
+    { name = "pygments" },
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/83/c99c252c3fad2f7010ceb476a31af042eec71da441ffeef75bb590bc2e9e/textual-3.7.1.tar.gz", hash = "sha256:a76ba0c8a6c194ef24fd5c3681ebfddca55e7127c064a014128c84fbd7f5d271", size = 1604038, upload-time = "2025-07-09T09:04:45.477Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/b0/a9aedf13af1bfb1bf01cbc645ea5d5a4151b5d77ac1748b85c4f0d777d7d/textual-8.2.2.tar.gz", hash = "sha256:94e85267650cf679ac16ade5ac929055e836dc00798a0e6e3925926a5beee303", size = 1848623, upload-time = "2026-04-03T13:19:06.057Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/f1/8929fcce6dc983f7a260d0f3ddd2a69b74ba17383dbe57a7e0a9e085e8be/textual-3.7.1-py3-none-any.whl", hash = "sha256:ab5d153f4f65e77017977fa150d0376409e0acf5f1d2e25e2e4ab9de6c0d61ff", size = 691472, upload-time = "2025-07-09T09:04:43.626Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/18/4d59eb3f2241db6d346a90f2452fc47a19d61090a38b9cf331afe23e8431/textual-8.2.2-py3-none-any.whl", hash = "sha256:35a8f439875dc6e5b4dc7ee72dc9698a40bd13091c2de5bd5b2d4318522af8df", size = 724078, upload-time = "2026-04-03T13:19:08.115Z" },
 ]
 
 [[package]]

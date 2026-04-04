@@ -259,7 +259,6 @@ async def _(arg_msg: Message = CommandArg()):
     query: str | None = args["query"]
     length: int | None = args["length"]
     show_song: bool = args["show_song"] or True
-    logger.info(f"查询歌词，参数：query={query}, length={length}, show_song={show_song}")
 
     result = get_random_lyric(query, length)
     if not result:
