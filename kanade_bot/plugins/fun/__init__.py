@@ -1,7 +1,7 @@
 from io import BytesIO
 from pathlib import Path
 
-from nonebot import get_driver, get_plugin_config, logger, on_command, on_fullmatch, on_message
+from nonebot import get_driver, get_plugin_config, on_command, on_fullmatch, on_message
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
