@@ -15,7 +15,7 @@ from nonebot.typing import T_State
 from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
 
 from .config import Config
-from .lyric import LyricLine, add_song_lyric_txt, get_random_lyric, remove_song_lyric
+from .lyric import add_song_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
 from .sing import (
     get_or_random_sing_song,
@@ -265,9 +265,13 @@ async def _(arg_msg: Message = CommandArg()):
         await random_lyric.finish("没有找到符合条件的歌曲")
 
     song_name, lyric_lines = result
-    lyric_text = "\n".join(
-        line.pretty_string if isinstance(line, LyricLine) else line for line in lyric_lines
-    )
+
+    if isinstance(lyric_lines, list):
+        lyric_text = "\n".join(line.pretty_string for line in lyric_lines)
+    elif isinstance(lyric_lines, str):
+        lyric_text = lyric_lines
+    else:  # 要是有模式匹配就好了
+        await random_lyric.finish("歌词格式错误")
 
     if show_song:
         await random_lyric.finish(f"{lyric_text}\n\t——{song_name}")
