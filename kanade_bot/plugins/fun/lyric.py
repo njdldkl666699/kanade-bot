@@ -78,17 +78,19 @@ def add_song_lyric_txt(song_name: str, lyric: str):
     if not song_name:
         raise ValueError("歌曲名不能为空")
 
+    normalized_song_name = _normalize_song_name(song_name)
+
     lyric = lyric.strip()
     if not lyric:
         raise ValueError("歌词内容不能为空")
-    lyrics[song_name] = lyric
+    lyrics[normalized_song_name] = lyric
 
     lyric_dir = Path(cfg.fun_lyrics_directory)
     lyric_dir.mkdir(parents=True, exist_ok=True)
-    lyric_file = lyric_dir / f"{song_name}.txt"
+    lyric_file = lyric_dir / f"{normalized_song_name}.txt"
     lyric_file.write_text(lyric, encoding="utf-8")
 
-    logger.info(f"已添加歌词: {song_name} ({lyric_file})")
+    logger.info(f"已添加歌词: {song_name} -> {normalized_song_name} ({lyric_file})")
 
 
 def remove_song_lyric(song_name: str):
@@ -97,21 +99,33 @@ def remove_song_lyric(song_name: str):
     if not song_name:
         raise ValueError("歌曲名不能为空")
 
+    normalized_song_name = _normalize_song_name(song_name)
+
     lyrics.pop(song_name, None)
+    lyrics.pop(normalized_song_name, None)
 
     lyric_dir = Path(cfg.fun_lyrics_directory)
-    txt_file = lyric_dir / f"{song_name}.txt"
-    lrc_file = lyric_dir / f"{song_name}.lrc"
+    txt_file = lyric_dir / f"{normalized_song_name}.txt"
+    lrc_file = lyric_dir / f"{normalized_song_name}.lrc"
 
     for lyric_file in (txt_file, lrc_file):
         if lyric_file.exists():
             lyric_file.unlink()
 
-    logger.info(f"已删除歌词: {song_name}")
+    logger.info(f"已删除歌词: {song_name} -> {normalized_song_name}")
 
 
 TIMESTAMP_PATTERN = re.compile(r"\[(\d{1,2}:\d{2}(?:\.\d{1,3})?)\]")
 METADATA_PATTERN = re.compile(r"^\[[a-zA-Z]+:.*\]$")
+INVALID_FILENAME_CHARS_PATTERN = re.compile(r"[\\/:*?\"<>|\n\r\t]")
+
+
+def _normalize_song_name(song_name: str) -> str:
+    """将歌曲名标准化为安全文件名，避免路径分隔符导致写入失败。"""
+    normalized = INVALID_FILENAME_CHARS_PATTERN.sub("_", song_name).strip().strip(".")
+    if not normalized:
+        raise ValueError("歌曲名仅包含非法字符，无法保存")
+    return normalized
 
 
 def _timestamp_to_seconds(timestamp: str) -> float:
