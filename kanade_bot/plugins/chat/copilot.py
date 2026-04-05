@@ -1,4 +1,3 @@
-import asyncio
 from asyncio import Lock
 from collections import deque
 from datetime import datetime
@@ -32,66 +31,82 @@ GitHub CLI强制执行30分钟的会话超时，如果在30分钟内没有人类
 
 
 class CopilotSessionManager:
-    SESSION_TIMEOUT_SECONDS = 30 * 60  # 30分钟会话超时
+    """Copilot会话管理器，负责管理会话对象、消息缓冲区、会话锁等资源，并提供发送消息、添加缓冲消息、重置会话等功能"""
+
+    SESSION_TIMEOUT_SECONDS = 30 * 60
+    """会话超时的时间，单位为秒，默认30分钟。
+
+    会话超时后将被删除，释放资源。
+    每当有消息发送时，都会更新会话的最后活跃时间。"""
+
+    SESSION_COMPACTION_RETRY_MAX = 2
+    """发生压缩时最多重发次数"""
+
+    TOOLS: list[str] = [
+        "store_memory",
+        "view",
+        "read",
+        "grep",
+        "glob",
+        "search",
+        "web_search",
+        "web_fetch",
+        "todo",
+        tavily_search.name,
+        list_memes.name,
+    ]
+    """工具列表，包含所有可用工具的名称"""
+
+    SYSTEM_PROMPT_PATH = Path(cfg.chat_system_prompt_path)
+    SYSTEM_PROMPT = ""
+    """系统提示词"""
+    if not SYSTEM_PROMPT_PATH.is_file():
+        logger.warning(f"系统提示词文件不存在，路径: {SYSTEM_PROMPT_PATH.absolute()}")
+    else:
+        SYSTEM_PROMPT = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+
+    CUSTOM_AGENT_CONFIG: CustomAgentConfig = {
+        "name": "Kanade",
+        "display_name": "宵崎奏",
+        "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
+        "tools": TOOLS,
+        "prompt": SYSTEM_PROMPT,
+    }
+
+    SYSTEM_MESSAGE: SystemMessageConfig = {
+        "mode": "append",
+        "content": "回复用户的消息时，请始终使用Kanade SubAgent进行回复。",
+    }
+
+    SESSION_CONFIG = {
+        "on_permission_request": PermissionHandler.approve_all,
+        "model": cfg.chat_model,
+        "reasoning_effort": "low",
+        "tools": [tavily_search, list_memes],
+        "available_tools": [*TOOLS, "read_agent", "list_agents", "task"],
+        "custom_agents": [CUSTOM_AGENT_CONFIG],
+        "agent": CUSTOM_AGENT_CONFIG["name"],
+        "system_message": SYSTEM_MESSAGE,
+    }
 
     def __init__(self, scheduler: AsyncIOScheduler):
         self._client = CopilotClient()
-        tools: list[str] = [
-            "store_memory",
-            "view",
-            "read",
-            "grep",
-            "glob",
-            "search",
-            "web_search",
-            "web_fetch",
-            "todo",
-            tavily_search.name,
-            list_memes.name,
-        ]
+        """Copilot客户端对象，负责与Copilot服务进行通信，创建和恢复会话等操作"""
 
-        system_prompt_path = Path(cfg.chat_system_prompt_path)
-        system_prompt = ""
-        if not system_prompt_path.is_file():
-            logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
-        else:
-            system_prompt = system_prompt_path.read_text(encoding="utf-8")
-
-        custom_agent_config: CustomAgentConfig = {
-            "name": "Kanade",
-            "display_name": "宵崎奏",
-            "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
-            "tools": tools,
-            "prompt": system_prompt,
-        }
-
-        system_message: SystemMessageConfig = {
-            "mode": "append",
-            "content": "回复用户的消息时，请始终使用Kanade SubAgent进行回复，当发生会话压缩后，也立即切换到Kanade SubAgent进行回复",
-        }
-
-        self.__session_config = {
-            "on_permission_request": PermissionHandler.approve_all,
-            "model": cfg.chat_model,
-            "reasoning_effort": "low",
-            "tools": [tavily_search, list_memes],
-            "available_tools": [*tools, "read_agent", "list_agents", "task"],
-            "custom_agents": [custom_agent_config],
-            "agent": custom_agent_config["name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
-            "system_message": system_message,
-        }
-
-        # 会话对象缓存，键为会话ID，值为CopilotSession对象
         self.__sessions: dict[str, CopilotSession] = {}
-        # 会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表
-        self.__sessions_prompt_buffer: dict[str, deque[str]] = {}
-        # 会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间
-        self.__sessions_last_active_time: dict[str, datetime] = {}
+        """会话对象缓存，键为会话ID，值为CopilotSession对象"""
 
-        # 会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象
+        self.__sessions_prompt_buffer: dict[str, deque[str]] = {}
+        """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
+
+        self.__sessions_last_active_time: dict[str, datetime] = {}
+        """会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间"""
+
         self.__session_locks: dict[str, Lock] = {}
-        # 全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全
+        """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
+
         self.__global_lock = Lock()
+        """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
 
         scheduler.add_job(self._check_sessions_timeout, "interval", minutes=1)
 
@@ -99,29 +114,28 @@ class CopilotSessionManager:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
         new_session = False
         try:
-            session = await self._client.resume_session(session_id, **self.__session_config)
+            session = await self._client.resume_session(session_id, **self.SESSION_CONFIG)
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
             session = await self._client.create_session(
-                session_id=session_id, **self.__session_config
+                session_id=session_id, **self.SESSION_CONFIG
             )
             new_session = True
 
         # 注册会话结束事件的回调函数，确保会话结束时能正确清理缓存
         ### 暂时不生效
         session.on(self._get_session_shutdown_hook(session_id))
-        session.on(self._get_session_compaction_complete_hook(session_id))
 
         current_agent = (await session.rpc.agent.get_current()).agent
-        if not current_agent or current_agent.name != self.__session_config["agent"]:
+        if not current_agent or current_agent.name != self.SESSION_CONFIG["agent"]:
             logger.warning(
                 "会话{} Agent设置异常，期望{}，但实际是{}，将重新设置",
                 session_id,
-                self.__session_config["agent"],
+                self.SESSION_CONFIG["agent"],
                 current_agent.name if current_agent else "None",
             )
-            await session.rpc.agent.select(SessionAgentSelectParams(self.__session_config["agent"]))
+            await session.rpc.agent.select(SessionAgentSelectParams(self.SESSION_CONFIG["agent"]))
 
         current_model = await session.rpc.model.get_current()
         if current_model.model_id != cfg.chat_model:
@@ -185,8 +199,12 @@ class CopilotSessionManager:
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
-                session_event = await session.send_and_wait(
-                    send_prompt, attachments=attachments, timeout=timeout
+                session_event = await self._send_with_compaction_retry(
+                    session,
+                    session_id,
+                    prompt=send_prompt,
+                    attachments=attachments,
+                    timeout=timeout,
                 )
             except Exception as e:
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
@@ -196,6 +214,48 @@ class CopilotSessionManager:
             self.__sessions_last_active_time[session_id] = datetime.now()
 
         return session_event, new_session
+
+    async def _send_with_compaction_retry(
+        self,
+        session: CopilotSession,
+        session_id: str,
+        *,
+        prompt: str,
+        attachments: list[Attachment] | None = None,
+        timeout: float = 60,
+    ) -> SessionEvent | None:
+        """发送消息并在压缩发生时拒收本次响应，自动重发当前消息。"""
+        for attempt in range(self.SESSION_COMPACTION_RETRY_MAX + 1):
+            compaction_started = False
+
+            def on_session_compaction_start(event: SessionEvent):
+                nonlocal compaction_started
+                if event.type == SessionEventType.SESSION_COMPACTION_START:
+                    compaction_started = True
+                    logger.info(f"会话{session_id}开始压缩，本轮响应将被丢弃")
+
+            unsubscribe = session.on(on_session_compaction_start)
+            try:
+                session_event = await session.send_and_wait(
+                    prompt,
+                    attachments=attachments,
+                    timeout=timeout,
+                )
+            finally:
+                unsubscribe()
+
+            if not compaction_started:
+                return session_event
+
+            if attempt >= self.SESSION_COMPACTION_RETRY_MAX:
+                logger.warning(
+                    f"会话{session_id}在压缩后重试超过上限{self.SESSION_COMPACTION_RETRY_MAX}次，返回最后一次响应"
+                )
+                return session_event
+
+            logger.info(f"会话{session_id}压缩后将重发当前消息，正在进行第{attempt + 1}次重试")
+
+        return None
 
     async def _ensure_session_lock(self, session_id: str) -> Lock:
         """确保会话锁存在并返回"""
@@ -216,57 +276,6 @@ class CopilotSessionManager:
                 del self.__sessions[session_id]
 
         return on_session_shutdown
-
-    def _get_session_compaction_complete_hook(self, session_id: str):
-        """获取会话压缩完成事件的回调函数"""
-
-        def on_session_compaction_complete(event: SessionEvent):
-            if event.type == SessionEventType.SESSION_COMPACTION_COMPLETE:
-                logger.info(f"会话{session_id}已完成压缩，检查Agent状态")
-
-                # 无法使用异步函数作为回调函数，
-                # 因此在回调函数中创建一个异步任务来检查和修复Agent状态，
-                # 避免阻塞事件处理线程
-
-                # 获取当前线程的事件循环
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    # 如果没有运行中的循环，创建一个新的
-                    logger.warning("当前线程没有运行中的事件循环，将创建新的来处理会话压缩完成事件")
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                # 创建异步任务而不等待结果，避免阻塞
-                asyncio.run_coroutine_threadsafe(
-                    self._check_fix_agent_after_compaction(session_id), loop
-                )
-
-        return on_session_compaction_complete
-
-    async def _check_fix_agent_after_compaction(self, session_id: str):
-        """检查会话压缩完成后Agent状态是否正常，如果不正常则修复"""
-        session = self.__sessions.get(session_id)
-        if not session:
-            logger.warning(f"会话{session_id}对象不存在，无法检查Agent状态")
-            return
-
-        try:
-            # 获取当前Agent
-            current_agent = (await session.rpc.agent.get_current()).agent
-            if current_agent and current_agent.name == self.__session_config["agent"]:
-                logger.info(f"会话{session_id} Agent状态正常，无需修改")
-                return
-
-            logger.warning(
-                "会话{} Agent状态异常，期望{}，但实际是{}，会话压缩导致的，将重新设置",
-                session_id,
-                self.__session_config["agent"],
-                current_agent.name if current_agent else "None",
-            )
-            await session.rpc.agent.select(SessionAgentSelectParams(self.__session_config["agent"]))
-        except Exception as e:
-            logger.warning(f"检查或修复会话{session_id} Agent状态时发生错误: {e}")
 
     async def _check_sessions_timeout(self):
         """定时检查会话超时，超时则删除会话对象"""

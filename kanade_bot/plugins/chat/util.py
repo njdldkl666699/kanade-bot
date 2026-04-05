@@ -72,7 +72,7 @@ def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, 
         session_id = f"console-group-{event.channel.id}"
         is_group = True
 
-    prompt = f"{nickname}说：{prompt}" if nickname else prompt
+    prompt = f"{nickname} 说：{prompt}" if nickname else prompt
     return session_id, prompt, is_group
 
 
@@ -134,7 +134,12 @@ def split_content_preserving_code_blocks(content: str) -> list[str]:
     return chunks
 
 
-async def finish_onebot_message(matcher: type[Matcher], chunks: list[str]):
+async def finish_onebot_message(
+    matcher: type[Matcher],
+    chunks: list[str],
+    *,
+    reply_id: int | None = None,
+):
     messages: list[OneBotMessage] = []
 
     def replace_meme(match: re.Match[str]) -> str:
@@ -162,6 +167,15 @@ async def finish_onebot_message(matcher: type[Matcher], chunks: list[str]):
     for chunk in chunks:
         text = re.sub(r"\{\{(\w+?)\}\}", replace_meme, chunk)
         messages.append(OneBotMessage(text))
+
+    if not messages:
+        await matcher.finish()
+
+    # 消息数==1，引用回复
+    if len(messages) == 1:
+        if reply_id:
+            messages[0].append(MessageSegment.reply(reply_id))
+        await matcher.finish(messages[0])
 
     # 消息数<=3，按条发送
     if len(messages) <= 3:
@@ -215,11 +229,11 @@ async def send_message_in_chunks(
 
     if response and response.data.content:
         content = response.data.content
-        chunks = split_content_preserving_code_blocks(content)
-        if isinstance(event, ConsoleMessageEvent):
-            # Console消息直接发送原始内容
-            await matcher.finish(content)
         # OneBot消息特殊处理
-        await finish_onebot_message(matcher, chunks)
+        if isinstance(event, OneBotMessageEvent):
+            chunks = split_content_preserving_code_blocks(content)
+            await finish_onebot_message(matcher, chunks, reply_id=event.message_id)
+        # Console消息直接发送原始内容
+        await matcher.finish(content)
     else:
         await matcher.finish("模型未响应，请稍后再试")
