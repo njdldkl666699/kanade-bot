@@ -20,11 +20,7 @@ class LyricLine(BaseModel):
 
     @property
     def pretty_string(self) -> str:
-        return (
-            f"{self.line}\n"
-            + (f"{self.translation}\n" if self.translation else "")
-            + (f"{self.romaji}\n" if self.romaji else "")
-        ).strip()
+        return (f"{self.line}\n" + (f"{self.translation}\n" if self.translation else "")).strip()
 
 
 type Lyric = list[LyricLine] | str
@@ -117,7 +113,7 @@ def remove_song_lyric(song_name: str):
 
 TIMESTAMP_PATTERN = re.compile(r"\[(\d{1,2}:\d{2}(?:\.\d{1,3})?)\]")
 METADATA_PATTERN = re.compile(r"^\[[a-zA-Z]+:.*\]$")
-INVALID_FILENAME_CHARS_PATTERN = re.compile(r"[\\/:*?\"<>|\n\r\t]")
+INVALID_FILENAME_CHARS_PATTERN = re.compile(r"[\\/*?\"<>|\n\r\t]")
 
 
 def _normalize_song_name(song_name: str) -> str:

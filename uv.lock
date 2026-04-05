@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "2.4.4"
+version = "2.4.5"
 source = { virtual = "." }
 dependencies = [
     { name = "audioop-lts" },
