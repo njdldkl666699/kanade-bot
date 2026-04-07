@@ -1,6 +1,6 @@
 # 宵崎奏Bot（Kanade Bot）
 
-<img src="./宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
+<img src="assets/宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
 
 ## 简介
 

@@ -84,11 +84,14 @@ mc_status = on_command(
 
 @mc_status.handle()
 async def _(event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"host": str, "port": int})
-    host: str | None = args.get("host")
+    args = parse_arg_message(arg_msg, {"host": str, "port": int, "theme": str})
+    host: str | None = args["host"]
     if host is None:
         await mc_status.finish("请提供服务器地址")
-    port: int | None = args.get("port")
+    port: int | None = args["port"]
+    theme: str | None = args["theme"]
+    if theme not in ("light", "dark"):
+        theme = "light"
 
     try:
         server = JavaServer(host, port)
@@ -97,7 +100,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         logger.warning(f"查询服务器状态失败: {e}")
         await mc_status.finish("服务器查询失败")
 
-    image = render_mc_status(status, host, port)
+    image = render_mc_status(status, host, port, theme)
     if isinstance(event, OneBotMessageEvent):
         # 发送图片消息
         await mc_status.finish(MessageSegment.image(image))

@@ -2,6 +2,7 @@ import base64
 import textwrap
 from io import BytesIO
 from pathlib import Path
+from typing import Literal
 
 from mcstatus.responses import JavaStatusResponse
 from nonebot import get_plugin_config
@@ -12,7 +13,7 @@ from .config import Config
 cfg = get_plugin_config(Config)
 
 
-def load_icon(icon_data: str | None) -> Image.Image:
+def _load_icon(icon_data: str | None) -> Image.Image:
     if icon_data and "," in icon_data:
         try:
             raw = base64.b64decode(icon_data.split(",", 1)[1])
@@ -20,19 +21,62 @@ def load_icon(icon_data: str | None) -> Image.Image:
         except Exception:
             pass
 
-    fallback = Path(__file__).resolve().parents[3] / "grass_block.png"
+    fallback = Path(cfg.tool_fallback_icon_path)
     return Image.open(fallback).convert("RGBA")
 
 
-def get_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _get_font(size: float) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     font_path = Path(cfg.tool_font_path)
     if font_path.exists():
         return ImageFont.truetype(str(font_path), size)
-    return ImageFont.load_default()
+    return ImageFont.load_default(size)
 
 
-def render_mc_status(status: JavaStatusResponse, host: str, port: int | None = None) -> bytes:
-    icon = load_icon(status.icon)
+type Theme = Literal["light", "dark"]
+type RGBA = tuple[int, int, int, int]
+
+_palettes: dict[str, dict[str, RGBA]] = {
+    "dark": {
+        "background": (20, 28, 42, 255),
+        "card": (36, 49, 66, 255),
+        "icon_panel": (28, 38, 52, 255),
+        "motd_text": (255, 255, 255, 255),
+        "info_text": (215, 225, 240, 255),
+    },
+    "light": {
+        "background": (238, 243, 250, 255),
+        "card": (252, 254, 255, 255),
+        "icon_panel": (224, 234, 245, 255),
+        "motd_text": (24, 36, 52, 255),
+        "info_text": (58, 72, 90, 255),
+    },
+}
+
+
+def _get_latency_color(value: float, theme: Theme) -> RGBA:
+    if theme == "light":
+        if value < 100:
+            return (42, 134, 77, 255)
+        if value < 250:
+            return (189, 117, 24, 255)
+        return (196, 56, 56, 255)
+    if theme == "dark":
+        if value < 100:
+            return (86, 201, 120, 255)
+        if value < 250:
+            return (255, 170, 64, 255)
+        return (255, 92, 92, 255)
+
+
+def render_mc_status(
+    status: JavaStatusResponse,
+    host: str,
+    port: int | None = None,
+    theme: Theme = "light",
+) -> bytes:
+    palette = _palettes[theme]
+
+    icon = _load_icon(status.icon)
     icon = icon.resize((128, 128))
 
     description = status.motd.to_plain()
@@ -50,37 +94,55 @@ def render_mc_status(status: JavaStatusResponse, host: str, port: int | None = N
     if sample:
         sample_names = [player.name for player in sample]
 
+    latency = status.latency
+
     lines = [
         f"地址: {host}" + (f":{port}" if port else ""),
-        f"延迟: {status.latency:.1f} ms",
+        f"延迟: {latency:.1f} ms",
         f"版本: {status.version.name}",
         f"玩家: {players.online}/{players.max}",
         *sample_names,
     ]
 
-    motd_line_height = 30
-    line_height = 34
-    image_width = 860
-    info_start_y = 48 + len(motd_lines) * motd_line_height
+    IMAGE_WIDTH = 860
+    MOTD_LINE_HEIGHT = 30
+    LINE_HEIGHT = 34
 
-    image_height = info_start_y + max(160, line_height * (len(lines) + 1))
-    card = Image.new("RGBA", (image_width, image_height), (20, 28, 42, 255))
+    info_start_y = 48 + len(motd_lines) * MOTD_LINE_HEIGHT
+    image_height = info_start_y + max(160, LINE_HEIGHT * (len(lines) + 1))
+
+    card = Image.new("RGBA", (IMAGE_WIDTH, image_height), palette["background"])
     draw = ImageDraw.Draw(card)
     draw.rounded_rectangle(
-        (24, 24, image_width - 24, image_height - 24), radius=20, fill=(36, 49, 66, 255)
+        (24, 24, IMAGE_WIDTH - 24, image_height - 24),
+        radius=20,
+        fill=palette["card"],
     )
-    draw.rounded_rectangle((52, 52, 196, 196), radius=16, fill=(28, 38, 52, 255))
+    draw.rounded_rectangle(
+        (52, 52, 196, 196),
+        radius=16,
+        fill=palette["icon_panel"],
+    )
     card.paste(icon, (60, 60), icon)
-
+    # MOTD文本
     for idx, line in enumerate(motd_lines):
         draw.text(
-            (230, 40 + idx * motd_line_height), line, fill=(255, 255, 255, 255), font=get_font(30)
+            (230, 40 + idx * MOTD_LINE_HEIGHT),
+            line,
+            fill=palette["motd_text"],
+            font=_get_font(30),
         )
-
+    # 信息文本
     start_y = info_start_y
     for idx, line in enumerate(lines):
+        color = palette["info_text"]
+        if line.startswith("延迟:"):
+            color = _get_latency_color(latency, theme)
         draw.text(
-            (230, start_y + idx * line_height), line, fill=(215, 225, 240, 255), font=get_font(24)
+            (230, start_y + idx * LINE_HEIGHT),
+            line,
+            fill=color,
+            font=_get_font(24),
         )
 
     buffer = BytesIO()
