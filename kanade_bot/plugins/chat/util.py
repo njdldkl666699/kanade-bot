@@ -174,7 +174,7 @@ async def finish_onebot_message(
     # 消息数==1，引用回复
     if len(messages) == 1:
         if reply_id:
-            messages[0].append(MessageSegment.reply(reply_id))
+            messages[0].insert(0, MessageSegment.reply(reply_id))
         await matcher.finish(messages[0])
 
     # 消息数<=3，按条发送

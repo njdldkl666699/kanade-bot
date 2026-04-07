@@ -15,7 +15,7 @@ from nonebot.typing import T_State
 from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
 
 from .config import Config
-from .lyric import add_song_lyric_txt, get_random_lyric, remove_song_lyric
+from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
 from .sing import (
     get_or_random_sing_song,
@@ -79,11 +79,12 @@ async def _(event: Event):
     # 获取群聊记录
     if group_id not in group_message_cache:
         group_message_cache[group_id] = []
-    messages = group_message_cache[group_id]
+    cached_messages = group_message_cache[group_id]
 
     # 获取当前信息
     message = event.get_message()
     if len(message) != 1 or not message[0].is_text():
+        cached_messages.clear()
         return
 
     # 仅处理一段文本消息
@@ -92,18 +93,18 @@ async def _(event: Event):
         return
 
     # 比对当前消息和上一条消息
-    last_text = messages[-1] if messages else None
+    last_text = cached_messages[-1] if cached_messages else None
     # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
     if new_text != last_text:
-        messages.clear()
-    messages.append(new_text)
+        cached_messages.clear()
+    cached_messages.append(new_text)
 
     # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
-    if len(messages) >= threshold:
+    if len(cached_messages) >= threshold:
         await plus_one.send(new_text)
-        messages.clear()
+        cached_messages.clear()
 
-    group_message_cache[group_id] = messages
+    group_message_cache[group_id] = cached_messages
 
 
 # 音乐推荐
@@ -264,7 +265,7 @@ async def _(arg_msg: Message = CommandArg()):
     if not result:
         await random_lyric.finish("没有找到符合条件的歌曲")
 
-    song_name, lyric_lines = result
+    lyric_file, lyric_lines = result
 
     if isinstance(lyric_lines, list):
         lyric_text = "\n".join(line.pretty_string for line in lyric_lines)
@@ -274,7 +275,7 @@ async def _(arg_msg: Message = CommandArg()):
         await random_lyric.finish("歌词格式错误")
 
     if show_song:
-        await random_lyric.finish(f"{lyric_text}\n\t——{song_name}")
+        await random_lyric.finish(f"{lyric_text}\n\t——{lyric_file.stem}")
     else:
         await random_lyric.finish(lyric_text)
 
@@ -312,7 +313,7 @@ async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = C
         state["song_name"] = song_name
         await add_lyric.pause("请发送歌词")
 
-    add_song_lyric_txt(song_name, lyric)
+    add_lyric_txt(song_name, lyric)
     await add_lyric.finish(f"已添加歌曲 {song_name}")
 
 
@@ -323,7 +324,7 @@ async def _(state: T_State, message: str = EventPlainText()):
         await add_lyric.finish("发生错误，请重新添加歌词")
 
     try:
-        add_song_lyric_txt(song_name, message)
+        add_lyric_txt(song_name, message)
     except ValueError as e:
         await add_lyric.finish(str(e))
 

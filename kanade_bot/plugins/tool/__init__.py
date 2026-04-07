@@ -1,11 +1,18 @@
 import base64
+from pathlib import Path
 
-from nonebot import get_plugin_config, on_command
-from nonebot.adapters import Message
+from mcstatus import JavaServer
+from nonebot import get_plugin_config, logger, on_command
+from nonebot.adapters import Event, Message
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
+from kanade_bot.plugins.util import parse_arg_message
+
 from .config import Config
+from .mcstatus import render_mc_status
 
 __plugin_meta__ = PluginMetadata(
     name="tool",
@@ -65,3 +72,37 @@ async def _(arg_msg: Message = CommandArg()):
         f"倍率: {total_multiplier / 100 + 1}\n"
         f"技能实际值为: {total_multiplier}%"
     )
+
+
+mc_status = on_command(
+    "我的世界服务器状态",
+    aliases={"mcstatus", "mcping", "mc_status", "mc_ping"},
+    priority=2,
+    block=True,
+)
+
+
+@mc_status.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    args = parse_arg_message(arg_msg, {"host": str, "port": int})
+    host: str | None = args.get("host")
+    if host is None:
+        await mc_status.finish("请提供服务器地址")
+    port: int | None = args.get("port")
+
+    try:
+        server = JavaServer(host, port)
+        status = await server.async_status()
+    except Exception as e:
+        logger.warning(f"查询服务器状态失败: {e}")
+        await mc_status.finish("服务器查询失败")
+
+    image = render_mc_status(status, host, port)
+    if isinstance(event, OneBotMessageEvent):
+        # 发送图片消息
+        await mc_status.finish(MessageSegment.image(image))
+
+    # 其他平台保存图片文件
+    image_path = Path("mc_status.png")
+    image_path.write_bytes(image)
+    await mc_status.finish("服务器状态已保存到 mc_status.png")
