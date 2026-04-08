@@ -46,7 +46,7 @@ def query_with_score(query_text: str) -> list[str]:
     if result is None:
         return []
 
-    relevant_documents = []
+    relevant_documents: list[str] = []
     for doc, score in zip(result.documents, result.distances):
         if score <= cfg.chat_rag_score_threshold:
             relevant_documents.append(doc)

@@ -216,9 +216,7 @@ async def send_message_in_chunks(
         reply_text = event.reply.message.extract_plain_text().strip()
 
     # 进行RAG查询，获取相关文档
-    rag_docs = None
-    if not prompt:
-        rag_docs = query_with_score(reply_text or "")
+    rag_docs = query_with_score(prompt) if prompt else None
 
     response, new_session = await copilot.send_and_wait(
         session_id,

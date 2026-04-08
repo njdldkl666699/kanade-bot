@@ -28,7 +28,7 @@ collection = client.get_or_create_collection(
 )
 
 # 6. 执行检索测试
-query = "充电宝能带到电梯里吗"
+query = "锐评tks"
 start = time.time()
 results = collection.query(
     query_texts=[query],
