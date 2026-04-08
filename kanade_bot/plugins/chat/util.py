@@ -238,5 +238,10 @@ async def send_message_in_chunks(
             await finish_onebot_message(matcher, chunks, reply_id=event.message_id)
         # Console消息直接发送原始内容
         await matcher.finish(content)
-    else:
-        await matcher.finish("模型未响应，请稍后再试")
+
+    # 没有响应或内容为空，发送失败消息
+    image = Path(cfg.chat_fail_image_path)
+    if image.is_file():
+        await matcher.finish(OneBotMessageSegmentMeme(image))
+    # 没有失败图片，发送默认文本消息
+    await matcher.finish("已深度思考（用时0秒）\n服务器繁忙，请稍后再试")

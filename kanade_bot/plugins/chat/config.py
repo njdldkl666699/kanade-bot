@@ -19,6 +19,8 @@ class Config(BaseModel):
     """聊天配置文件路径"""
     chat_memes_path: str = "memes"
     """表情包存储路径"""
+    chat_fail_image_path: str = "assets/chat_fail.jpg"
+    """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
 
     chat_bot_id: int
     """使用OneBot协议时，聊天机器人的QQ号"""
