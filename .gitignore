@@ -18,7 +18,7 @@ wheels/
 !.env.example
 
 # 杂项
-copilot-sdk_docs/
 chat_configs.json
+copilot-sdk_docs/
 bge-small-zh-v1.5/
-kanade_rag_db/
+chroma/

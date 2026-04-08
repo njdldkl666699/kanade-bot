@@ -1,16 +1,17 @@
+import asyncio
 import os
 
-from chromadb import PersistentClient
+from chromadb import AsyncHttpClient
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from dotenv import load_dotenv
 
 load_dotenv()
 
+PORT = int(os.getenv("CHAT_RAG_PORT", 8000))
+"""RAG使用的ChromaDB服务端口号"""
+
 MODEL_NAME_OR_PATH = os.getenv("CHAT_RAG_MODEL_OR_PATH", "BAAI/bge-small-zh-v1.5")
 """模型名称或路径"""
-
-PERSISTENT_PATH = os.getenv("CHAT_RAG_DB_PERSISTENT_PATH", "kanade_rag_db")
-"""向量数据库的持久化路径"""
 
 COLLECTION_NAME = os.getenv("CHAT_RAG_DB_COLLECTION_NAME", "kanade_wiki_collection")
 """向量数据库中集合的名称"""
@@ -350,18 +351,24 @@ IDS = [
 # 105
 print(f"ID数量: {len(IDS)}")
 
-bge_ef = SentenceTransformerEmbeddingFunction(
-    model_name=MODEL_NAME_OR_PATH,
-    normalize_embeddings=True,  # 可选：是否归一化向量，通常推荐在使用余弦相似度时开启
-)
 
-client = PersistentClient(path=PERSISTENT_PATH)
+async def main():
+    bge_ef = SentenceTransformerEmbeddingFunction(
+        model_name=MODEL_NAME_OR_PATH,
+        normalize_embeddings=True,  # 可选：是否归一化向量，通常推荐在使用余弦相似度时开启
+    )
 
-collection = client.get_or_create_collection(
-    name=COLLECTION_NAME,
-    embedding_function=bge_ef,  # pyright: ignore[reportArgumentType]
-)
+    client = await AsyncHttpClient(port=PORT)
 
-collection.add(documents=DOCUMENTS, ids=IDS)
+    collection = await client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=bge_ef,  # pyright: ignore[reportArgumentType]
+    )
 
-print("文档已成功添加到向量数据库中。")
+    await collection.add(documents=DOCUMENTS, ids=IDS)
+
+    print("文档已成功添加到向量数据库中。")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

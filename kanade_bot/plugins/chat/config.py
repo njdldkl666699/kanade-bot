@@ -27,10 +27,10 @@ class Config(BaseModel):
 
     chat_rag_enabled: bool = False
     """是否启用RAG功能"""
+    chat_rag_port: int = 8000
+    """RAG使用的ChromaDB服务端口号"""
     chat_rag_model_or_path: str = "BAAI/bge-small-zh-v1.5"
     """RAG使用的模型名称或路径，默认为BGE小型中文模型，支持从Hugging Face下载"""
-    chat_rag_db_persistent_path: str = "kanade_rag_db"
-    """RAG使用的ChromaDB持久化路径"""
     chat_rag_db_collection_name: str = "kanade_wiki_collection"
     """RAG使用的ChromaDB集合名称"""
     chat_rag_query_n_results: int = 3
