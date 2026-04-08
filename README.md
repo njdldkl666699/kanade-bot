@@ -11,4 +11,5 @@
 1. 克隆仓库到本地；
 2. 安装依赖：`uv sync`；
 3. 参考各个插件的配置类，补全或修改`.env`和`.env.prod`中的配置项；
-4. 运行机器人：`uv run`。
+4. 初始化ChromaDB：`uv run scripts/init_kanade_wiki_rag_db.py`;
+5. 运行机器人：`uv run`。

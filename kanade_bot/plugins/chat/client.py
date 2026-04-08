@@ -1,9 +1,7 @@
 from httpx import AsyncClient
-from nonebot import get_driver, get_plugin_config, logger
+from nonebot import get_driver, logger
 
-from .config import Config
-
-cfg = get_plugin_config(Config)
+from .config import cfg
 
 file_client = AsyncClient()
 

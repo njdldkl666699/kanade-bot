@@ -4,7 +4,7 @@ from base64 import b64encode
 from pathlib import Path
 
 from copilot.session import Attachment
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -18,10 +18,9 @@ from kanade_bot.plugins.util import OneBotMessageSegmentMeme
 
 from .ban import is_banned
 from .client import file_client as client
-from .config import Config, PlatformType, configs
+from .config import PlatformType, cfg, configs
 from .copilot import copilot
-
-cfg = get_plugin_config(Config)
+from .rag import query_with_score
 
 
 def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
@@ -216,10 +215,16 @@ async def send_message_in_chunks(
     if isinstance(event, OneBotMessageEvent) and event.reply:
         reply_text = event.reply.message.extract_plain_text().strip()
 
+    # 进行RAG查询，获取相关文档
+    rag_docs = None
+    if not prompt:
+        rag_docs = query_with_score(reply_text or "")
+
     response, new_session = await copilot.send_and_wait(
         session_id,
         prompt,
         is_group=is_group,
+        rag_docs=rag_docs,
         reply_text=reply_text,
         attachments=attachments,
         timeout=300,

@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v2.5.1"
+version = "v3.0.0-pre1"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13, <4.0"
@@ -16,6 +16,8 @@ dependencies = [
     "audioop-lts>=0.2.2",
     "mcstatus>=13.0.1",
     "pillow>=11.2.1",
+    "chromadb>=1.5.6",
+    "sentence-transformers>=5.3.0",
 ]
 
 [tool.nonebot]

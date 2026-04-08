@@ -10,16 +10,14 @@ from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchTo
 from copilot.generated.session_events import SessionEvent, SessionEventType
 from copilot.session import Attachment, CustomAgentConfig, PermissionHandler, SystemMessageConfig
 from loguru import logger
-from nonebot import get_driver, get_plugin_config, require
+from nonebot import get_driver, require
 
-from .config import Config
+from .config import cfg
 from .tool import list_memes, tavily_search
 
 require("nonebot_plugin_apscheduler")
 
 from nonebot_plugin_apscheduler import scheduler
-
-cfg = get_plugin_config(Config)
 
 """
 GitHub CLI强制执行30分钟的会话超时，如果在30分钟内没有人类交互，CLI将结束会话。
@@ -155,6 +153,7 @@ class CopilotSessionManager:
         prompt: str | None,
         *,
         is_group: bool = False,
+        rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
         timeout: float = 60,
@@ -162,7 +161,7 @@ class CopilotSessionManager:
         """发送消息并等待响应，返回响应事件和是否是新会话
 
         prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
-        仅使用缓冲区中的消息和引用消息；如果缓冲区也没有消息，则不发送任何消息
+        仅使用缓冲区中的消息和引用消息
         """
         async with self.__global_lock:
             # 从缓存中获取会话对象，并尝试发送消息
@@ -185,16 +184,29 @@ class CopilotSessionManager:
                 # 没有新的用户消息，也没有缓冲消息，不发送任何消息
                 return None, new_session
 
-            group_prompt = "$现在的会话是群聊\n" if is_group else ""
-            buffered_messages_prompt = "\n".join(buffered_messages) if buffered_messages else ""
-            reply_prompt = f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else ""
-            user_prompt = f"$下面是这次的用户消息：\n{prompt}\n\n" if prompt else ""
-            attachments_prompt = "$用户附带了图片" if attachments else ""
+            prompt_parts = [
+                # RAG相关文档
+                f"$检索到的相关文档：\n{'\n'.join(rag_docs)}\n\n" if rag_docs else "",
+                # 群聊提示
+                "$现在的会话是群聊\n" if is_group else "",
+                # 缓冲区消息
+                "\n".join(buffered_messages) if buffered_messages else "",
+                # 引用消息
+                f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "",
+                # 本次用户消息
+                f"$下面是这次的用户消息：\n{prompt}\n\n" if prompt else "",
+                # 附件提示
+                "$用户附带了图片\n" if attachments else "",
+            ]
 
-            send_prompt = f"{group_prompt}{buffered_messages_prompt}{user_prompt}{reply_prompt}{attachments_prompt}".strip()
+            send_prompt = "".join(prompt_parts).strip()
+            if not send_prompt:
+                # 没有任何消息可发送，直接返回
+                return None, new_session
 
             # 清空消息缓冲区
-            self.__sessions_prompt_buffer[session_id].clear()
+            if session_id in self.__sessions_prompt_buffer:
+                self.__sessions_prompt_buffer[session_id].clear()
 
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
@@ -232,7 +244,7 @@ class CopilotSessionManager:
                 nonlocal compaction_started
                 if event.type == SessionEventType.SESSION_COMPACTION_START:
                     compaction_started = True
-                    logger.info(f"会话{session_id}开始压缩，本轮响应将被丢弃")
+                    logger.warning(f"会话{session_id}开始压缩，本轮响应将被丢弃")
 
             unsubscribe = session.on(on_session_compaction_start)
             try:

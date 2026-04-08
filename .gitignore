@@ -20,3 +20,5 @@ wheels/
 # 杂项
 copilot-sdk_docs/
 chat_configs.json
+bge-small-zh-v1.5/
+kanade_rag_db/
