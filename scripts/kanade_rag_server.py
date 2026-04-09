@@ -1,20 +1,139 @@
-import asyncio
 import os
+import time
 
-from chromadb import AsyncHttpClient
+from chromadb import Collection, PersistentClient
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from dotenv import load_dotenv
+from loguru import logger
+from rpyc import Service, ThreadedServer
 
 load_dotenv()
 
-PORT = int(os.getenv("CHAT_RAG_PORT", 8000))
-"""RAG使用的ChromaDB服务端口号"""
+PORT = int(os.getenv("CHAT_RAG_PORT", 39831))
+"""RAG服务器端口号"""
 
 MODEL_NAME_OR_PATH = os.getenv("CHAT_RAG_MODEL_OR_PATH", "BAAI/bge-small-zh-v1.5")
-"""模型名称或路径"""
+"""RAG使用的模型名称或路径，默认为BGE小型中文模型，支持从Hugging Face下载"""
+
+DB_PATH = os.getenv("CHAT_RAG_DB_PATH", "./chroma")
+"""向量数据库的存储路径"""
 
 COLLECTION_NAME = os.getenv("CHAT_RAG_DB_COLLECTION_NAME", "kanade_wiki_collection")
 """向量数据库中集合的名称"""
+
+IDS = [
+    "kanade_wiki",
+    "introduction",
+    "base_info",
+    "base_info_relationships",
+    "base_info_traits",
+    "base_info_other",
+    "story_main_1",
+    "story_main_2",
+    "story_main_3",
+    *[f"story_event_{i}" for i in range(1, 52)],
+    *[f"anecdote_{i}" for i in range(1, 27)],
+    "relationship_mfy",
+    "relationship_ena",
+    "relationship_mzk",
+    "relationship_ick",
+    "relationship_saki",
+    "relationship_hnm",
+    "relationship_shiho",
+    "relationship_mnr",
+    "relationship_hrk",
+    "relationship_airi",
+    "relationship_szk",
+    "relationship_khn",
+    "relationship_an",
+    "relationship_akt",
+    "relationship_toya",
+    "relationship_tks",
+    "relationship_emu",
+    "relationship_nene",
+    "relationship_rui",
+]
+
+chrs = {
+    "knd": ["宵崎奏", "Kanade", "knd", "K"],
+    "mfy": ["朝比奈真冬", "Mafuyu", "mfy", "雪", "OWN"],
+    "ena": ["东云绘名", "ena", "Enana"],
+    "mzk": ["晓山瑞希", "mizuki", "mzk", "Amia"],
+    "miku": ["初音未来", "Miku", "miku"],
+    "ick": ["星乃一歌", "ichika", "ick"],
+    "saki": ["天马咲希", "saki"],
+    "hnm": ["望月穗波", "honami", "hnm"],
+    "shiho": ["日野森志步", "shiho"],
+    "mnr": ["花里实乃理", "minori", "mnr"],
+    "hrk": ["桐谷遥", "haruka", "hrk"],
+    "airi": ["桃井爱莉", "airi"],
+    "szk": ["日野森雫", "shizuku", "szk"],
+    "khn": ["小豆泽心羽", "kohane", "khn"],
+    "an": ["白石杏", "an"],
+    "akt": ["东云彰人", "akito", "akt"],
+    "toya": ["青柳冬弥", "toya"],
+    "tks": ["天马司", "tsukasa", "tks"],
+    "emu": ["凤笑梦", "emu"],
+    "nene": ["草薙宁宁", "nene"],
+    "rui": ["神代类", "rui"],
+}
+
+METADATAS = [
+    {"h1": "宵崎奏-萌娘百科"},
+    {"h2": "简介"},
+    {"h2": "基本信息", "characters": chrs["knd"]},
+    {"h2": "基本信息 - 人际关系", "characters": [*chrs["knd"], "25点，Nightcord见。"]},
+    {"h2": "基本信息 - 个人特质", "characters": chrs["knd"]},
+    {"h2": "基本信息 - 其他", "characters": chrs["knd"]},
+    {
+        "h2": "经历",
+        "h3": "主线 - 1",
+        "characters": [*chrs["knd"], "父亲", "爸爸", "母亲", "妈妈"],
+    },
+    {
+        "h2": "经历",
+        "h3": "主线 - 2",
+        "characters": [
+            *chrs["knd"],
+            *chrs["mfy"],
+            *chrs["ena"],
+            *chrs["mzk"],
+            *chrs["miku"],
+        ],
+    },
+    {
+        "h2": "经历",
+        "h3": "主线 - 3",
+        "characters": [
+            *chrs["knd"],
+            *chrs["mfy"],
+            *chrs["ena"],
+            *chrs["mzk"],
+            *chrs["miku"],
+        ],
+    },
+    *[{"h2": "经历", "index": i} for i in range(1, 52)],
+    *[{"h2": "轶事", "index": i} for i in range(1, 27)],
+    {"h2": "人际关系", "h3": "队内成员", "h4": "朝比奈真冬", "characters": chrs["mfy"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "东云绘名", "characters": chrs["ena"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "晓山瑞希", "characters": chrs["mzk"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "星乃一歌", "characters": chrs["ick"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "天马咲希", "characters": chrs["saki"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "望月穗波", "characters": chrs["hnm"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "日野森志步", "characters": chrs["shiho"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "花里实乃理", "characters": chrs["mnr"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "桐谷遥", "characters": chrs["hrk"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "桃井爱莉", "characters": chrs["airi"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "日野森雫", "characters": chrs["szk"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "小豆泽心羽", "characters": chrs["khn"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "白石杏", "characters": chrs["an"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "东云彰人", "characters": chrs["akt"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "青柳冬弥", "characters": chrs["toya"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "天马司", "characters": chrs["tks"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "凤笑梦", "characters": chrs["emu"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "草薙宁宁", "characters": chrs["nene"]},
+    {"h2": "人际关系", "h3": "队内成员", "h4": "神代类", "characters": chrs["rui"]},
+]
 
 DOCUMENTS = [
     """# 宵崎奏-萌娘百科
@@ -313,62 +432,83 @@ DOCUMENTS = [
 （二人目前几乎没有单独交流）
 """,
 ]
-# 105
-print(f"文档数量: {len(DOCUMENTS)}")
-
-IDS = [
-    "kanade_wiki",
-    "introduction",
-    "base_info",
-    "base_info_relationships",
-    "base_info_traits",
-    "base_info_other",
-    "story_main_1",
-    "story_main_2",
-    "story_main_3",
-    *[f"story_event_{i}" for i in range(1, 52)],
-    *[f"anecdote_{i}" for i in range(1, 27)],
-    "relationship_mfy",
-    "relationship_ena",
-    "relationship_mzk",
-    "relationship_ick",
-    "relationship_saki",
-    "relationship_hnm",
-    "relationship_shiho",
-    "relationship_mnr",
-    "relationship_hrk",
-    "relationship_airi",
-    "relationship_szk",
-    "relationship_khn",
-    "relationship_an",
-    "relationship_akt",
-    "relationship_toya",
-    "relationship_tks",
-    "relationship_emu",
-    "relationship_nene",
-    "relationship_rui",
-]
-# 105
-print(f"ID数量: {len(IDS)}")
 
 
-async def main():
+def ensure_data_and_db(collection: Collection):
+    """预检文档、ID、元数据数量，并确保数据库中的文档完整"""
+    # 预检文档、ID、元数据数量
+    n_ids = len(IDS)
+    n_metadatas = len(METADATAS)
+    n_docs = len(DOCUMENTS)
+    logger.info(f"预检 ID数量: {n_ids}, 元数据数量: {n_metadatas}, 文档数量: {n_docs}")
+    if not (n_ids == n_metadatas == n_docs):
+        raise ValueError("预检失败：ID、元数据和文档的数量不一致！")
+
+    # 简单判定数据库中的文档是否完整，如果不完整则添加文档
+    if collection.count() <= n_ids:
+        logger.info("数据库中文档不完整，正在添加文档...")
+        # 先删除可能存在的旧文档
+        collection.delete(ids=IDS)
+        # 添加新文档
+        collection.add(ids=IDS, metadatas=METADATAS, documents=DOCUMENTS)
+        logger.info("文档添加完成。")
+
+
+class RAGService(Service):
+    def __init__(self, collection: Collection):
+        self.collection = collection
+
+    def exposed_query(
+        self,
+        query_text: str,
+        *,
+        n_results: int = 10,
+        threshold: float = 0.6,
+    ) -> list[str] | None:
+        """执行RAG查询，返回相似度分数低于阈值的相关文档列表"""
+        logger.info(
+            f"收到查询请求: query_text='{query_text}', n_results={n_results}, threshold={threshold}"
+        )
+        results = self.collection.query(
+            query_texts=query_text,
+            n_results=n_results,
+        )
+
+        documents = results["documents"]
+        if documents is None:
+            return None
+        distances = results["distances"]
+        if distances is None:
+            return None
+
+        filtered_docs = []
+        for doc, dist in zip(documents[0], distances[0]):
+            if dist < threshold:
+                filtered_docs.append(doc)
+
+        return filtered_docs
+
+
+def main():
+    start = time.time()
     bge_ef = SentenceTransformerEmbeddingFunction(
         model_name=MODEL_NAME_OR_PATH,
         normalize_embeddings=True,  # 可选：是否归一化向量，通常推荐在使用余弦相似度时开启
     )
-
-    client = await AsyncHttpClient(port=PORT)
-
-    collection = await client.get_or_create_collection(
+    client = PersistentClient(path=DB_PATH)
+    collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         embedding_function=bge_ef,  # pyright: ignore[reportArgumentType]
     )
+    # 确保数据库中的文档完整，如果不完整则添加文档
+    ensure_data_and_db(collection)
 
-    await collection.add(documents=DOCUMENTS, ids=IDS)
-
-    print("文档已成功添加到向量数据库中。")
+    # 启动RPC服务器
+    server = ThreadedServer(RAGService(collection), hostname="localhost", port=PORT)
+    end = time.time()
+    logger.info(f"RAG RPC服务器已启动，用时{end - start:.2f}秒，监听 localhost:{PORT}")
+    server.start()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

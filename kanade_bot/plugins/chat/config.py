@@ -29,16 +29,12 @@ class Config(BaseModel):
 
     chat_rag_enabled: bool = False
     """是否启用RAG功能"""
-    chat_rag_port: int = 8000
-    """RAG使用的ChromaDB服务端口号"""
-    chat_rag_model_or_path: str = "BAAI/bge-small-zh-v1.5"
-    """RAG使用的模型名称或路径，默认为BGE小型中文模型，支持从Hugging Face下载"""
-    chat_rag_db_collection_name: str = "kanade_wiki_collection"
-    """RAG使用的ChromaDB集合名称"""
+    chat_rag_port: int = 39831
+    """RAG服务器端口号"""
     chat_rag_query_n_results: int = 3
     """RAG查询返回的相关文档数量"""
-    chat_rag_score_threshold: float = 0.7
-    """RAG相关文档的相似度分数阈值，数值越小表示越相关"""
+    chat_rag_distance_threshold: float = 0.7
+    """RAG相关文档的距离阈值，数值越小表示越相关"""
 
 
 class AutoReplyConfig(BaseModel):

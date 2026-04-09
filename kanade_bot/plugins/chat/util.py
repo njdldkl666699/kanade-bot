@@ -20,7 +20,7 @@ from .ban import is_banned
 from .client import file_client as client
 from .config import PlatformType, cfg, configs
 from .copilot import copilot
-from .rag import query_with_score
+from .rag import query
 
 
 def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
@@ -216,7 +216,7 @@ async def send_message_in_chunks(
         reply_text = event.reply.message.extract_plain_text().strip()
 
     # 进行RAG查询，获取相关文档
-    rag_docs = await query_with_score(prompt) if prompt else None
+    rag_docs = query(prompt) if prompt else None
 
     response, new_session = await copilot.send_and_wait(
         session_id,

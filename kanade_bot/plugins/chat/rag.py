@@ -1,58 +1,26 @@
-import time
-
-from chromadb import AsyncHttpClient
-from chromadb.api.models.AsyncCollection import AsyncCollection
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+import rpyc
 from nonebot import get_driver, logger
-from pydantic import BaseModel
 
 from .config import cfg
 
-collection: AsyncCollection | None = None
+client = None
 
 
-class QueryResult(BaseModel):
-    """RAG查询结果"""
-
-    documents: list[str]
-    """检索到的相关文档列表"""
-    distances: list[float]
-    """每个相关文档与查询的相似度分数列表，数值越小表示越相关"""
-
-
-async def query(query_text: str) -> QueryResult | None:
-    """执行RAG查询，返回相关文档和相似度分数"""
-    if collection is None:
-        logger.error("向量数据库集合未初始化，无法执行查询")
-        return
-
-    results = await collection.query(
-        query_texts=query_text,
-        n_results=cfg.chat_rag_query_n_results,
-    )
-
-    documents = results["documents"]
-    if documents is None:
-        return
-    distances = results["distances"]
-    if distances is None:
-        return
-
-    return QueryResult(documents=documents[0], distances=distances[0])
-
-
-async def query_with_score(query_text: str) -> list[str]:
+def query(query_text: str) -> list[str] | None:
     """执行RAG查询，返回相似度分数低于阈值的相关文档列表"""
-    result = await query(query_text)
-    if result is None:
-        return []
-
-    relevant_documents: list[str] = []
-    for doc, score in zip(result.documents, result.distances):
-        if score <= cfg.chat_rag_score_threshold:
-            relevant_documents.append(doc)
-
-    return relevant_documents
+    if client is None:
+        logger.warning("RAG功能未启用，无法执行查询")
+        return None
+    try:
+        results = client.root.query(
+            query_text,
+            n_results=cfg.chat_rag_query_n_results,
+            threshold=cfg.chat_rag_distance_threshold,
+        )
+        return results
+    except Exception as e:
+        logger.error(f"执行RAG查询时发生错误: {e}")
+        return None
 
 
 driver = get_driver()
@@ -60,27 +28,12 @@ driver = get_driver()
 
 @driver.on_startup
 async def startup():
-    global collection
     if not cfg.chat_rag_enabled:
-        logger.info("RAG模块已禁用，跳过向量数据库初始化")
+        logger.info("RAG功能已禁用，跳过RAG RPC客户端初始化")
         return
+    logger.info("RAG功能已启用，正在连接RAG RPC服务器...")
 
-    logger.info("RAG模块正在启动，正在初始化向量数据库客户端和集合...")
-
-    start = time.time()
-
-    bge_ef = SentenceTransformerEmbeddingFunction(
-        model_name=cfg.chat_rag_model_or_path,
-        normalize_embeddings=True,
-    )
-
-    client = await AsyncHttpClient(port=cfg.chat_rag_port)
-
-    collection = await client.get_collection(
-        cfg.chat_rag_db_collection_name,
-        embedding_function=bge_ef,  # pyright: ignore[reportArgumentType]
-    )
-
-    end = time.time()
-
-    logger.info(f"RAG模块向量数据库客户端和集合初始化完成，耗时{end - start:.2f}秒")
+    global client
+    port = cfg.chat_rag_port
+    client = rpyc.connect("localhost", port)
+    logger.info(f"RAG RPC客户端已连接到服务器 localhost:{port}")
