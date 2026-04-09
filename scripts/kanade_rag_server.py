@@ -445,7 +445,7 @@ def ensure_data_and_db(collection: Collection):
         raise ValueError("预检失败：ID、元数据和文档的数量不一致！")
 
     # 简单判定数据库中的文档是否完整，如果不完整则添加文档
-    if collection.count() <= n_ids:
+    if collection.count() < n_ids:
         logger.info("数据库中文档不完整，正在添加文档...")
         # 先删除可能存在的旧文档
         collection.delete(ids=IDS)
