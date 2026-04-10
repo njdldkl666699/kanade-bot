@@ -35,5 +35,10 @@ async def startup():
 
     global client
     port = cfg.chat_rag_port
-    client = rpyc.connect("localhost", port)
-    logger.info(f"RAG RPC客户端已连接到服务器 localhost:{port}")
+
+    try:
+        client = rpyc.connect("localhost", port)
+        logger.info(f"RAG RPC客户端已连接到服务器 localhost:{port}")
+    except Exception as e:
+        logger.error(f"连接RAG RPC服务器失败: {e}")
+        client = None

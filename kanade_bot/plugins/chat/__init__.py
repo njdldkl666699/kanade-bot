@@ -42,9 +42,7 @@ async def handle_chat(event: Event, prompt: str = EventPlainText()):
     if is_event_banned(event):
         return
 
-    # 解析会话ID和提示词
-    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
-    await send_message_in_chunks(chat, event, session_id, prompt, is_group)
+    await send_message_in_chunks(chat, event, prompt)
 
 
 def not_to_me(to_me: bool = EventToMe()):
@@ -62,7 +60,7 @@ chat_monitor = on_message(
 
 @chat_monitor.handle()
 async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
-    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
+    session_id, _, is_group = resolve_session_id_and_prompt(event, "")
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -74,7 +72,7 @@ async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
         return
 
     if is_group and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, event, session_id, prompt, is_group)
+        await send_message_in_chunks(chat, event, prompt)
 
     # 将用户消息添加到会话缓冲区
     await copilot.add_message(session_id, prompt)

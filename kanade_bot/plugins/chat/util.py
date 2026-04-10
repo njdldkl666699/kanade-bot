@@ -71,7 +71,8 @@ def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, 
         session_id = f"console-group-{event.channel.id}"
         is_group = True
 
-    prompt = f"{nickname} 说：{prompt}" if nickname else prompt
+    if nickname:
+        prompt = f"{nickname} 说：{prompt}"
     return session_id, prompt, is_group
 
 
@@ -194,9 +195,7 @@ async def finish_onebot_message(
 async def send_message_in_chunks(
     matcher: type[Matcher],
     event: Event,
-    session_id: str,
-    prompt: str | None,
-    is_group: bool = False,
+    prompt: str,
 ):
     # 处理消息中的图片附件
     attachments: list[Attachment] = []
@@ -217,6 +216,8 @@ async def send_message_in_chunks(
 
     # 进行RAG查询，获取相关文档
     rag_docs = query(prompt) if prompt else None
+    # 然后再将prompt带上用户昵称
+    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
 
     response, new_session = await copilot.send_and_wait(
         session_id,
@@ -230,18 +231,28 @@ async def send_message_in_chunks(
     if new_session:
         logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
 
-    if response and response.data.content:
-        content = response.data.content
-        # OneBot消息特殊处理
-        if isinstance(event, OneBotMessageEvent):
-            chunks = split_content_preserving_code_blocks(content)
-            await finish_onebot_message(matcher, chunks, reply_id=event.message_id)
-        # Console消息直接发送原始内容
-        await matcher.finish(content)
+    if not response or not response.data.content:
+        logger.warning(f"会话{session_id}没有收到回复，可能是生成失败或超时")
+        await send_fail_message(matcher)
+        return
 
-    # 没有响应或内容为空，发送失败消息
+    content = response.data.content
+    if isinstance(content, dict):
+        logger.warning(f"生成的内容不是字符串，无法发送，内容：{content}")
+        await send_fail_message(matcher)
+        return
+
+    # OneBot消息特殊处理
+    if isinstance(event, OneBotMessageEvent):
+        chunks = split_content_preserving_code_blocks(content)
+        await finish_onebot_message(matcher, chunks, reply_id=event.message_id)
+
+    # Console消息直接发送原始内容
+    await matcher.finish(content)
+
+
+def send_fail_message(matcher: type[Matcher]):
     image = Path(cfg.chat_fail_image_path)
     if image.is_file():
-        await matcher.finish(OneBotMessageSegmentMeme(image))
-    # 没有失败图片，发送默认文本消息
-    await matcher.finish("已深度思考（用时0秒）\n服务器繁忙，请稍后再试")
+        return matcher.finish(OneBotMessageSegmentMeme(image))
+    return matcher.finish("已深度思考（用时0秒）\n服务器繁忙，请稍后再试")
