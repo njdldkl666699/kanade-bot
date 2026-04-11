@@ -41,6 +41,8 @@ driver = get_driver()
 
 @driver.on_startup
 async def on_startup():
+    global help_md, help_image
+
     doc_path = Path(cfg.help_doc_path)
     if not doc_path.is_file():
         logger.warning(f"帮助文档文件不存在，路径: {doc_path.absolute()}")
