@@ -6,16 +6,12 @@ from pathlib import Path
 from copilot.session import Attachment
 from nonebot import logger
 from nonebot.adapters import Event
-from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
-from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
-from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from kanade_bot.plugins.util import OneBotMessageSegmentMeme
-
+from ..util import OneBotMessageSegmentMeme, resolve_session_id_and_prompt
 from .ban import is_banned
 from .client import file_client as client
 from .config import PlatformType, cfg, configs
@@ -46,34 +42,6 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     # 达到阈值，按照概率决定是否自动回复
     # 生成一个0.0到1.0之间的随机数，如果小于配置的概率，则触发自动回复
     return random.random() < auto_reply_config.probability
-
-
-def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str, bool]:
-    """解析事件以获取会话ID和提示词，并返回是否是群聊"""
-    session_id = event.get_session_id()
-    nickname: str | None = None
-    is_group = False
-
-    # 处理OneBot消息事件
-    if isinstance(event, OneBotMessageEvent):
-        session_id = f"qq-private-{event.user_id}"
-        nickname = event.sender.nickname
-    if isinstance(event, OneBotGroupMessageEvent):
-        session_id = f"qq-group-{event.group_id}"
-        nickname = event.sender.card or event.sender.nickname
-        is_group = True
-
-    # Console的消息事件
-    if isinstance(event, ConsoleMessageEvent):
-        nickname = event.user.nickname
-        session_id = f"console-private-{event.user.id}"
-    if isinstance(event, ConsolePublicMessageEvent):
-        session_id = f"console-group-{event.channel.id}"
-        is_group = True
-
-    if nickname:
-        prompt = f"{nickname} 说：{prompt}"
-    return session_id, prompt, is_group
 
 
 async def resolve_message_images(message: OneBotMessage) -> list[Attachment]:
@@ -217,7 +185,9 @@ async def send_message_in_chunks(
     # 进行RAG查询，获取相关文档
     rag_docs = query(prompt) if prompt else None
     # 然后再将prompt带上用户昵称
-    session_id, prompt, is_group = resolve_session_id_and_prompt(event, prompt)
+    session_id, nickname, is_group = resolve_session_id_and_prompt(event, prompt)
+    if nickname:
+        prompt = f"{nickname} 说：{prompt}"
 
     response, new_session = await copilot.send_and_wait(
         session_id,

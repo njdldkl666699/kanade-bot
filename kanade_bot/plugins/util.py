@@ -2,9 +2,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from nonebot.adapters import Message
+from nonebot.adapters import Event, Message
+from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
+from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import MessageSegment
 
 
 def parse_arg_message(
@@ -49,9 +53,35 @@ def parse_arg_message(
     return arg_dict
 
 
-def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
+def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessageSegment:
     """创建一个OneBot动画表情消息段"""
-    message = MessageSegment.image(file)
+    message = OneBotMessageSegment.image(file)
     message.data["summary"] = "[动画表情]"
     message.data["sub_type"] = 1
     return message
+
+
+def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str | None, bool]:
+    """解析事件以获取会话ID和用户昵称，并返回是否是群聊"""
+    session_id = event.get_session_id()
+    nickname: str | None = None
+    is_group = False
+
+    # 处理OneBot消息事件
+    if isinstance(event, OneBotMessageEvent):
+        session_id = f"qq-private-{event.user_id}"
+        nickname = event.sender.nickname
+    if isinstance(event, OneBotGroupMessageEvent):
+        session_id = f"qq-group-{event.group_id}"
+        nickname = event.sender.card or event.sender.nickname
+        is_group = True
+
+    # Console的消息事件
+    if isinstance(event, ConsoleMessageEvent):
+        nickname = event.user.nickname
+        session_id = f"console-private-{event.user.id}"
+    if isinstance(event, ConsolePublicMessageEvent):
+        session_id = f"console-group-{event.channel.id}"
+        is_group = True
+
+    return session_id, nickname, is_group

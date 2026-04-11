@@ -9,8 +9,7 @@ from copilot.client import StopError
 from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
 from copilot.generated.session_events import SessionEvent, SessionEventType
 from copilot.session import Attachment, CustomAgentConfig, PermissionHandler, SystemMessageConfig
-from loguru import logger
-from nonebot import get_driver, require
+from nonebot import get_driver, logger, require
 
 from .config import cfg
 from .tool import list_memes, tavily_search
@@ -35,12 +34,13 @@ class CopilotSessionManager:
     """会话超时的时间，单位为秒，默认30分钟。
 
     会话超时后将被删除，释放资源。
-    每当有消息发送时，都会更新会话的最后活跃时间。"""
+    每当有消息发送时，都会更新会话的最后活跃时间。
+    """
 
     SESSION_COMPACTION_RETRY_MAX = 2
     """发生压缩时最多重发次数"""
 
-    TOOLS: list[str] = [
+    tools: list[str] = [
         "store_memory",
         "view",
         "read",
@@ -55,23 +55,23 @@ class CopilotSessionManager:
     ]
     """工具列表，包含所有可用工具的名称"""
 
-    SYSTEM_PROMPT_PATH = Path(cfg.chat_system_prompt_path)
-    SYSTEM_PROMPT = ""
+    system_prompt_path = Path(cfg.chat_system_prompt_path)
+    system_prompt = ""
     """系统提示词"""
-    if not SYSTEM_PROMPT_PATH.is_file():
-        logger.warning(f"系统提示词文件不存在，路径: {SYSTEM_PROMPT_PATH.absolute()}")
+    if not system_prompt_path.is_file():
+        logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
     else:
-        SYSTEM_PROMPT = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = system_prompt_path.read_text(encoding="utf-8")
 
-    CUSTOM_AGENT_CONFIG: CustomAgentConfig = {
+    custom_agent_config: CustomAgentConfig = {
         "name": "Kanade",
         "display_name": "宵崎奏",
         "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
-        "tools": TOOLS,
-        "prompt": SYSTEM_PROMPT,
+        "tools": tools,
+        "prompt": system_prompt,
     }
 
-    SYSTEM_MESSAGE: SystemMessageConfig = {
+    system_message: SystemMessageConfig = {
         "mode": "append",
         "content": "回复用户的消息时，请始终使用Kanade SubAgent进行回复。",
     }
@@ -81,10 +81,10 @@ class CopilotSessionManager:
         "model": cfg.chat_model,
         "reasoning_effort": "low",
         "tools": [tavily_search, list_memes],
-        "available_tools": [*TOOLS, "read_agent", "list_agents", "task"],
-        "custom_agents": [CUSTOM_AGENT_CONFIG],
-        "agent": CUSTOM_AGENT_CONFIG["name"],
-        "system_message": SYSTEM_MESSAGE,
+        "available_tools": [*tools, "read_agent", "list_agents", "task"],
+        "custom_agents": [custom_agent_config],
+        "agent": custom_agent_config["name"],
+        "system_message": system_message,
     }
 
     def __init__(self, scheduler: AsyncIOScheduler):
@@ -186,20 +186,20 @@ class CopilotSessionManager:
 
             prompt_parts = [
                 # RAG相关文档
-                f"$检索到的相关文档：\n{'\n'.join(rag_docs)}\n\n" if rag_docs else "",
+                f"$检索到的相关文档：\n{'\n'.join(rag_docs)}\n" if rag_docs else "",
                 # 群聊提示
                 "$现在的会话是群聊\n" if is_group else "",
                 # 缓冲区消息
                 "\n".join(buffered_messages) if buffered_messages else "",
                 # 引用消息
-                f"$用户引用了之前的消息：\n{reply_text}\n\n" if reply_text else "",
+                f"$用户引用了之前的消息：\n{reply_text}\n" if reply_text else "",
                 # 本次用户消息
-                f"$下面是这次的用户消息：\n{prompt}\n\n" if prompt else "",
+                f"$下面是这次的用户消息：\n{prompt}\n" if prompt else "",
                 # 附件提示
                 "$用户附带了图片\n" if attachments else "",
             ]
 
-            send_prompt = "".join(prompt_parts).strip()
+            send_prompt = "\n".join(prompt_parts).strip()
             if not send_prompt:
                 # 没有任何消息可发送，直接返回
                 return None, new_session

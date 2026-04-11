@@ -3,21 +3,22 @@ from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, on_command, on_message
 from nonebot.adapters import Event, Message
+from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.params import CommandArg, EventPlainText, EventToMe
+from nonebot.params import CommandArg, EventMessage, EventPlainText, EventToMe
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from kanade_bot.plugins.util import parse_arg_message
-
+from ..util import parse_arg_message, resolve_session_id_and_prompt
 from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
 from .copilot import copilot
-from .util import resolve_session_id_and_prompt, send_message_in_chunks, should_auto_reply
+from .util import send_message_in_chunks, should_auto_reply
 
 __plugin_meta__ = PluginMetadata(
     name="chat",
@@ -59,8 +60,11 @@ chat_monitor = on_message(
 
 
 @chat_monitor.handle()
-async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
-    session_id, _, is_group = resolve_session_id_and_prompt(event, "")
+async def handle_chat_monitor(
+    event: Event,
+    message: ConsoleMessage | OneBotMessage = EventMessage(),
+):
+    session_id, nickname, is_group = resolve_session_id_and_prompt(event, "")
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -71,11 +75,20 @@ async def handle_chat_monitor(event: Event, prompt: str = EventPlainText()):
     else:
         return
 
+    if isinstance(message, ConsoleMessage):
+        message_str = str(message)
+    elif isinstance(message, OneBotMessage):
+        message_str = message.to_rich_text()
+    else:
+        return
+
     if is_group and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, event, prompt)
+        await send_message_in_chunks(chat, event, message_str)
 
     # 将用户消息添加到会话缓冲区
-    await copilot.add_message(session_id, prompt)
+    if nickname:
+        message_str = f"{nickname} ：{message_str}"
+    await copilot.add_message(session_id, message_str)
 
 
 global_config = get_driver().config

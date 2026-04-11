@@ -12,8 +12,7 @@ from nonebot.params import CommandArg, EventPlainText
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
-from kanade_bot.plugins.util import OneBotMessageSegmentMeme, parse_arg_message
-
+from ..util import OneBotMessageSegmentMeme, parse_arg_message
 from .config import Config
 from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music

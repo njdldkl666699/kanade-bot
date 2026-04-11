@@ -9,8 +9,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from kanade_bot.plugins.util import parse_arg_message
-
+from ..util import parse_arg_message
 from .config import Config
 from .mcstatus import render_mc_status
 
