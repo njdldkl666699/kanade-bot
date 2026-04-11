@@ -16,4 +16,8 @@
 
 ## 常见问题
 
-1. Windows上没有FontConfig，在命令行报错`Fontconfig error: Cannot load default config file`，可以在env中配置`FONTCONFIG_PATH="assets/"`来指定字体配置目录，其下的`fonts.conf`文件会被加载为配置文件。
+1. `Fontconfig error: Cannot load default config file: No such file: (null)`
+
+    Windows上没有FontConfig，可以在env中配置`FONTCONFIG_PATH="assets/"`来指定字体配置目录，其下的`fonts.conf`文件会被加载为配置文件。
+
+    大部分Linux发行版是有FontConfig的，出现这个问题也可以在env中配置`FONTCONFIG_PATH`来指定字体配置目录，一般为`/etc/fonts/`。
