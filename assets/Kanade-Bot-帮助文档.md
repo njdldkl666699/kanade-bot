@@ -92,7 +92,7 @@ NoneBot 服务器状态（CPU, Memory, Disk Usage）查看。
 
 别名：`ciallo`（不区分大小写） `Ciallo～(∠・ω< )⌒☆` `Ciallo～(∠・ω< )⌒★`
 
-<img src="./宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em; ">
+![Ciallo～(∠・ω< )⌒☆](https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/assets/images/%E5%AE%B5%E5%B4%8E%E5%A5%8FCiallo.webp)
 
 ### 自动+1
 
