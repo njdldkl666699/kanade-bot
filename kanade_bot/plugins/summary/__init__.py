@@ -50,7 +50,7 @@ async def record_recv_msg(
 
     session_id, nickname, _ = resolve_session_id_and_prompt(event, message_str)
     if nickname:
-        message_str = f"{nickname} ：{message_str}"
+        message_str = f"$ {nickname} ：{message_str}"
 
     summarizer.add_message(session_id, message_str)
 
@@ -81,7 +81,7 @@ async def record_send_msg(
             session_id = f"qq-private-{data['user_id']}"
 
         message: OneBotMessage = data["message"]
-        message_str = message.to_rich_text()
+        message_str = "$ AI ：" + message.to_rich_text()
 
     elif isinstance(bot, ConsoleBot):
         if api != "send_msg":
@@ -95,7 +95,7 @@ async def record_send_msg(
 
         elements: NoneChatConsoleMessage = data["content"]
         console_message = ConsoleMessage.from_console_message(elements)
-        message_str = "AI ：" + str(console_message)
+        message_str = "$ AI ：" + str(console_message)
     else:
         return
 
@@ -128,7 +128,7 @@ async def _(
         await summarize.finish(f"消息条数必须在 {min}-{max} 范围内")
 
     session_id, nickname, is_group = resolve_session_id_and_prompt(event, "")
-    if not summarizer.session_summarizable(session_id):
+    if not summarizer.session_summarizable(session_id, size):
         await summarize.finish("没有足够的消息记录可供总结")
 
     group_or_user_name = nickname

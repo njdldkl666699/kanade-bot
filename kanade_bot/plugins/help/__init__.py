@@ -3,11 +3,10 @@ import tomllib
 from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger, on_command, require
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
+from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.plugin import PluginMetadata
 
 from .config import Config
@@ -81,18 +80,14 @@ async def on_startup():
 
 
 @help.handle()
-async def handle_help(bot: Bot):
-    if isinstance(bot, OneBot):
-        # OneBot发送图片
-        if not help_image:
-            await help.finish("帮助文档不可用")
-        await help.finish(OneBotMessageSegment.image(help_image))
-
+async def _(bot: ConsoleBot):
     if not help_md:
         await help.finish("帮助文档不可用")
+    await help.finish(ConsoleMessageSegment.markdown(help_md))
 
-    if isinstance(bot, ConsoleBot):
-        # Console发送Markdown文本
-        await help.finish(ConsoleMessageSegment.markdown(help_md))
 
-    await help.finish(help_md)
+@help.handle()
+async def _(bot: OneBot):
+    if not help_image:
+        await help.finish("帮助文档不可用")
+    await help.finish(OneBotMessageSegment.image(help_image))

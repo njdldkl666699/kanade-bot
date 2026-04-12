@@ -54,14 +54,15 @@ class Summarizer:
             self._message_records[session_id] = deque(maxlen=cfg.summary_max_size)
         self._message_records[session_id].append(message)
 
-    def session_summarizable(self, session_id: str) -> bool:
+    def session_summarizable(self, session_id: str, size: int) -> bool:
         """检查指定会话是否有足够的消息记录可供总结
 
         :param session_id: 会话ID
+        :param size: 要总结的消息条数
         """
         if session_id not in self._message_records:
             return False
-        if len(self._message_records[session_id]) < cfg.summary_min_size:
+        if len(self._message_records[session_id]) < size:
             return False
         return True
 
@@ -91,7 +92,7 @@ class Summarizer:
         else:
             prefix = f"私聊 {group_or_user_name}: \n\n"
 
-        prompt = prefix + "\n".join(messages)
+        prompt = prefix + "\n\n".join(messages)
         copilot_session_id = f"summary-{session_id}-{int(datetime.now().timestamp())}"
 
         session: CopilotSession | None = None
@@ -103,9 +104,6 @@ class Summarizer:
             await session.disconnect()
         except Exception as e:
             logger.error(f"总结会话{session_id}发生错误: {e}")
-            import traceback
-
-            traceback.print_exc()
             session_event = None
 
         if not session_event:
