@@ -20,9 +20,9 @@ from ..util import resolve_session_id_and_prompt
 from .config import Config
 from .summarizer import summarizer
 
-require("nonebot_plugin_htmlkit")
+require("nonebot_plugin_htmlrender")
 
-from nonebot_plugin_htmlkit import md_to_pic
+from nonebot_plugin_htmlrender import md_to_pic
 
 __plugin_meta__ = PluginMetadata(
     name="summary",

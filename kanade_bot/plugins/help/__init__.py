@@ -11,9 +11,9 @@ from nonebot.plugin import PluginMetadata
 
 from .config import Config
 
-require("nonebot_plugin_htmlkit")
+require("nonebot_plugin_htmlrender")
 
-from nonebot_plugin_htmlkit import md_to_pic
+from nonebot_plugin_htmlrender import md_to_pic
 
 __plugin_meta__ = PluginMetadata(
     name="help",
