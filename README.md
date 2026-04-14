@@ -2,6 +2,8 @@
 
 <img src="assets/images/宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
 
+![Stone Badge](https://stone.professorlee.work/api/stone/njdldkl666699/kanade-bot)
+
 ## 简介
 
 宵崎奏Bot是一个基于NoneBot2框架的机器人，集成了Copilot SDK来提供聊天功能，并提供一些有趣的功能命令。同时支持Console和OneBot v11适配器，方便在不同环境中使用。
