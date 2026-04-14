@@ -83,23 +83,25 @@ mc_status = on_command(
 
 @mc_status.handle()
 async def _(event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"host": str, "port": int, "theme": str})
-    host: str | None = args["host"]
-    if host is None:
+    args = parse_arg_message(arg_msg, {"address": str, "theme": str})
+    address: str | None = args["address"]
+    if address is None:
         await mc_status.finish("请提供服务器地址")
-    port: int | None = args["port"]
+
     theme: str | None = args["theme"]
     if theme not in ("light", "dark"):
         theme = "light"
 
     try:
-        server = JavaServer(host, port)
+        # 使用 JavaServer.async_lookup 以支持 SRV 记录解析。
+        server = await JavaServer.async_lookup(address)
         status = await server.async_status()
     except Exception as e:
         logger.warning(f"查询服务器状态失败: {e}")
         await mc_status.finish("服务器查询失败")
 
-    image = render_mc_status(status, host, port, theme)
+    # 展示实际连接端口（SRV 解析后可能与输入不同）。
+    image = await render_mc_status(status, address, theme)
     if isinstance(event, OneBotMessageEvent):
         # 发送图片消息
         await mc_status.finish(MessageSegment.image(image))

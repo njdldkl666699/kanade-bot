@@ -8,6 +8,8 @@ class Config(BaseModel):
     """总结使用的模型ID"""
     summary_system_prompt_path: str
     """总结使用的系统提示词文件路径"""
+    summary_bot_name: str = "宵崎奏"
+    """总结中AI的名称，用于区分用户和AI的发言"""
     summary_min_size: int = 10
     """总结的最小消息条数"""
     summary_max_size: int = 2048

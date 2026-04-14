@@ -1,6 +1,6 @@
 # 宵崎奏Bot（Kanade Bot）
 
-<img src="assets/宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
+<img src="assets/images/宵崎奏Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
 
 ## 简介
 
@@ -16,4 +16,7 @@
 
 ## 常见问题
 
-1. 图片没有字体：阅读`assets/fonts.conf`，自行下载这些字体；也可以修改为其他字体。
+1. 服务器查询返回的图片字体不好看：支持Unifont，可以下载Unifont字体并安装到系统中。
+2. 终端打印的Banner错乱：
+   1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
+   2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。

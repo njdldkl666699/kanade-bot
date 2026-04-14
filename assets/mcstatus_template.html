@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minecraft Status Card</title>
+    <style>
+      :root {
+        --bg: #eef3fa;
+        --card: #fcfeff;
+        --icon-panel: #e0eaf5;
+        --motd: #182434;
+        --info: #3a485a;
+        --good: #2a864d;
+        --warn: #bd7518;
+        --bad: #c43838;
+      }
+
+      body[data-theme="dark"] {
+        --bg: #141c2a;
+        --card: #243142;
+        --icon-panel: #1c2634;
+        --motd: #ffffff;
+        --info: #d7e1f0;
+        --good: #56c978;
+        --warn: #ffaa40;
+        --bad: #ff5c5c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 860px;
+        min-height: 360px;
+        font-family: "Unifont", "GNU Unifont", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+        background: var(--bg);
+      }
+
+      .canvas {
+        width: 860px;
+        padding: 24px;
+        background: var(--bg);
+      }
+
+      .card {
+        border-radius: 20px;
+        background: var(--card);
+        padding: 28px;
+        display: grid;
+        grid-template-columns: 152px 1fr;
+        gap: 26px;
+      }
+
+      .icon-panel {
+        width: 152px;
+        height: 152px;
+        border-radius: 16px;
+        background: var(--icon-panel);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .icon-panel img {
+        width: 128px;
+        height: 128px;
+        object-fit: cover;
+        border-radius: 10px;
+      }
+
+      .content {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .motd {
+        margin: 0;
+        padding: 0;
+        color: var(--motd);
+        font-size: 30px;
+        line-height: 1.2;
+        font-weight: 700;
+        font-family: "Unifont", "GNU Unifont", "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Noto Sans Mono", "Cascadia Mono", "Consolas", "Courier New", monospace;
+      }
+
+      .motd p {
+        margin: 0;
+        padding: 0;
+      }
+
+      .motd p + p {
+        margin-top: 0.18em;
+      }
+
+      .motd .obfuscated {
+        display: inline-block;
+        min-width: 1ch;
+        font-family: inherit;
+      }
+
+      .info {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        color: var(--info);
+        font-size: 24px;
+        line-height: 1.42;
+        font-weight: 500;
+      }
+
+      .info li {
+        white-space: pre-wrap;
+      }
+
+      .latency-good {
+        color: var(--good);
+      }
+
+      .latency-warn {
+        color: var(--warn);
+      }
+
+      .latency-bad {
+        color: var(--bad);
+      }
+    </style>
+  </head>
+  <body data-theme="{{ theme }}">
+    <main class="canvas">
+      <section class="card">
+        <div class="icon-panel">
+          <img src="{{ icon_src }}" alt="Server Icon" />
+        </div>
+
+        <div class="content">
+          <div class="motd">{{ motd_html | safe }}</div>
+
+          <ul class="info">
+            <li>地址: {{ address }}</li>
+            <li class="latency-{{ latency_level }}">延迟: {{ latency }} ms</li>
+            <li>版本: {{ version_name }}</li>
+            <li>玩家: {{ online_players }}/{{ max_players }}</li>
+            {% for name in sample_names %}
+            <li>{{ name }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const obfuscatedCharacters =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`~!@#$%^&*()-_=+[]\\\"';:<>,./?";
+      const obfuscatedElems = document.querySelectorAll(".obfuscated");
+
+      if (obfuscatedElems.length > 0) {
+        const render = () => {
+          obfuscatedElems.forEach((elem) => {
+            const source = elem.dataset.source || elem.innerText;
+            if (!elem.dataset.source) {
+              elem.dataset.source = source;
+            }
+
+            let value = "";
+            for (let i = 0, l = source.length; i < l; i += 1) {
+              value += obfuscatedCharacters.charAt(
+                Math.floor(Math.random() * obfuscatedCharacters.length)
+              );
+            }
+            elem.innerText = value;
+          });
+          setTimeout(render, 50);
+        };
+        render();
+      }
+    </script>
+  </body>
+</html>

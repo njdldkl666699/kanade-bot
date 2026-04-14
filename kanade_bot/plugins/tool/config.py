@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class Config(BaseModel):
-    tool_font_path: str = ""
-    """字体文件路径，支持OTF和TTF格式。默认为空字符串，表示使用内置字体。"""
     tool_fallback_icon_path: str
     """服务器图标加载失败时的替代图标路径，支持PNG格式。"""
+    tool_template_path: str
+    """服务器状态渲染使用的HTML模板路径，支持HTML格式。"""

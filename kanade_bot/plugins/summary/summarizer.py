@@ -21,6 +21,7 @@ class Summarizer:
         logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
     else:
         system_prompt = system_prompt_path.read_text(encoding="utf-8")
+        system_prompt = system_prompt.replace("{{summary_bot_name}}", cfg.summary_bot_name)
 
     system_message: SystemMessageConfig = {
         "mode": "replace",
@@ -54,18 +55,6 @@ class Summarizer:
             self._message_records[session_id] = deque(maxlen=cfg.summary_max_size)
         self._message_records[session_id].append(message)
 
-    def session_summarizable(self, session_id: str, size: int) -> bool:
-        """检查指定会话是否有足够的消息记录可供总结
-
-        :param session_id: 会话ID
-        :param size: 要总结的消息条数
-        """
-        if session_id not in self._message_records:
-            return False
-        if len(self._message_records[session_id]) < size:
-            return False
-        return True
-
     async def summarize(
         self,
         session_id: str,
@@ -78,21 +67,20 @@ class Summarizer:
         """发送消息并等待响应，返回响应文本
 
         :param session_id: 会话ID
-        :param size: 要总结的消息条数
-        :returns: 模型生成的总结文本，如果没有足够的消息记录或发生错误，则返回 None
+        :param size: 要总结的消息条数，不足则总结全部
+        :returns: 模型生成的总结文本，如果发生错误，则返回 None
         """
         if session_id not in self._message_records:
             return None
-        messages = self._message_records[session_id]
-        if len(messages) < size:
-            return None
+        # 获取要总结的消息切片，取最后 size 条记录
+        messages_slice = list(self._message_records[session_id])[-size:]
 
         if is_group:
             prefix = f"群聊 {group_or_user_name}: \n\n"
         else:
             prefix = f"私聊 {group_or_user_name}: \n\n"
 
-        prompt = prefix + "\n\n".join(messages)
+        prompt = prefix + "\n\n".join(messages_slice)
         copilot_session_id = f"summary-{session_id}-{int(datetime.now().timestamp())}"
 
         session: CopilotSession | None = None

@@ -18,7 +18,9 @@ wheels/
 !.env.example
 
 # 杂项
-chat_configs.json
 copilot-sdk_docs/
 bge-small-zh-v1.5/
 chroma/
+chat_configs.json
+kanade_banner.html
+mc_status.png

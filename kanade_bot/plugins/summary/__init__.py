@@ -81,7 +81,7 @@ async def record_send_msg(
             session_id = f"qq-private-{data['user_id']}"
 
         message: OneBotMessage = data["message"]
-        message_str = "$ AI ：" + message.to_rich_text()
+        message_str = f"$ {cfg.summary_bot_name} ：{message.to_rich_text()}"
 
     elif isinstance(bot, ConsoleBot):
         if api != "send_msg":
@@ -95,7 +95,7 @@ async def record_send_msg(
 
         elements: NoneChatConsoleMessage = data["content"]
         console_message = ConsoleMessage.from_console_message(elements)
-        message_str = "$ AI ：" + str(console_message)
+        message_str = f"$ {cfg.summary_bot_name} ：{console_message}"
     else:
         return
 
@@ -128,8 +128,6 @@ async def _(
         await summarize.finish(f"消息条数必须在 {min}-{max} 范围内")
 
     session_id, nickname, is_group = resolve_session_id_and_prompt(event, "")
-    if not summarizer.session_summarizable(session_id, size):
-        await summarize.finish("没有足够的消息记录可供总结")
 
     group_or_user_name = nickname
     # 如果是群聊，则修改为群名称
@@ -148,7 +146,7 @@ async def _(
         timeout=300,
     )
     if not summary:
-        await summarize.finish("总结失败，可能是生成错误或超时")
+        await summarize.finish("总结失败")
 
     if not isinstance(bot, OneBot):
         # Console消息直接发送总结文本
