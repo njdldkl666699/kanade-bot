@@ -2,7 +2,7 @@ import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
-from kanade_bot.banner import get_kanade
+from scripts.banner import get_kanade
 
 
 def init_nonebot():

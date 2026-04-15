@@ -166,8 +166,8 @@ def get_kanade_html() -> str:
     body {{ margin: 24px; background: #ffffff; }}
     .kanade {{
       font-family: 'Cascadia Mono', 'Consolas', monospace;
-      font-size: 16px;
-      line-height: 1;
+      font-size: 1em;
+      line-height: normal;
       letter-spacing: 0;
       white-space: pre;
     }}
