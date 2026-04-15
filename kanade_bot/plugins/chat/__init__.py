@@ -167,8 +167,12 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
         await chat_unban.finish()
 
     args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
-    id = args.get("id", "").strip()
-    ban_type = args.get("ban_type", "user").strip().lower()
+    id: str = args["id"] or ""
+    id = id.strip()
+    ban_type = args["ban_type"] or "user"
+    ban_type = ban_type.strip().lower()
+    if ban_type not in ("user", "group"):
+        ban_type = "user"
 
     if isinstance(event, ConsoleMessageEvent):
         remove_from_ban_list(id, ban_type, "console")
