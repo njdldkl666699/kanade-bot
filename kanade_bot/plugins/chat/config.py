@@ -8,18 +8,18 @@ from pydantic import BaseModel
 class Config(BaseModel):
     chat_model: str = "gpt-5-mini"
     """模型ID，需要支持图片输入"""
-    chat_system_prompt_path: str
+    chat_system_prompt_path: str = "assets/prompts/Kanade-v3.md"
     """系统提示词文件路径"""
     chat_tavily_api_key: str
     """Tavily API Key"""
 
     chat_session_prompt_buffer_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
-    chat_configs_path: str = "chat_configs.json"
+    chat_configs_path: str = "assets/chat_configs.json"
     """聊天配置文件路径"""
-    chat_memes_path: str = "memes"
+    chat_memes_path: str = "assets/memes"
     """表情包存储路径"""
-    chat_fail_image_path: str = "assets/chat_fail.jpg"
+    chat_fail_image_path: str = "assets/images/chat_fail.jpg"
     """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
 
     chat_bot_id: int

@@ -1,3 +1,4 @@
+import random
 from io import BytesIO
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg, EventPlainText
 from nonebot.plugin import PluginMetadata
@@ -14,6 +16,7 @@ from nonebot.typing import T_State
 
 from ..util import OneBotMessageSegmentMeme, parse_arg_message
 from .config import Config
+from .duanzi import FACE_IDS, add_duanzi, get_random_duanzi, list_paged_duanzi, remove_duanzi
 from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
 from .sing import (
@@ -312,7 +315,11 @@ async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = C
         state["song_name"] = song_name
         await add_lyric.pause("请发送歌词")
 
-    add_lyric_txt(song_name, lyric)
+    try:
+        add_lyric_txt(song_name, lyric)
+    except ValueError as e:
+        await add_lyric.finish(str(e))
+
     await add_lyric.finish(f"已添加歌曲 {song_name}")
 
 
@@ -353,3 +360,126 @@ async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
         await remove_lyric.finish(str(e))
 
     await remove_lyric.finish(f"已删除歌曲 {song_name}")
+
+
+random_duanzi = on_command(
+    "随机段子",
+    aliases={"duanzi", "段子", "史", "发史", "随机史"},
+    priority=2,
+    block=True,
+)
+
+
+@random_duanzi.handle()
+async def _(bot: Bot):
+    if not (duanzi := get_random_duanzi()):
+        await random_duanzi.finish()
+
+    if isinstance(bot, OneBot):
+        if "{{face}}" not in duanzi:
+            await random_duanzi.finish(duanzi)
+
+        segments = duanzi.split("{{face}}")
+        message = OneBotMessage()
+        for i, segment in enumerate(segments):
+            if segment:
+                message += segment
+            if i != len(segments) - 1:
+                face_id = random.choice(FACE_IDS)
+                message += MessageSegment.face(face_id)
+        await random_duanzi.finish(message)
+
+    await random_duanzi.finish(duanzi)
+
+
+add_a_duanzi = on_command(
+    "添加段子",
+    aliases={"add_duanzi", "添史"},
+    priority=2,
+    block=True,
+)
+
+
+@add_a_duanzi.handle()
+async def _(event: ConsolePublicMessageEvent, arg_msg: Message = CommandArg()):
+    duanzi = arg_msg.extract_plain_text().strip()
+    if not duanzi:
+        await add_a_duanzi.pause("请输入段子/史内容")
+
+    if not add_duanzi(duanzi):
+        await add_a_duanzi.finish("添加失败")
+
+    await add_a_duanzi.finish("添加完成")
+
+
+@add_a_duanzi.handle()
+async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    if reply := event.reply:
+        if duanzi := reply.message.extract_plain_text().strip():
+            add_duanzi(duanzi)
+            await add_a_duanzi.finish("添加完成")
+
+    duanzi = arg_msg.extract_plain_text().strip()
+    if not duanzi:
+        await add_a_duanzi.pause("请输入段子/史内容")
+
+    if not add_duanzi(duanzi):
+        await add_a_duanzi.finish("添加失败")
+
+    await add_a_duanzi.finish("添加完成")
+
+
+@add_a_duanzi.handle()
+async def _(message: str = EventPlainText()):
+    if not (duanzi := message.strip()):
+        await add_a_duanzi.finish("发送消息中没有文本内容，请重新发送命令")
+
+    if not add_duanzi(duanzi):
+        await add_a_duanzi.finish("添加失败")
+
+    await add_a_duanzi.finish("添加完成")
+
+
+list_duanzi = on_command(
+    "段子列表",
+    aliases={"list_duanzi", "史官"},
+    priority=2,
+    block=True,
+)
+
+
+@list_duanzi.handle()
+async def _(arg_msg: Message = CommandArg()):
+    page = arg_msg.extract_plain_text().strip()
+    if page.isdigit():
+        page = int(page)
+    else:
+        page = 1
+
+    duanzi_list_str = list_paged_duanzi(page)
+    await list_duanzi.finish(duanzi_list_str)
+
+
+remove_a_duanzi = on_command(
+    "删除段子",
+    aliases={"remove_duanzi", "del_duanzi", "删史"},
+    priority=2,
+    block=True,
+)
+
+
+@remove_a_duanzi.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await remove_a_duanzi.finish()
+
+    index_str = arg_msg.extract_plain_text().strip()
+    if not index_str.isdigit():
+        await remove_a_duanzi.finish("删除失败，请检查序号是否正确")
+
+    index = int(index_str)
+    if not remove_duanzi(index):
+        await remove_a_duanzi.finish("删除失败，请检查序号是否正确")
+
+    await remove_a_duanzi.finish("删除完成")
