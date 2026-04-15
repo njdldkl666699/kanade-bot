@@ -14,3 +14,5 @@ class Config(BaseModel):
     """总结的最小消息条数"""
     summary_max_size: int = 2048
     """总结的最大条数，同时也是消息记录的最大条数，超过后会丢弃最早的消息"""
+    summary_message_records_path: str = "summary_message_records.json"
+    """总结消息记录的缓存文件路径"""

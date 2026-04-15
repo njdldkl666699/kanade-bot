@@ -1,3 +1,4 @@
+import json
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +55,29 @@ class Summarizer:
         if session_id not in self._message_records:
             self._message_records[session_id] = deque(maxlen=cfg.summary_max_size)
         self._message_records[session_id].append(message)
+
+    def load_message_records(self):
+        """从缓存文件中加载历史消息记录到内存中"""
+        cache_path = Path(cfg.summary_message_records_path)
+        if not cache_path.is_file():
+            logger.info(f"总结缓存文件不存在，路径: {cache_path.absolute()}")
+            return
+
+        with cache_path.open("r", encoding="utf-8") as f:
+            data: dict[str, list[str]] = json.load(f)
+        for session_id, messages in data.items():
+            self._message_records[session_id] = deque(messages, maxlen=cfg.summary_max_size)
+
+    def save_message_records(self):
+        """将当前的消息记录缓存保存到文件中"""
+        cache_path = Path(cfg.summary_message_records_path)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {
+            session_id: list(messages) for session_id, messages in self._message_records.items()
+        }
+        with cache_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
 
     async def summarize(
         self,
@@ -112,6 +136,12 @@ driver = get_driver()
 
 @driver.on_startup
 async def startup():
+    try:
+        summarizer.load_message_records()
+        logger.info("总结消息记录已加载")
+    except Exception as e:
+        logger.warning(f"加载总结消息记录时发生错误: {e}")
+
     await summarizer._client.start()
     logger.info("总结器 Copilot客户端已启动")
 
@@ -119,7 +149,13 @@ async def startup():
 @driver.on_shutdown
 async def shutdown():
     try:
+        summarizer.save_message_records()
+        logger.info("总结消息记录已保存")
+    except Exception as e:
+        logger.warning(f"保存总结消息记录时发生错误: {e}")
+
+    try:
         await summarizer._client.stop()
+        logger.info("总结器 Copilot客户端已关闭")
     except* StopError as eg:
         logger.warning(f"停止总结器 Copilot客户端时发生错误: {eg.message}")
-    logger.info("总结器 Copilot客户端已关闭")
