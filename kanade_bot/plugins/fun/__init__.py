@@ -16,15 +16,10 @@ from nonebot.typing import T_State
 
 from ..util import OneBotMessageSegmentMeme, parse_arg_message
 from .config import Config
-from .duanzi import FACE_IDS, add_duanzi, get_random_duanzi, list_paged_duanzi, remove_duanzi
+from .duanzi import FACE_IDS, add_duanzi, get_or_random_duanzi, list_paged_duanzi, remove_duanzi
 from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
-from .sing import (
-    get_or_random_sing_song,
-    get_sing_song_pages,
-    list_sing_songs,
-    random_clip_song,
-)
+from .sing import get_or_random_sing_song, get_sing_song_pages, list_sing_songs, random_clip_song
 
 __plugin_meta__ = PluginMetadata(
     name="fun",
@@ -371,8 +366,13 @@ random_duanzi = on_command(
 
 
 @random_duanzi.handle()
-async def _(bot: Bot):
-    if not (duanzi := get_random_duanzi()):
+async def _(bot: Bot, arg_msg: Message = CommandArg()):
+    index_str = arg_msg.extract_plain_text().strip()
+    index: int | None = None
+    if index_str.isdigit():
+        index = int(index_str)
+
+    if not (duanzi := get_or_random_duanzi(index)):
         await random_duanzi.finish()
 
     if isinstance(bot, OneBot):

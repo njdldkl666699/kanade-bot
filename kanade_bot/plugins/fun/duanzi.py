@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 import random
+from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
 
@@ -36,10 +36,15 @@ def list_paged_duanzi(page: int = 1) -> str:
     return "\n".join(messages)
 
 
-def get_random_duanzi() -> str | None:
-    """从段子列表中随机返回一个段子"""
+def get_or_random_duanzi(index: int | None = None) -> str | None:
+    """从段子列表中随机返回一个段子，如果指定了index则返回对应的段子"""
     if not duanzi_list:
         return None
+
+    if index is not None:
+        if index < 1 or index > len(duanzi_list):
+            return None
+        return duanzi_list[index - 1]
 
     return random.choice(duanzi_list)
 
