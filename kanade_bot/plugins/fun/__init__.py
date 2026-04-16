@@ -381,11 +381,12 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
 
         segments = duanzi.split("{{face}}")
         message = OneBotMessage()
+        face_id = random.choice(FACE_IDS)
+
         for i, segment in enumerate(segments):
             if segment:
                 message += segment
             if i != len(segments) - 1:
-                face_id = random.choice(FACE_IDS)
                 message += MessageSegment.face(face_id)
         await random_duanzi.finish(message)
 
