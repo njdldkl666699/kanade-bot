@@ -395,7 +395,7 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
                 nickname=cfg.bot_nickname,
                 content=message,
             )
-            await random_duanzi.finish(node_custom)
+            await random_duanzi.finish(OneBotMessage(node_custom))
         await random_duanzi.finish(message)
 
     await random_duanzi.finish(duanzi)
