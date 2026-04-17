@@ -154,9 +154,7 @@ async def finish_onebot_message(
     # 消息数>3，合并转发
     node_custom_message = OneBotMessage()
     for message in messages:
-        node_custom_message.append(
-            MessageSegment.node_custom(cfg.chat_bot_id, cfg.chat_bot_nickname, message)
-        )
+        node_custom_message += MessageSegment.node_custom(cfg.bot_id, cfg.bot_nickname, message)
     await matcher.finish(node_custom_message)
 
 

@@ -388,6 +388,14 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
                 message += segment
             if i != len(segments) - 1:
                 message += MessageSegment.face(face_id)
+
+        if len(duanzi) >= 500:
+            node_custom = MessageSegment.node_custom(
+                user_id=cfg.bot_id,
+                nickname=cfg.bot_nickname,
+                content=message,
+            )
+            await random_duanzi.finish(node_custom)
         await random_duanzi.finish(message)
 
     await random_duanzi.finish(duanzi)

@@ -24,3 +24,8 @@ class Config(BaseModel):
 
     fun_duanzi_list_path: str = "assets/duanzi.json"
     """段子(史)列表文件路径，JSON列表文件"""
+
+    bot_id: int
+    """使用OneBot协议时，聊天机器人的QQ号"""
+    bot_nickname: str
+    """使用OneBot协议时，聊天机器人的昵称"""

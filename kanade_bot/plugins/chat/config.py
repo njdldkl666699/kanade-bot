@@ -22,9 +22,9 @@ class Config(BaseModel):
     chat_fail_image_path: str = "assets/images/chat_fail.jpg"
     """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
 
-    chat_bot_id: int
+    bot_id: int
     """使用OneBot协议时，聊天机器人的QQ号"""
-    chat_bot_nickname: str
+    bot_nickname: str
     """使用OneBot协议时，聊天机器人的昵称"""
 
     chat_rag_enabled: bool = False
