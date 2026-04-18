@@ -91,6 +91,13 @@ doc_names: set[str] = set()
 
 
 @help.handle()
+async def sakura_bot(arg_msg: Message = CommandArg()):
+    sub_command = arg_msg.extract_plain_text().strip()
+    if not sub_command:
+        await help.send("Sakura Bot帮助文档：\n" + cfg.help_sakura_bot_link)
+
+
+@help.handle()
 async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
     doc_name = arg_msg.extract_plain_text().strip()
     if doc_name not in doc_names:
