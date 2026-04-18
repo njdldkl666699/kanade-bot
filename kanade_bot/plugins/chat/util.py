@@ -115,7 +115,7 @@ async def finish_onebot_message(
         if meme_name not in configs.memes:
             return ""
 
-        meme_path = Path(cfg.chat_memes_path) / meme_name
+        meme_path = Path(cfg.chat_memes_dir_path) / meme_name
         if not meme_path.is_dir():
             return ""
 
@@ -220,7 +220,7 @@ async def send_message_in_chunks(
 
 
 def send_fail_message(matcher: type[Matcher]):
-    image = Path(cfg.chat_fail_image_path)
+    image = Path(cfg.chat_fail_image_file_path)
     if image.is_file():
         return matcher.finish(OneBotMessageSegmentMeme(image))
     return matcher.finish("已深度思考（用时0秒）\n服务器繁忙，请稍后再试")

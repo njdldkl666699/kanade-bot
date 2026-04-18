@@ -52,7 +52,7 @@ def get_or_random_duanzi(index: int | None = None) -> str | None:
 def add_duanzi(duanzi: str) -> bool:
     """向段子列表中添加一个段子，并保存到文件"""
     duanzi_list.append(duanzi)
-    duanzi_path = Path(cfg.fun_duanzi_list_path)
+    duanzi_path = Path(cfg.fun_duanzi_list_file_path)
     duanzi_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with duanzi_path.open("w", encoding="utf-8") as f:
@@ -70,7 +70,7 @@ def remove_duanzi(index: int) -> bool:
 
     del duanzi_list[index - 1]
 
-    duanzi_path = Path(cfg.fun_duanzi_list_path)
+    duanzi_path = Path(cfg.fun_duanzi_list_file_path)
     duanzi_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with duanzi_path.open("w", encoding="utf-8") as f:
@@ -88,7 +88,7 @@ driver = get_driver()
 def load_duanzi_list():
     global duanzi_list
     try:
-        with open(cfg.fun_duanzi_list_path, "r", encoding="utf-8") as f:
+        with open(cfg.fun_duanzi_list_file_path, "r", encoding="utf-8") as f:
             duanzi_list = json.load(f)
     except Exception as e:
         logger.error(f"加载段子列表失败: {e}")

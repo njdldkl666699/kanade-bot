@@ -55,7 +55,7 @@ class CopilotSessionManager:
     ]
     """工具列表，包含所有可用工具的名称"""
 
-    system_prompt_path = Path(cfg.chat_system_prompt_path)
+    system_prompt_path = Path(cfg.chat_system_prompt_file_path)
     system_prompt = ""
     """系统提示词"""
     if not system_prompt_path.is_file():

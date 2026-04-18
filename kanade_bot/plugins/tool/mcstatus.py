@@ -36,7 +36,7 @@ def _resolve_icon_src(icon_data: str | None) -> str:
         except Exception:
             pass
 
-    fallback = Path(cfg.tool_fallback_icon_path)
+    fallback = Path(cfg.tool_fallback_icon_file_path)
     return _encode_image_as_data_url(fallback)
 
 
@@ -75,7 +75,7 @@ async def render_mc_status(
 
     latency = status.latency
 
-    template_path = Path(cfg.tool_template_path)
+    template_path = Path(cfg.tool_template_file_path)
     template_name = template_path.name
 
     return await template_to_pic(

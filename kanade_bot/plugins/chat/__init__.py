@@ -239,7 +239,7 @@ async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandA
     response.raise_for_status()
     image = response.content
     # 确保表情包目录存在
-    meme_path = Path(cfg.chat_memes_path) / name
+    meme_path = Path(cfg.chat_memes_dir_path) / name
     meme_path.mkdir(parents=True, exist_ok=True)
     # 保存图片到表情包目录
     image_path = meme_path / f"{uuid.uuid4()}.png"

@@ -46,7 +46,7 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    ciallo_image_path = Path(cfg.fun_ciallo_image_path)
+    ciallo_image_path = Path(cfg.fun_ciallo_image_file_path)
     if not ciallo_image_path.is_file():
         await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
 

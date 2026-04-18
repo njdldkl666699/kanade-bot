@@ -8,18 +8,18 @@ from pydantic import BaseModel
 class Config(BaseModel):
     chat_model: str = "gpt-5-mini"
     """模型ID，需要支持图片输入"""
-    chat_system_prompt_path: str = "assets/prompts/Kanade-v3.md"
+    chat_system_prompt_file_path: str = "assets/prompts/Kanade-v3.md"
     """系统提示词文件路径"""
     chat_tavily_api_key: str
     """Tavily API Key"""
 
     chat_session_prompt_buffer_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
-    chat_configs_path: str = "assets/chat_configs.json"
+    chat_configs_file_path: str = "assets/chat_configs.json"
     """聊天配置文件路径"""
-    chat_memes_path: str = "assets/memes"
+    chat_memes_dir_path: str = "assets/memes"
     """表情包存储路径"""
-    chat_fail_image_path: str = "assets/images/chat_fail.jpg"
+    chat_fail_image_file_path: str = "assets/images/chat_fail.jpg"
     """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
 
     bot_id: int
@@ -88,7 +88,7 @@ cfg = get_plugin_config(Config)
 
 def _ensure_chat_configs() -> ChatConfigs:
     """确保聊天配置文件存在并返回配置对象，如果文件不存在则创建默认配置文件并返回默认配置对象"""
-    path = Path(cfg.chat_configs_path)
+    path = Path(cfg.chat_configs_file_path)
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         default_configs = ChatConfigs()
@@ -106,6 +106,6 @@ configs = _ensure_chat_configs()
 
 def write_chat_config():
     """将聊天配置对象写入配置文件"""
-    Path(cfg.chat_configs_path).write_text(
+    Path(cfg.chat_configs_file_path).write_text(
         configs.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"
     )

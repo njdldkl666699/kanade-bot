@@ -75,7 +75,7 @@ driver = get_driver()
 @driver.on_startup
 def load_sing_songs():
     global sing_songs
-    directory = Path(cfg.fun_sing_directory)
+    directory = Path(cfg.fun_sing_dir_path)
     if not directory.is_dir():
         logger.warning("唱歌功能的歌曲文件目录不存在，路径: {}", directory.absolute())
         return
