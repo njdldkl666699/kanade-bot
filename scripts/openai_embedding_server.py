@@ -1,6 +1,7 @@
 import base64
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
@@ -18,7 +19,7 @@ MODEL_NAME_OR_PATH = os.getenv("CHAT_RAG_MODEL_OR_PATH", "BAAI/bge-small-zh-v1.5
 PORT = int(os.getenv("OPENAI_EMBED_PORT", 21039))
 """Server port."""
 
-RESPONSE_MODEL_NAME = MODEL_NAME_OR_PATH.split("/")[-1]
+RESPONSE_MODEL_NAME = Path(MODEL_NAME_OR_PATH).name
 """Model name to return in responses."""
 
 API_KEY = "sk-embedding"

@@ -1,6 +1,6 @@
 from typing import Any
 
-from nonebot import get_plugin_config, on_command, require
+from nonebot import get_plugin_config, logger, on_command, require
 from nonebot.adapters import Bot, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import Message as ConsoleMessage
@@ -39,6 +39,7 @@ async def record_recv_msg(
     event: OneBotMessageEvent | ConsoleMessageEvent,
     message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
+    logger.debug(f"record_recv_msg: event={event}, message={message}")
     if not cfg.summary_enabled:
         return
 
