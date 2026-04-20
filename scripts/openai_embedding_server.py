@@ -194,7 +194,7 @@ async def create_embeddings(
 
     vectors = model.encode(
         inputs,
-        normalize_embeddings=True,
+        normalize_embeddings=False,
         show_progress_bar=False,
     )
 
@@ -212,8 +212,4 @@ async def create_embeddings(
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        app,
-        port=PORT,
-        reload=False,
-    )
+    uvicorn.run(app, port=PORT)

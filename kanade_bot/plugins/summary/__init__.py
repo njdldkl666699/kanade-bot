@@ -1,6 +1,6 @@
 from typing import Any
 
-from nonebot import get_plugin_config, logger, on_command, require
+from nonebot import get_driver, get_plugin_config, logger, on_command, require
 from nonebot.adapters import Bot, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import Message as ConsoleMessage
@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.drivers import URL, ASGIMixin, HTTPServerSetup, Request, Response
 from nonebot.message import event_postprocessor
 from nonebot.params import CommandArg, EventMessage
 from nonebot.plugin import PluginMetadata
@@ -34,12 +35,27 @@ __plugin_meta__ = PluginMetadata(
 cfg = get_plugin_config(Config)
 
 
+async def add_llm_message(request: Request) -> Response:
+    logger.debug(f"Received LLM message: {request.json}")
+    return Response(200)
+
+
+if isinstance((driver := get_driver()), ASGIMixin):
+    driver.setup_http_server(
+        HTTPServerSetup(
+            path=URL("/message/llm"),
+            method="POST",
+            name="add_llm_message",
+            handle_func=add_llm_message,
+        )
+    )
+
+
 @event_postprocessor
 async def record_recv_msg(
     event: OneBotMessageEvent | ConsoleMessageEvent,
     message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
-    logger.debug(f"record_recv_msg: event={event}, message={message}")
     if not cfg.summary_enabled:
         return
 
