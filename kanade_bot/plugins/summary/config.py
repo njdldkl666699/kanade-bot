@@ -2,8 +2,6 @@ from pydantic import BaseModel
 
 
 class Config(BaseModel):
-    summary_enabled: bool = True
-    """是否启用总结功能"""
     summary_model: str = "gpt-5-mini"
     """总结使用的模型ID"""
     summary_system_prompt_file_path: str = "assets/prompts/Summarizer.md"

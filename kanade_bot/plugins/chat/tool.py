@@ -7,17 +7,13 @@ from .config import configs
 
 
 class TavilySearchParams(BaseModel):
-    query: str = Field(description="要搜索的查询字符串")
+    query: str = Field(description="Search query.")
 
 
 @define_tool(
-    "tavily_search",
-    description="""一个网络搜索工具。
-提供一个查询字符串来获取搜索结果。
-必须等到它返回结果后才能再次调用它。
-如果你需要关于同一查询的更多信息，
-调用web_fetch工具从结果中的URL提取内容，
-而不是再次调用它进行搜索。""",
+    "web_search_tavily",
+    description="""A web search tool that uses Tavily to search the web for relevant content. 
+Ideal for gathering current information, news, and detailed web content analysis.""",
 )
 async def tavily_search(params: TavilySearchParams):
     response = await client.post(
@@ -34,6 +30,24 @@ async def tavily_search(params: TavilySearchParams):
         "模型调用工具{}，查询内容：{}，返回了结果，状态码：{}",
         tavily_search.name,
         params.query,
+        response.status_code,
+    )
+    return response.json()
+
+
+@define_tool(
+    "web_page_extract_tavily",
+    description="Extract the content of a web page using Tavily.",
+)
+async def tavily_extract(url: str):
+    response = await client.post(
+        "/extract",
+        json={"url": [url]},
+    )
+    logger.info(
+        "模型调用工具{}，提取页面：{}，返回了结果，状态码：{}",
+        tavily_extract.name,
+        url,
         response.status_code,
     )
     return response.json()

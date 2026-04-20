@@ -12,7 +12,7 @@ from copilot.session import Attachment, CustomAgentConfig, PermissionHandler, Sy
 from nonebot import get_driver, logger, require
 
 from .config import cfg
-from .tool import list_memes, tavily_search
+from .tool import list_memes, tavily_extract, tavily_search
 
 require("nonebot_plugin_apscheduler")
 
@@ -51,6 +51,7 @@ class CopilotSessionManager:
         "web_fetch",
         "todo",
         tavily_search.name,
+        tavily_extract.name,
         list_memes.name,
     ]
     """工具列表，包含所有可用工具的名称"""
@@ -80,7 +81,7 @@ class CopilotSessionManager:
         "on_permission_request": PermissionHandler.approve_all,
         "model": cfg.chat_model,
         "reasoning_effort": "medium",
-        "tools": [tavily_search, list_memes],
+        "tools": [tavily_search, tavily_extract, list_memes],
         "available_tools": [*tools, "read_agent", "list_agents", "task"],
         "custom_agents": [custom_agent_config],
         "agent": custom_agent_config["name"],
