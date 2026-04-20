@@ -22,3 +22,6 @@
 2. 终端打印的Banner错乱：
    1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
    2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。
+3. 关闭聊天功能并使用AstrBot：
+   1. 在`.env`或`.env.prod`中设置`CHAT_ENABLED=false`来关闭聊天插件的所有功能。
+   2. 本项目提供了一个本地Embedding服务器，你可以使用它来为AstrBot提供嵌入模型。使用`uv run scripts/openai_embedding_server.py`来启动，并参考其中的配置在AstrBot中填入。

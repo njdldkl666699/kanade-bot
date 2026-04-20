@@ -79,7 +79,7 @@ class CopilotSessionManager:
     SESSION_CONFIG = {
         "on_permission_request": PermissionHandler.approve_all,
         "model": cfg.chat_model,
-        "reasoning_effort": "low",
+        "reasoning_effort": "medium",
         "tools": [tavily_search, list_memes],
         "available_tools": [*tools, "read_agent", "list_agents", "task"],
         "custom_agents": [custom_agent_config],
