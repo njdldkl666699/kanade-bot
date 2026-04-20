@@ -37,6 +37,12 @@ cfg = get_plugin_config(Config)
 
 async def add_llm_message(request: Request) -> Response:
     logger.debug(f"Received LLM message: {request.json}")
+    is_group = request.json.get("is_group", False)
+    session_id = request.json.get("session_id")
+    session_id = f"qq-{'group' if is_group else 'private'}-{session_id}"
+    message = request.json.get("message")
+    message = f"$ {cfg.summary_bot_name} ：{message}"
+    summarizer.add_message(session_id, message)
     return Response(200)
 
 

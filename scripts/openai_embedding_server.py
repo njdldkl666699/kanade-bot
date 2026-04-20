@@ -194,7 +194,7 @@ async def create_embeddings(
 
     vectors = model.encode(
         inputs,
-        normalize_embeddings=False,
+        normalize_embeddings=True,
         show_progress_bar=False,
     )
 
