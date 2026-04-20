@@ -1,15 +1,8 @@
-import os
-
 import nonebot
-from dotenv import load_dotenv
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
 from scripts.banner import get_kanade
-
-load_dotenv()
-
-CHAT_ENABLED = os.getenv("CHAT_ENABLED", "true").lower() == "true"
 
 
 def init_nonebot():
@@ -28,15 +21,7 @@ def init_nonebot():
     nonebot.load_plugin("nonebot_plugin_apscheduler")
     nonebot.load_plugin("nonebot_plugin_htmlrender")
 
-    # nonebot.load_plugins("kanade_bot/plugins")
-    nonebot.load_plugin("kanade_bot.plugins.api60s")
-    nonebot.load_plugin("kanade_bot.plugins.fun")
-    nonebot.load_plugin("kanade_bot.plugins.help")
-    nonebot.load_plugin("kanade_bot.plugins.summary")
-    nonebot.load_plugin("kanade_bot.plugins.tool")
-
-    if CHAT_ENABLED:
-        nonebot.load_plugin("kanade_bot.plugins.chat")
+    nonebot.load_plugins("kanade_bot/plugins")
 
 
 if __name__ == "__main__":
