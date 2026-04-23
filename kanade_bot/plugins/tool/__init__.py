@@ -2,7 +2,7 @@ import base64
 from pathlib import Path
 
 from mcstatus import JavaServer
-from nonebot import get_plugin_config, logger, on_command
+from nonebot import get_driver, get_plugin_config, logger, on_command
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -132,6 +132,9 @@ async def _(event: OneBotGroupMessageEvent):
     await list_schedules.finish(pretty_list)
 
 
+global_config = get_driver().config
+
+
 add_a_schedule = on_command(
     "添加定时任务",
     aliases={"schedule_add"},
@@ -142,8 +145,12 @@ add_a_schedule = on_command(
 
 @add_a_schedule.handle()
 async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await add_a_schedule.finish()
+
     group_id = event.group_id
-    args = parse_arg_message(arg_msg, {"name": str, "cron": str}, maxsplit=2)
+    args = parse_arg_message(arg_msg, {"name": str, "cron": str}, maxsplit=1)
     name: str | None = args["name"]
     cron: str | None = args["cron"]
     if not all([name, cron]):
@@ -174,6 +181,10 @@ remove_a_schedule = on_command(
 
 @remove_a_schedule.handle()
 async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    admin_id = event.get_user_id()
+    if admin_id not in global_config.superusers:
+        await remove_a_schedule.finish()
+
     group_id = event.group_id
     name = arg_msg.extract_plain_text().strip()
     if not name:
