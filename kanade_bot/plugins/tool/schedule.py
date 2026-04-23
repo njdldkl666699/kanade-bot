@@ -1,6 +1,6 @@
 from apscheduler.triggers.cron import CronTrigger
-from nonebot import get_adapter, get_driver, logger, require
-from nonebot.adapters.onebot.v11 import Adapter, Message
+from nonebot import get_driver, logger, require
+from nonebot.adapters.onebot.v11 import Bot, Message
 
 from .config import ScheduleConfig, schedules, write_schedules
 
@@ -8,12 +8,15 @@ require("nonebot_plugin_apscheduler")
 
 from nonebot_plugin_apscheduler import scheduler
 
-bot = list(get_adapter(Adapter).bots.values())[0]
-"""仅支持单bot，取第一个bot实例"""
+TOOL_SCHEDULE_JOB_PREFIX = "tool_schedule"
+
+
+bot: Bot | None = None
+"""定时任务使用的Bot实例"""
 
 
 def schedule_id(group_id: int, schedule_name: str) -> str:
-    return f"tool_schedule_{group_id}_{schedule_name}"
+    return f"{TOOL_SCHEDULE_JOB_PREFIX}_{group_id}_{schedule_name}"
 
 
 def print_schedules_pretty(group_id: int) -> str | None:
@@ -68,6 +71,9 @@ def remove_schedule(group_id: int, name: str):
 
 
 async def send_scheduled_message(group_id: int, message: Message):
+    if bot is None:
+        logger.warning("Bot实例未就绪，无法发送定时消息")
+        return
     try:
         await bot.send_group_msg(group_id=group_id, message=message)
     except Exception as e:
@@ -77,8 +83,10 @@ async def send_scheduled_message(group_id: int, message: Message):
 driver = get_driver()
 
 
-@driver.on_startup
-async def on_startup():
+@driver.on_bot_connect
+def on_bot_connect(bot_instance: Bot):
+    global bot
+    bot = bot_instance
     for group_id, schedule_list in schedules.root.items():
         for name, schedule in schedule_list.items():
             job_id = schedule_id(group_id, name)
@@ -89,3 +97,14 @@ async def on_startup():
                 args=[group_id, schedule.message],
             )
         logger.info(f"已加载群 {group_id} 的 {len(schedule_list)} 个定时任务")
+
+
+@driver.on_bot_disconnect
+def on_bot_disconnect():
+    global bot
+    bot = None
+    jobs = scheduler.get_jobs()
+    for job in jobs:
+        if job.id.startswith(TOOL_SCHEDULE_JOB_PREFIX):
+            scheduler.remove_job(job.id)
+    logger.info(f"Bot已断开连接，已移除 {len(jobs)} 个定时任务")
