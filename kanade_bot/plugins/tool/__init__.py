@@ -8,7 +8,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.params import CommandArg
+from nonebot.params import CommandArg, EventMessage
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
@@ -156,7 +156,7 @@ async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = C
 
 
 @add_a_schedule.handle()
-async def _(state: T_State, message: OneBotMessage):
+async def _(state: T_State, message: OneBotMessage = EventMessage()):
     try:
         add_schedule(state["group_id"], state["name"], state["cron"], message)
     except ValueError as e:
