@@ -1,9 +1,10 @@
 from nonebot import on_command
-from nonebot.adapters import Bot
+from nonebot.adapters import Bot, Message
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.message import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11.message import MessageSegment as OneBotMessageSegment
+from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_htmlrender import md_to_pic
 
@@ -52,10 +53,14 @@ ai_news = on_command(
 
 
 @ai_news.handle()
-async def _(bot: Bot):
+async def _(bot: Bot, arg_msg: Message = CommandArg()):
+    date = arg_msg.extract_plain_text().strip()
     response = await client.get(
         "/v2/ai-news",
-        params={"encoding": "markdown"},
+        params={
+            "date": date,
+            "encoding": "markdown",
+        },
     )
     text = response.text
     if isinstance(bot, ConsoleBot):
