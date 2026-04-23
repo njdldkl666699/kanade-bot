@@ -1,6 +1,6 @@
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, SupportsIndex
 
 from nonebot.adapters import Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -14,12 +14,14 @@ from nonebot.params import CommandArg
 def parse_arg_message(
     arg_message: Message = CommandArg(),
     mappings: dict[str, type] | None = None,
+    maxsplit: SupportsIndex = -1,
 ) -> dict[str, Any]:
     """解析命令参数消息
 
     参数:
         arg_message: 命令参数消息
         mappings: 可选的参数名称映射字典，键为参数名称，值为参数类型
+        maxsplit: 分割参数消息时的最大分割次数，默认为 -1（不限制）
 
     返回:
         dict: 解析后的参数字典，键为参数名称，值为参数值；\
@@ -36,7 +38,7 @@ def parse_arg_message(
     if not mappings:
         return {}
 
-    args = arg_message.extract_plain_text().strip().split()
+    args = arg_message.extract_plain_text().strip().split(maxsplit=maxsplit)
     arg_dict: dict[str, Any] = {}
 
     for index, (name, value_type) in enumerate(mappings.items()):

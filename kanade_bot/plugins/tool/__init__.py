@@ -4,14 +4,18 @@ from pathlib import Path
 from mcstatus import JavaServer
 from nonebot import get_plugin_config, logger, on_command
 from nonebot.adapters import Event, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
+from nonebot.typing import T_State
 
 from ..util import parse_arg_message
 from .config import Config
 from .mcstatus import render_mc_status
+from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 
 __plugin_meta__ = PluginMetadata(
     name="tool",
@@ -21,6 +25,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 cfg = get_plugin_config(Config)
+
 
 thunder_link_parse = on_command(
     "迅雷链接解析",
@@ -110,3 +115,72 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     image_path = Path("mc_status.png")
     image_path.write_bytes(image)
     await mc_status.finish("服务器状态已保存到 mc_status.png")
+
+
+list_schedules = on_command(
+    "定时任务列表",
+    aliases={"schedule_list"},
+    priority=2,
+    block=True,
+)
+
+
+@list_schedules.handle()
+async def _(event: OneBotGroupMessageEvent):
+    group_id = event.group_id
+    pretty_list = print_schedules_pretty(group_id) or "当前没有定时任务"
+    await list_schedules.finish(pretty_list)
+
+
+add_a_schedule = on_command(
+    "添加定时任务",
+    aliases={"schedule_add"},
+    priority=2,
+    block=True,
+)
+
+
+@add_a_schedule.handle()
+async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    group_id = event.group_id
+    args = parse_arg_message(arg_msg, {"name": str, "cron": str}, maxsplit=2)
+    name: str | None = args["name"]
+    cron: str | None = args["cron"]
+    if not all([name, cron]):
+        await add_a_schedule.finish("请重新提供定时任务名称、Cron表达式")
+
+    state["group_id"] = group_id
+    state["name"] = name
+    state["cron"] = cron
+    await add_a_schedule.pause("请发送定时任务消息内容：")
+
+
+@add_a_schedule.handle()
+async def _(state: T_State, message: OneBotMessage):
+    try:
+        add_schedule(state["group_id"], state["name"], state["cron"], message)
+    except ValueError as e:
+        await add_a_schedule.finish(str(e))
+    await add_a_schedule.finish(f"已添加定时任务 {state['name']}")
+
+
+remove_a_schedule = on_command(
+    "移除定时任务",
+    aliases={"schedule_remove"},
+    priority=2,
+    block=True,
+)
+
+
+@remove_a_schedule.handle()
+async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
+    group_id = event.group_id
+    name = arg_msg.extract_plain_text().strip()
+    if not name:
+        await remove_a_schedule.finish("请提供定时任务名称")
+
+    try:
+        remove_schedule(group_id, name)
+    except ValueError as e:
+        await remove_a_schedule.finish(str(e))
+    await remove_a_schedule.finish(f"已移除定时任务 {name}")
