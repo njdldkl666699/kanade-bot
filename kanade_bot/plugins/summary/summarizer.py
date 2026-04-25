@@ -7,7 +7,7 @@ from copilot import CopilotClient, CopilotSession
 from copilot.client import StopError
 from copilot.session import PermissionHandler, SystemMessageConfig
 from nonebot import get_driver, get_plugin_config, logger
-
+from copilot.generated.session_events import AssistantMessageData
 from .config import Config
 
 cfg = get_plugin_config(Config)
@@ -120,12 +120,11 @@ class Summarizer:
 
         if not session_event:
             return None
-        content = session_event.data.content
-        if isinstance(content, str):
-            return content
+        if not isinstance(session_event.data, AssistantMessageData):
+            logger.warning(f"总结会话{session_id}的响应内容不是文本，数据: {session_event.data}")
+            return None
 
-        logger.warning(f"总结会话{session_id}的响应内容不是字符串: {content}")
-        return None
+        return session_event.data.content
 
 
 summarizer = Summarizer()

@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from nonebot import get_plugin_config, on_command, on_message
-from nonebot.adapters import Event, Message
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -14,7 +14,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from ..util import parse_arg_message, extract_session_info
+from ..util import extract_session_info, parse_arg_message
 from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
@@ -40,6 +40,7 @@ chat = on_message(
 
 @chat.handle()
 async def handle_chat(
+    bot: Bot,
     event: OneBotMessageEvent | ConsoleMessageEvent,
     message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
@@ -53,7 +54,7 @@ async def handle_chat(
     if isinstance(message, ConsoleMessage):
         message_str = str(message)
 
-    await send_message_in_chunks(chat, event, message_str)
+    await send_message_in_chunks(chat, bot, event, message_str)
 
 
 def not_to_me(to_me: bool = EventToMe()):
@@ -71,10 +72,11 @@ chat_monitor = on_message(
 
 @chat_monitor.handle()
 async def handle_chat_monitor(
+    bot: Bot,
     event: Event,
     message: ConsoleMessage | OneBotMessage = EventMessage(),
 ):
-    session_id, nickname, is_group = extract_session_info(event)
+    session_id, nickname, group_name = await extract_session_info(event, bot)
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -92,8 +94,8 @@ async def handle_chat_monitor(
     else:
         return
 
-    if is_group and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, event, message_str)
+    if group_name and should_auto_reply(group_id, platform, session_id):
+        await send_message_in_chunks(chat, bot, event, message_str)
 
     # 将用户消息添加到会话缓冲区
     if nickname:
@@ -113,7 +115,7 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    session_id, _, _ = extract_session_info(event)
+    session_id, _, _ = await extract_session_info(event)
     await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
 

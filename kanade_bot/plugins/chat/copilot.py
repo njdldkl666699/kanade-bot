@@ -102,7 +102,7 @@ class CopilotSessionManager:
         session_id: str,
         prompt: str | None,
         *,
-        is_group: bool = False,
+        group_name: str | None = None,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
@@ -134,20 +134,23 @@ class CopilotSessionManager:
                 # 没有新的用户消息，也没有缓冲消息，不发送任何消息
                 return None, new_session
 
-            prompt_parts = [
-                # RAG相关文档
-                f"$检索到的相关文档：\n{'\n'.join(rag_docs)}\n" if rag_docs else "",
-                # 群聊提示
-                "$现在的会话是群聊\n" if is_group else "",
-                # 缓冲区消息
-                "\n".join(buffered_messages) if buffered_messages else "",
-                # 引用消息
-                f"$用户引用了之前的消息：\n{reply_text}\n" if reply_text else "",
-                # 本次用户消息
-                f"$下面是这次的用户消息：\n{prompt}\n" if prompt else "",
-                # 附件提示
-                "$用户附带了图片\n" if attachments else "",
-            ]
+            prompt_parts: list[str] = []
+            if group_name:
+                prompt_parts.append(f"$现在的会话在群聊{group_name}中。")
+            if rag_docs:
+                prompt_parts.append("$检索到可能相关的文档：")
+                prompt_parts.extend(rag_docs)
+            if buffered_messages:
+                prompt_parts.append("$下面是之前的消息缓冲区中的消息：")
+                prompt_parts.extend(buffered_messages)
+            if reply_text:
+                prompt_parts.append("$用户引用了之前的消息：")
+                prompt_parts.append(reply_text)
+            if prompt:
+                prompt_parts.append("$下面是这次的用户消息：")
+                prompt_parts.append(prompt)
+            if attachments:
+                prompt_parts.append("$用户附带了图片")
 
             send_prompt = "\n".join(prompt_parts).strip()
             if not send_prompt:

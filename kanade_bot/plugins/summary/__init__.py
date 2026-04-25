@@ -6,7 +6,6 @@ from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
@@ -45,7 +44,7 @@ async def record_recv_msg(
     if isinstance(message, ConsoleMessage):
         message_str = str(message)
 
-    session_id, nickname, _ = extract_session_info(event)
+    session_id, nickname, _ = await extract_session_info(event)
     if nickname:
         message_str = f"$ {nickname} ：{message_str}"
 
@@ -124,21 +123,15 @@ async def _(
     if size < min or size > max:
         await summarize.finish(f"消息条数必须在 {min}-{max} 范围内")
 
-    session_id, nickname, is_group = extract_session_info(event)
+    session_id, nickname, group_name = await extract_session_info(event, bot)
 
-    group_or_user_name = nickname
     # 如果是群聊，则修改为群名称
-    if is_group:
-        if isinstance(bot, OneBot) and isinstance(event, OneBotGroupMessageEvent):
-            group_info = await bot.get_group_info(group_id=event.group_id)
-            group_or_user_name: str | None = group_info.get("group_name")
-        if isinstance(event, ConsoleMessageEvent):
-            group_or_user_name = event.channel.name
+    group_or_user_name = group_name or nickname
 
     summary = await summarizer.summarize(
         session_id,
         size,
-        is_group=is_group,
+        is_group=bool(group_name),
         group_or_user_name=group_or_user_name,
         timeout=300,
     )

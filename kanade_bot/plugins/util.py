@@ -2,9 +2,10 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, SupportsIndex
 
-from nonebot.adapters import Event, Message
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
@@ -63,11 +64,13 @@ def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessag
     return message
 
 
-def extract_session_info(event: Event) -> tuple[str, str | None, bool]:
-    """解析事件以获取会话ID、用户昵称、是否是群聊"""
+async def extract_session_info(
+    event: Event, bot: Bot | None = None
+) -> tuple[str, str | None, str | None]:
+    """解析事件以获取会话ID、用户昵称、群聊名称"""
     session_id = event.get_session_id()
     nickname: str | None = None
-    is_group = False
+    group_name: str | None = None
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
@@ -76,7 +79,9 @@ def extract_session_info(event: Event) -> tuple[str, str | None, bool]:
     if isinstance(event, OneBotGroupMessageEvent):
         session_id = f"qq-group-{event.group_id}"
         nickname = event.sender.card or event.sender.nickname
-        is_group = True
+        if isinstance(bot, OneBot):
+            group_info = await bot.get_group_info(group_id=event.group_id)
+            group_name = group_info.get("group_name") if group_info else None
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
@@ -84,6 +89,6 @@ def extract_session_info(event: Event) -> tuple[str, str | None, bool]:
         session_id = f"console-private-{event.user.id}"
     if isinstance(event, ConsolePublicMessageEvent):
         session_id = f"console-group-{event.channel.id}"
-        is_group = True
+        group_name = event.channel.name
 
-    return session_id, nickname, is_group
+    return session_id, nickname, group_name

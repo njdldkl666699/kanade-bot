@@ -6,7 +6,7 @@ from pathlib import Path
 from copilot.generated.session_events import AssistantMessageData
 from copilot.session import Attachment
 from nonebot import logger
-from nonebot.adapters import Event
+from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
@@ -161,6 +161,7 @@ async def finish_onebot_message(
 
 async def send_message_in_chunks(
     matcher: type[Matcher],
+    bot: Bot,
     event: Event,
     message_str: str,
 ):
@@ -186,14 +187,14 @@ async def send_message_in_chunks(
     rag_docs = query(query_str) if query_str else None
 
     # 将message_str带上用户昵称
-    session_id, nickname, is_group = extract_session_info(event)
+    session_id, nickname, group_name = await extract_session_info(event, bot)
     if nickname:
         message_str = f"{nickname} ：{message_str}"
 
     response, new_session = await copilot.send_and_wait(
         session_id,
         message_str,
-        is_group=is_group,
+        group_name=group_name,
         rag_docs=rag_docs,
         reply_text=reply_text,
         attachments=attachments,
