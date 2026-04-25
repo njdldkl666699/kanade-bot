@@ -16,7 +16,7 @@ from nonebot.plugin import PluginMetadata
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
-from ..util import resolve_session_id_and_prompt
+from ..util import extract_session_info
 from .config import Config
 from .summarizer import summarizer
 
@@ -45,7 +45,7 @@ async def record_recv_msg(
     if isinstance(message, ConsoleMessage):
         message_str = str(message)
 
-    session_id, nickname, _ = resolve_session_id_and_prompt(event, message_str)
+    session_id, nickname, _ = extract_session_info(event)
     if nickname:
         message_str = f"$ {nickname} ：{message_str}"
 
@@ -124,7 +124,7 @@ async def _(
     if size < min or size > max:
         await summarize.finish(f"消息条数必须在 {min}-{max} 范围内")
 
-    session_id, nickname, is_group = resolve_session_id_and_prompt(event, "")
+    session_id, nickname, is_group = extract_session_info(event)
 
     group_or_user_name = nickname
     # 如果是群聊，则修改为群名称

@@ -9,12 +9,12 @@ from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMe
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.params import CommandArg, EventMessage, EventPlainText, EventToMe
+from nonebot.params import CommandArg, EventMessage, EventToMe
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from ..util import parse_arg_message, resolve_session_id_and_prompt
+from ..util import parse_arg_message, extract_session_info
 from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
@@ -39,12 +39,21 @@ chat = on_message(
 
 
 @chat.handle()
-async def handle_chat(event: Event, prompt: str = EventPlainText()):
+async def handle_chat(
+    event: OneBotMessageEvent | ConsoleMessageEvent,
+    message: OneBotMessage | ConsoleMessage = EventMessage(),
+):
     # 检查用户或群聊是否在聊天黑名单中
     if is_event_banned(event):
         return
 
-    await send_message_in_chunks(chat, event, prompt)
+    message_str = ""
+    if isinstance(message, OneBotMessage):
+        message_str = message.to_rich_text()
+    if isinstance(message, ConsoleMessage):
+        message_str = str(message)
+
+    await send_message_in_chunks(chat, event, message_str)
 
 
 def not_to_me(to_me: bool = EventToMe()):
@@ -65,7 +74,7 @@ async def handle_chat_monitor(
     event: Event,
     message: ConsoleMessage | OneBotMessage = EventMessage(),
 ):
-    session_id, nickname, is_group = resolve_session_id_and_prompt(event, "")
+    session_id, nickname, is_group = extract_session_info(event)
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -104,7 +113,7 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    session_id, _, _ = resolve_session_id_and_prompt(event, "")
+    session_id, _, _ = extract_session_info(event)
     await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
 

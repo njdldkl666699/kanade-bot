@@ -63,8 +63,8 @@ def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessag
     return message
 
 
-def resolve_session_id_and_prompt(event: Event, prompt: str) -> tuple[str, str | None, bool]:
-    """解析事件以获取会话ID和用户昵称，并返回是否是群聊"""
+def extract_session_info(event: Event) -> tuple[str, str | None, bool]:
+    """解析事件以获取会话ID、用户昵称、是否是群聊"""
     session_id = event.get_session_id()
     nickname: str | None = None
     is_group = False

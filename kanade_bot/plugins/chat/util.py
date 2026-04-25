@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from ..util import OneBotMessageSegmentMeme, resolve_session_id_and_prompt
+from ..util import OneBotMessageSegmentMeme, extract_session_info
 from .ban import is_banned
 from .client import file_client as client
 from .config import PlatformType, cfg, configs
@@ -162,7 +162,7 @@ async def finish_onebot_message(
 async def send_message_in_chunks(
     matcher: type[Matcher],
     event: Event,
-    prompt: str,
+    message_str: str,
 ):
     # 处理消息中的图片附件
     attachments: list[Attachment] = []
@@ -182,15 +182,17 @@ async def send_message_in_chunks(
         reply_text = event.reply.message.extract_plain_text().strip()
 
     # 进行RAG查询，获取相关文档
-    rag_docs = query(prompt) if prompt else None
-    # 然后再将prompt带上用户昵称
-    session_id, nickname, is_group = resolve_session_id_and_prompt(event, prompt)
+    query_str = event.get_message().extract_plain_text().strip()
+    rag_docs = query(query_str) if query_str else None
+
+    # 将message_str带上用户昵称
+    session_id, nickname, is_group = extract_session_info(event)
     if nickname:
-        prompt = f"{nickname} 说：{prompt}"
+        message_str = f"{nickname} ：{message_str}"
 
     response, new_session = await copilot.send_and_wait(
         session_id,
-        prompt,
+        message_str,
         is_group=is_group,
         rag_docs=rag_docs,
         reply_text=reply_text,
