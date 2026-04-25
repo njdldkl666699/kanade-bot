@@ -3,6 +3,7 @@ import re
 from base64 import b64encode
 from pathlib import Path
 
+from copilot.generated.session_events import AssistantMessageData
 from copilot.session import Attachment
 from nonebot import logger
 from nonebot.adapters import Event
@@ -199,16 +200,18 @@ async def send_message_in_chunks(
     if new_session:
         logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
 
-    if not response or not response.data.content:
+    if not response:
         logger.warning(f"会话{session_id}没有收到回复，可能是生成失败或超时")
+        await send_fail_message(matcher)
+        return
+    if not isinstance(response.data, AssistantMessageData):
+        logger.warning(
+            f"会话{session_id}回复的数据不是AssistantMessageData，可能是生成失败，数据：{response.data}"
+        )
         await send_fail_message(matcher)
         return
 
     content = response.data.content
-    if isinstance(content, dict):
-        logger.warning(f"生成的内容不是字符串，无法发送，内容：{content}")
-        await send_fail_message(matcher)
-        return
 
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):

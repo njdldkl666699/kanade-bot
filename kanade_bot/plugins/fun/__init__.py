@@ -2,7 +2,7 @@ import random
 from io import BytesIO
 from pathlib import Path
 
-from nonebot import get_driver, get_plugin_config, on_command, on_fullmatch, on_message
+from nonebot import get_plugin_config, on_command, on_fullmatch, on_message
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -11,6 +11,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg, EventPlainText
+from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
@@ -332,22 +333,17 @@ async def _(state: T_State, message: str = EventPlainText()):
     await add_lyric.finish(f"已添加歌曲 {song_name}")
 
 
-global_config = get_driver().config
-
 remove_lyric = on_command(
     "删除歌词",
     aliases={"remove_lyric", "del_lyric"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @remove_lyric.handle()
-async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await remove_lyric.finish()
-
+async def _(arg_msg: Message = CommandArg()):
     song_name = arg_msg.extract_plain_text().strip()
     try:
         remove_song_lyric(song_name)
@@ -474,16 +470,13 @@ remove_a_duanzi = on_command(
     "删除段子",
     aliases={"remove_duanzi", "del_duanzi", "删史"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @remove_a_duanzi.handle()
-async def _(event: Event, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await remove_a_duanzi.finish()
-
+async def _(arg_msg: Message = CommandArg()):
     index_str = arg_msg.extract_plain_text().strip()
     if not index_str.isdigit():
         await remove_a_duanzi.finish("删除失败，请检查序号是否正确")

@@ -9,6 +9,7 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg, EventMessage
+from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
@@ -132,23 +133,17 @@ async def _(event: OneBotGroupMessageEvent):
     await list_schedules.finish(pretty_list)
 
 
-global_config = get_driver().config
-
-
 add_a_schedule = on_command(
     "添加定时任务",
     aliases={"schedule_add"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @add_a_schedule.handle()
 async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await add_a_schedule.finish()
-
     group_id = event.group_id
     args = parse_arg_message(arg_msg, {"name": str, "cron": str}, maxsplit=1)
     name: str | None = args["name"]
@@ -175,16 +170,13 @@ remove_a_schedule = on_command(
     "移除定时任务",
     aliases={"schedule_remove"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @remove_a_schedule.handle()
 async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await remove_a_schedule.finish()
-
     group_id = event.group_id
     name = arg_msg.extract_plain_text().strip()
     if not name:

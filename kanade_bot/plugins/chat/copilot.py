@@ -1,58 +1,36 @@
 from asyncio import Lock
 from collections import deque
-from datetime import datetime
 from pathlib import Path
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from copilot import CopilotClient, CopilotSession
 from copilot.client import StopError
-from copilot.generated.rpc import SessionAgentSelectParams, SessionModelSwitchToParams
-from copilot.generated.session_events import SessionEvent, SessionEventType
-from copilot.session import Attachment, CustomAgentConfig, PermissionHandler, SystemMessageConfig
-from nonebot import get_driver, logger, require
+from copilot.generated.rpc import ModelSwitchToRequest
+from copilot.generated.session_events import AssistantMessageData, SessionEvent, SessionEventType
+from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
+from copilot.tools import Tool
+from nonebot import get_driver, logger
 
 from .config import cfg
 from .tool import list_memes, tavily_extract, tavily_search
-
-require("nonebot_plugin_apscheduler")
-
-from nonebot_plugin_apscheduler import scheduler
-
-"""
-GitHub CLI强制执行30分钟的会话超时，如果在30分钟内没有人类交互，CLI将结束会话。
-每当有任何人类交互时，30分钟的计时器应该被重置。
-
-解决方案：
-发送消息时，如果本地没有会话对象，优先尝试恢复会话，恢复失败再创建新会话。
-"""
 
 
 class CopilotSessionManager:
     """Copilot会话管理器，负责管理会话对象、消息缓冲区、会话锁等资源，并提供发送消息、添加缓冲消息、重置会话等功能"""
 
-    SESSION_TIMEOUT_SECONDS = 30 * 60
-    """会话超时的时间，单位为秒，默认30分钟。
-
-    会话超时后将被删除，释放资源。
-    每当有消息发送时，都会更新会话的最后活跃时间。
-    """
-
     SESSION_COMPACTION_RETRY_MAX = 2
     """发生压缩时最多重发次数"""
 
-    tools: list[str] = [
-        "store_memory",
+    tools: list[Tool] = [tavily_search, tavily_extract, list_memes]
+
+    available_tools: list[str] = [
         "view",
         "read",
         "grep",
         "glob",
-        "search",
-        "web_search",
+        "sql",
+        "skill",
         "web_fetch",
-        "todo",
-        tavily_search.name,
-        tavily_extract.name,
-        list_memes.name,
+        *(tool.name for tool in tools),
     ]
     """工具列表，包含所有可用工具的名称"""
 
@@ -64,31 +42,21 @@ class CopilotSessionManager:
     else:
         system_prompt = system_prompt_path.read_text(encoding="utf-8")
 
-    custom_agent_config: CustomAgentConfig = {
-        "name": "Kanade",
-        "display_name": "宵崎奏",
-        "description": "宵崎奏人格Agent，始终使用此Agent回复消息。",
-        "tools": tools,
-        "prompt": system_prompt,
-    }
-
     system_message: SystemMessageConfig = {
-        "mode": "append",
-        "content": "回复用户的消息时，请始终使用Kanade SubAgent进行回复。",
+        "mode": "replace",
+        "content": system_prompt,
     }
 
     SESSION_CONFIG = {
         "on_permission_request": PermissionHandler.approve_all,
         "model": cfg.chat_model,
         "reasoning_effort": "medium",
-        "tools": [tavily_search, tavily_extract, list_memes],
-        "available_tools": [*tools, "read_agent", "list_agents", "task"],
-        "custom_agents": [custom_agent_config],
-        "agent": custom_agent_config["name"],
+        "tools": tools,
+        "available_tools": available_tools,
         "system_message": system_message,
     }
 
-    def __init__(self, scheduler: AsyncIOScheduler):
+    def __init__(self):
         self._client = CopilotClient()
         """Copilot客户端对象，负责与Copilot服务进行通信，创建和恢复会话等操作"""
 
@@ -98,16 +66,11 @@ class CopilotSessionManager:
         self.__sessions_prompt_buffer: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
 
-        self.__sessions_last_active_time: dict[str, datetime] = {}
-        """会话最后活跃时间缓存，键为会话ID，值为最后一次活跃的时间"""
-
         self.__session_locks: dict[str, Lock] = {}
         """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
 
         self.__global_lock = Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
-
-        scheduler.add_job(self._check_sessions_timeout, "interval", minutes=1)
 
     async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
@@ -122,20 +85,6 @@ class CopilotSessionManager:
             )
             new_session = True
 
-        # 注册会话结束事件的回调函数，确保会话结束时能正确清理缓存
-        ### 暂时不生效
-        session.on(self._get_session_shutdown_hook(session_id))
-
-        current_agent = (await session.rpc.agent.get_current()).agent
-        if not current_agent or current_agent.name != self.SESSION_CONFIG["agent"]:
-            logger.warning(
-                "会话{} Agent设置异常，期望{}，但实际是{}，将重新设置",
-                session_id,
-                self.SESSION_CONFIG["agent"],
-                current_agent.name if current_agent else "None",
-            )
-            await session.rpc.agent.select(SessionAgentSelectParams(self.SESSION_CONFIG["agent"]))
-
         current_model = await session.rpc.model.get_current()
         if current_model.model_id != cfg.chat_model:
             logger.warning(
@@ -144,7 +93,7 @@ class CopilotSessionManager:
                 cfg.chat_model,
                 current_model.model_id,
             )
-            await session.rpc.model.switch_to(SessionModelSwitchToParams("gpt-4.1"))
+            await session.rpc.model.switch_to(ModelSwitchToRequest("gpt-4.1"))
 
         return session, new_session
 
@@ -222,10 +171,6 @@ class CopilotSessionManager:
             except Exception as e:
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
 
-        # 更新会话最后活跃时间
-        async with self.__global_lock:
-            self.__sessions_last_active_time[session_id] = datetime.now()
-
         return session_event, new_session
 
     async def _send_with_compaction_retry(
@@ -259,6 +204,13 @@ class CopilotSessionManager:
 
             if not compaction_started:
                 return session_event
+            else:
+                #### DEBUG ####
+                logger.warning(f"会话{session_id}发生压缩，已丢弃本次响应")
+                if session_event:
+                    match session_event.data:
+                        case AssistantMessageData() as data:
+                            logger.info(f"会话{session_id}压缩后的响应内容: {data.content}")
 
             if attempt >= self.SESSION_COMPACTION_RETRY_MAX:
                 logger.warning(
@@ -279,35 +231,6 @@ class CopilotSessionManager:
                 if session_id not in self.__session_locks:
                     self.__session_locks[session_id] = Lock()
         return self.__session_locks[session_id]
-
-    def _get_session_shutdown_hook(self, session_id: str):
-        ###### 暂时是不生效的，等待SDK修复相关问题 ######
-        # 暂时线程不安全
-        def on_session_shutdown(event: SessionEvent):
-            if event.type == SessionEventType.SESSION_SHUTDOWN:
-                logger.info(f"会话{session_id}已结束，关闭类型：{event.data.shutdown_type}")
-                del self.__sessions[session_id]
-
-        return on_session_shutdown
-
-    async def _check_sessions_timeout(self):
-        """定时检查会话超时，超时则删除会话对象"""
-        now = datetime.now()
-        timeout_sessions = []
-        for session_id, last_active in self.__sessions_last_active_time.items():
-            if (now - last_active).total_seconds() > self.SESSION_TIMEOUT_SECONDS:
-                timeout_sessions.append(session_id)
-
-        for session_id in timeout_sessions:
-            logger.info(f"会话{session_id}已超时，将删除缓存")
-            session_lock = await self._ensure_session_lock(session_id)
-            async with self.__global_lock, session_lock:
-                try:
-                    await self.__sessions[session_id].disconnect()
-                    del self.__sessions[session_id]
-                except RuntimeError as e:
-                    logger.warning(f"删除会话{session_id}时发生错误: {e}")
-                del self.__sessions_last_active_time[session_id]
 
     def get_session_prompt_buffer_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""
@@ -342,15 +265,12 @@ class CopilotSessionManager:
             # 清空消息缓冲区
             if session_id in self.__sessions_prompt_buffer:
                 del self.__sessions_prompt_buffer[session_id]
-            # 删除活跃时间记录
-            if session_id in self.__sessions_last_active_time:
-                del self.__sessions_last_active_time[session_id]
             # 删除会话锁
             if session_id in self.__session_locks:
                 del self.__session_locks[session_id]
 
 
-copilot = CopilotSessionManager(scheduler)
+copilot = CopilotSessionManager()
 
 
 driver = get_driver()

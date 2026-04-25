@@ -1,7 +1,7 @@
 import uuid
 from pathlib import Path
 
-from nonebot import get_driver, get_plugin_config, on_command, on_message
+from nonebot import get_plugin_config, on_command, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage, EventPlainText, EventToMe
+from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
@@ -91,28 +92,18 @@ async def handle_chat_monitor(
     await copilot.add_message(session_id, message_str)
 
 
-global_config = get_driver().config
-
 ### 重置会话命令
 chat_reset = on_command(
     "重置会话",
     aliases={"chat_reset", "chatreset", "重置对话"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    admin_operates = False
-    admin_id = event.get_user_id()
-    if admin_id in global_config.superusers:
-        admin_operates = True
-    if isinstance(event, ConsoleMessageEvent):
-        admin_operates = True
-    if not admin_operates:
-        await chat_reset.finish()
-
     session_id, _, _ = resolve_session_id_and_prompt(event, "")
     await copilot.reset_session(session_id)
     await chat_reset.finish("会话已重置")
@@ -123,16 +114,13 @@ chat_ban = on_command(
     "聊天拉黑",
     aliases={"chat_ban", "chatban"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @chat_ban.handle()
 async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await chat_ban.finish()
-
     args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
     id: str = args["id"] or ""
     id = id.strip()
@@ -156,16 +144,13 @@ chat_unban = on_command(
     "聊天解除拉黑",
     aliases={"chat_unban", "chatunban"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @chat_unban.handle()
 async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
-    admin_id = event.get_user_id()
-    if admin_id not in global_config.superusers:
-        await chat_unban.finish()
-
     args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
     id: str = args["id"] or ""
     id = id.strip()
@@ -207,15 +192,13 @@ add_meme = on_command(
     "添加表情",
     aliases={"add_meme", "addmeme"},
     priority=2,
+    permission=SUPERUSER,
     block=True,
 )
 
 
 @add_meme.handle()
 async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
-    if event.get_user_id() not in global_config.superusers:
-        await add_meme.finish()
-
     args = parse_arg_message(arg_msg, {"name": str, "description": str})
     name: str | None = args.get("name") or None
     if not name:
