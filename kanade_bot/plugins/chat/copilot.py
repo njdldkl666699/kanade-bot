@@ -10,6 +10,7 @@ from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
 from nonebot import get_driver, logger
 
+from ..util import SessionInfo, build_sender_info
 from .config import cfg
 from .tool import list_memes, tavily_extract, tavily_search
 
@@ -99,10 +100,9 @@ class CopilotSessionManager:
 
     async def send_and_wait(
         self,
-        session_id: str,
-        prompt: str | None,
+        session_info: SessionInfo,
+        prompt: str,
         *,
-        group_name: str | None = None,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
@@ -113,6 +113,7 @@ class CopilotSessionManager:
         prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
         仅使用缓冲区中的消息和引用消息
         """
+        session_id = session_info.session_id
         async with self.__global_lock:
             # 从缓存中获取会话对象，并尝试发送消息
             session = self.__sessions.get(session_id)
@@ -134,25 +135,12 @@ class CopilotSessionManager:
                 # 没有新的用户消息，也没有缓冲消息，不发送任何消息
                 return None, new_session
 
-            prompt_parts: list[str] = []
-            if group_name:
-                prompt_parts.append(f"$现在的会话在群聊{group_name}中。")
-            if rag_docs:
-                prompt_parts.append("$检索到可能相关的文档：")
-                prompt_parts.extend(rag_docs)
-            if buffered_messages:
-                prompt_parts.append("$下面是之前的消息缓冲区中的消息：")
-                prompt_parts.extend(buffered_messages)
-            if reply_text:
-                prompt_parts.append("$用户引用了之前的消息：")
-                prompt_parts.append(reply_text)
-            if prompt:
-                prompt_parts.append("$下面是这次的用户消息：")
-                prompt_parts.append(prompt)
-            if attachments:
-                prompt_parts.append("$用户附带了图片")
-
-            send_prompt = "\n".join(prompt_parts).strip()
+            send_prompt = self._build_send_prompt(
+                session_info,
+                prompt,
+                rag_docs=rag_docs,
+                reply_text=reply_text,
+            )
             if not send_prompt:
                 # 没有任何消息可发送，直接返回
                 return None, new_session
@@ -164,10 +152,16 @@ class CopilotSessionManager:
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
-                session_event = await self._send_with_compaction_retry(
-                    session,
-                    session_id,
-                    prompt=send_prompt,
+                # session_event = await self._send_with_compaction_retry(
+                #     session,
+                #     session_id,
+                #     prompt=send_prompt,
+                #     attachments=attachments,
+                #     timeout=timeout,
+                # )
+                # 需要校验测试，在新版SDK下会不会把压缩的结果也返回
+                session_event = await session.send_and_wait(
+                    send_prompt,
                     attachments=attachments,
                     timeout=timeout,
                 )
@@ -176,8 +170,38 @@ class CopilotSessionManager:
 
         return session_event, new_session
 
+    @staticmethod
+    def _build_send_prompt(
+        session_info: SessionInfo,
+        prompt: str,
+        *,
+        rag_docs: list[str] | None = None,
+        reply_text: str | None = None,
+    ) -> str:
+        """构建发送给模型的完整提示词"""
+        prompt_parts: list[str] = []
+
+        if group_info := build_sender_info(session_info.group_name, session_info.group_id):
+            prompt_parts.append(f"$现在的会话在群聊{group_info}中。")
+
+        if rag_docs:
+            prompt_parts.append("$检索到可能相关的文档：")
+            prompt_parts.extend(rag_docs)
+        if reply_text:
+            prompt_parts.append("$用户引用了之前的消息：")
+            prompt_parts.append(reply_text)
+
+        if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+            prompt = f"{user_info} : {prompt}"
+        if prompt:
+            prompt_parts.append("$下面是这次的用户消息：")
+            prompt_parts.append(prompt)
+
+        return "\n".join(prompt_parts).strip()
+
+    @classmethod
     async def _send_with_compaction_retry(
-        self,
+        cls,
         session: CopilotSession,
         session_id: str,
         *,
@@ -186,7 +210,7 @@ class CopilotSessionManager:
         timeout: float = 60,
     ) -> SessionEvent | None:
         """发送消息并在压缩发生时拒收本次响应，自动重发当前消息。"""
-        for attempt in range(self.SESSION_COMPACTION_RETRY_MAX + 1):
+        for attempt in range(cls.SESSION_COMPACTION_RETRY_MAX + 1):
             compaction_started = False
 
             def on_session_compaction_start(event: SessionEvent):
@@ -215,9 +239,9 @@ class CopilotSessionManager:
                         case AssistantMessageData() as data:
                             logger.info(f"会话{session_id}压缩后的响应内容: {data.content}")
 
-            if attempt >= self.SESSION_COMPACTION_RETRY_MAX:
+            if attempt >= cls.SESSION_COMPACTION_RETRY_MAX:
                 logger.warning(
-                    f"会话{session_id}在压缩后重试超过上限{self.SESSION_COMPACTION_RETRY_MAX}次，返回最后一次响应"
+                    f"会话{session_id}在压缩后重试超过上限{cls.SESSION_COMPACTION_RETRY_MAX}次，返回最后一次响应"
                 )
                 return session_event
 

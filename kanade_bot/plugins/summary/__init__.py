@@ -15,7 +15,7 @@ from nonebot.plugin import PluginMetadata
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
-from ..util import extract_session_info
+from ..util import build_sender_info, extract_session_info
 from .config import Config
 from .summarizer import summarizer
 
@@ -44,11 +44,11 @@ async def record_recv_msg(
     if isinstance(message, ConsoleMessage):
         message_str = str(message)
 
-    session_id, nickname, _ = await extract_session_info(event)
-    if nickname:
-        message_str = f"$ {nickname} ：{message_str}"
+    session_info = await extract_session_info(event)
+    if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+        message_str = f"$ {user_info} : {message_str}"
 
-    summarizer.add_message(session_id, message_str)
+    summarizer.add_message(session_info.session_id, message_str)
 
 
 @Bot.on_called_api
@@ -91,7 +91,7 @@ async def record_send_msg(
 
         elements: NoneChatConsoleMessage = data["content"]
         console_message = ConsoleMessage.from_console_message(elements)
-        message_str = f"$ {cfg.summary_bot_name} ：{console_message}"
+        message_str = f"$ {cfg.summary_bot_name} : {console_message}"
     else:
         return
 
@@ -123,13 +123,14 @@ async def _(
     if size < min or size > max:
         await summarize.finish(f"消息条数必须在 {min}-{max} 范围内")
 
-    session_id, nickname, group_name = await extract_session_info(event, bot)
+    session_info = await extract_session_info(event, bot)
 
     # 如果是群聊，则修改为群名称
-    group_or_user_name = group_name or nickname
+    group_name = session_info.group_name
+    group_or_user_name = group_name or session_info.nickname
 
     summary = await summarizer.summarize(
-        session_id,
+        session_info.session_id,
         size,
         is_group=bool(group_name),
         group_or_user_name=group_or_user_name,

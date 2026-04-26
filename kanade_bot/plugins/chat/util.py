@@ -186,15 +186,12 @@ async def send_message_in_chunks(
     query_str = event.get_message().extract_plain_text().strip()
     rag_docs = query(query_str) if query_str else None
 
-    # 将message_str带上用户昵称
-    session_id, nickname, group_name = await extract_session_info(event, bot)
-    if nickname:
-        message_str = f"{nickname} ：{message_str}"
+    session_info = await extract_session_info(event, bot)
+    session_id = session_info.session_id
 
     response, new_session = await copilot.send_and_wait(
-        session_id,
+        session_info,
         message_str,
-        group_name=group_name,
         rag_docs=rag_docs,
         reply_text=reply_text,
         attachments=attachments,

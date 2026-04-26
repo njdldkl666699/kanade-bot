@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
+from pydantic import BaseModel
 
 
 def parse_arg_message(
@@ -64,31 +65,50 @@ def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessag
     return message
 
 
-async def extract_session_info(
-    event: Event, bot: Bot | None = None
-) -> tuple[str, str | None, str | None]:
-    """解析事件以获取会话ID、用户昵称、群聊名称"""
-    session_id = event.get_session_id()
+class SessionInfo(BaseModel):
+    session_id: str
+    """会话ID，格式为'{平台}-{会话类型}-{唯一标识}'"""
     nickname: str | None = None
+    """用户昵称"""
+    user_id: str | None = None
+    """用户ID"""
     group_name: str | None = None
+    """群聊名称"""
+    group_id: str | None = None
+    """群聊ID"""
+
+
+async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionInfo:
+    """解析事件以提取会话信息"""
+    info = SessionInfo(session_id=event.get_session_id())
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
-        session_id = f"qq-private-{event.user_id}"
-        nickname = event.sender.nickname
+        info.session_id = f"qq-private-{event.user_id}"
+        info.nickname = event.sender.nickname
     if isinstance(event, OneBotGroupMessageEvent):
-        session_id = f"qq-group-{event.group_id}"
-        nickname = event.sender.card or event.sender.nickname
+        info.session_id = f"qq-group-{event.group_id}"
+        info.nickname = event.sender.card or event.sender.nickname
         if isinstance(bot, OneBot):
             group_info = await bot.get_group_info(group_id=event.group_id)
-            group_name = group_info.get("group_name") if group_info else None
+            info.group_name = group_info.get("group_name") if group_info else None
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
-        nickname = event.user.nickname
-        session_id = f"console-private-{event.user.id}"
+        info.session_id = f"console-private-{event.user.id}"
+        info.nickname = event.user.nickname
     if isinstance(event, ConsolePublicMessageEvent):
-        session_id = f"console-group-{event.channel.id}"
-        group_name = event.channel.name
+        info.session_id = f"console-group-{event.channel.id}"
+        info.group_name = event.channel.name
 
-    return session_id, nickname, group_name
+    return info
+
+
+def build_sender_info(name: str | None, id: str | None) -> str:
+    """构建发送者信息字符串"""
+    parts: list[str] = []
+    if name:
+        parts.append(name)
+    if id:
+        parts.append(f"[id={id}]")
+    return "".join(parts)

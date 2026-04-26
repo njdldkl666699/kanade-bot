@@ -14,7 +14,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from ..util import extract_session_info, parse_arg_message
+from ..util import build_sender_info, extract_session_info, parse_arg_message
 from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
@@ -76,7 +76,8 @@ async def handle_chat_monitor(
     event: Event,
     message: ConsoleMessage | OneBotMessage = EventMessage(),
 ):
-    session_id, nickname, group_name = await extract_session_info(event, bot)
+    session_info = await extract_session_info(event, bot)
+    session_id = session_info.session_id
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
@@ -94,12 +95,12 @@ async def handle_chat_monitor(
     else:
         return
 
-    if group_name and should_auto_reply(group_id, platform, session_id):
+    if session_info.group_name and should_auto_reply(group_id, platform, session_id):
         await send_message_in_chunks(chat, bot, event, message_str)
 
     # 将用户消息添加到会话缓冲区
-    if nickname:
-        message_str = f"{nickname} ：{message_str}"
+    if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+        message_str = f"{user_info} : {message_str}"
     await copilot.add_message(session_id, message_str)
 
 
@@ -115,8 +116,8 @@ chat_reset = on_command(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    session_id, _, _ = await extract_session_info(event)
-    await copilot.reset_session(session_id)
+    session_info = await extract_session_info(event)
+    await copilot.reset_session(session_info.session_id)
     await chat_reset.finish("会话已重置")
 
 
