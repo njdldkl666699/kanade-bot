@@ -6,7 +6,8 @@ from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMe
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 
-from .config import PlatformType, configs, write_chat_config
+from ..util import PlatformType
+from .config import configs, write_chat_config
 
 type BanType = Literal["user", "group"]
 

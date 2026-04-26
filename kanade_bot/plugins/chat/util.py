@@ -12,10 +12,10 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from ..util import OneBotMessageSegmentMeme, extract_session_info
+from ..util import OneBotMessageSegmentMeme, PlatformType, extract_session_info
 from .ban import is_banned
 from .client import file_client as client
-from .config import PlatformType, cfg, configs
+from .config import cfg, configs
 from .copilot import copilot
 from .rag import query
 

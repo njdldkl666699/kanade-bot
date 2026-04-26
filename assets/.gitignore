@@ -1,10 +1,11 @@
 # Assets
-sing_songs/
-memes/
-lyrics/
-kanade_rag_db/
 bge-small-zh-v1.5/
 help_images/
+kanade_rag_db/
+lyrics/
+memes/
+memories/
+sing_songs/
 chat_configs.json
-summary_message_records.json
 schedule_configs.json
+summary_message_records.json

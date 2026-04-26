@@ -1,6 +1,6 @@
 from io import BytesIO
 from pathlib import Path
-from typing import Any, SupportsIndex
+from typing import Any, Literal, SupportsIndex
 
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -65,9 +65,14 @@ def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessag
     return message
 
 
+type PlatformType = Literal["console", "onebot"]
+
+
 class SessionInfo(BaseModel):
     session_id: str
     """会话ID，格式为'{平台}-{会话类型}-{唯一标识}'"""
+    platform: PlatformType | None = None
+    """消息平台类型"""
     nickname: str | None = None
     """用户昵称"""
     user_id: str | None = None
@@ -84,22 +89,32 @@ async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionI
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
-        info.session_id = f"qq-private-{event.user_id}"
+        uid = event.user_id
+        info.session_id = f"qq-private-{uid}"
         info.nickname = event.sender.nickname
+        info.user_id = str(uid)
+        info.platform = "onebot"
     if isinstance(event, OneBotGroupMessageEvent):
-        info.session_id = f"qq-group-{event.group_id}"
+        gid = event.group_id
+        info.session_id = f"qq-group-{gid}"
         info.nickname = event.sender.card or event.sender.nickname
+        info.group_id = str(gid)
         if isinstance(bot, OneBot):
-            group_info = await bot.get_group_info(group_id=event.group_id)
+            group_info = await bot.get_group_info(group_id=gid)
             info.group_name = group_info.get("group_name") if group_info else None
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
-        info.session_id = f"console-private-{event.user.id}"
+        uid = event.user.id
+        info.session_id = f"console-private-{uid}"
         info.nickname = event.user.nickname
+        info.user_id = uid
+        info.platform = "console"
     if isinstance(event, ConsolePublicMessageEvent):
-        info.session_id = f"console-group-{event.channel.id}"
+        gid = event.channel.id
+        info.session_id = f"console-group-{gid}"
         info.group_name = event.channel.name
+        info.group_id = gid
 
     return info
 

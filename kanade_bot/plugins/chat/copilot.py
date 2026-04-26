@@ -12,7 +12,14 @@ from nonebot import get_driver, logger
 
 from ..util import SessionInfo, build_sender_info
 from .config import cfg
-from .tool import list_memes, tavily_extract, tavily_search
+from .memory import delete_session_memory, set_memory_context
+from .tool import (
+    list_memes,
+    read_memory,
+    tavily_extract,
+    tavily_search,
+    write_memory,
+)
 
 
 class CopilotSessionManager:
@@ -21,7 +28,13 @@ class CopilotSessionManager:
     SESSION_COMPACTION_RETRY_MAX = 2
     """发生压缩时最多重发次数"""
 
-    tools: list[Tool] = [tavily_search, tavily_extract, list_memes]
+    tools: list[Tool] = [
+        tavily_search,
+        tavily_extract,
+        list_memes,
+        read_memory,
+        write_memory,
+    ]
 
     available_tools: list[str] = [
         "view",
@@ -125,6 +138,7 @@ class CopilotSessionManager:
 
             # 如果是新会话，则清空缓冲区
             if new_session:
+                delete_session_memory(session_id)
                 self.__sessions_prompt_buffer[session_id] = deque(
                     maxlen=cfg.chat_session_prompt_buffer_max_size
                 )
@@ -152,6 +166,7 @@ class CopilotSessionManager:
         async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
+                set_memory_context(session_info)
                 # session_event = await self._send_with_compaction_retry(
                 #     session,
                 #     session_id,
@@ -295,6 +310,7 @@ class CopilotSessionManager:
             # 删除会话锁
             if session_id in self.__session_locks:
                 del self.__session_locks[session_id]
+            delete_session_memory(session_id)
 
 
 copilot = CopilotSessionManager()

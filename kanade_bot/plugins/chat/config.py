@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Literal
 
 from nonebot import get_plugin_config
 from pydantic import BaseModel
@@ -21,6 +20,8 @@ class Config(BaseModel):
     """表情包存储路径"""
     chat_fail_image_file_path: str = "assets/images/chat_fail.jpg"
     """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
+    chat_memories_dir_path: str = "assets/memories"
+    """记忆文件存储路径，每个记忆为一个 Markdown 文件"""
 
     bot_id: int
     """使用OneBot协议时，聊天机器人的QQ号"""
@@ -63,9 +64,6 @@ class ChatConfig(BaseModel):
     """拉黑的群ID列表"""
     auto_reply_group_config: dict[str, AutoReplyConfig] = {}
     """主动回复配置，键为群ID，值为AutoReplyConfig对象"""
-
-
-type PlatformType = Literal["console", "onebot"]
 
 
 class ChatConfigs(BaseModel):
