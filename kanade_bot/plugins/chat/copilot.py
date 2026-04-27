@@ -127,43 +127,46 @@ class CopilotSessionManager:
         仅使用缓冲区中的消息和引用消息
         """
         session_id = session_info.session_id
-        async with self.__global_lock:
-            # 从缓存中获取会话对象，并尝试发送消息
-            session = self.__sessions.get(session_id)
+        async with await self._ensure_session_lock(session_id):
+            async with self.__global_lock:
+                session = self.__sessions.get(session_id)
+
             new_session = False
             if not session:
-                # 如果会话不存在，优先恢复会话，恢复失败再创建新会话
                 session, new_session = await self._resume_or_create_session(session_id)
-                self.__sessions[session_id] = session
+                async with self.__global_lock:
+                    self.__sessions[session_id] = session
 
-            # 如果是新会话，则清空缓冲区
             if new_session:
                 delete_session_memory(session_id)
-                self.__sessions_prompt_buffer[session_id] = deque(
-                    maxlen=cfg.chat_session_prompt_buffer_max_size
-                )
 
-            # 将消息缓冲区中的消息添加到选项中
-            buffered_messages = self.__sessions_prompt_buffer.get(session_id, [])
-            if not buffered_messages and prompt is None:
-                # 没有新的用户消息，也没有缓冲消息，不发送任何消息
-                return None, new_session
+            async with self.__global_lock:
+                if new_session:
+                    self.__sessions_prompt_buffer[session_id] = deque(
+                        maxlen=cfg.chat_session_prompt_buffer_max_size
+                    )
+
+                # 将消息缓冲区中的消息添加到选项中
+                buffered_messages = self.__sessions_prompt_buffer.get(session_id)
+                if not prompt and not buffered_messages and not reply_text:
+                    # 没有任何新的消息可发送，直接返回
+                    return None, new_session
+
+                # 清空消息缓冲区
+                if session_id in self.__sessions_prompt_buffer:
+                    self.__sessions_prompt_buffer[session_id].clear()
 
             send_prompt = self._build_send_prompt(
                 session_info,
                 prompt,
                 rag_docs=rag_docs,
+                buffered_messages=buffered_messages,
                 reply_text=reply_text,
             )
             if not send_prompt:
                 # 没有任何消息可发送，直接返回
                 return None, new_session
 
-            # 清空消息缓冲区
-            if session_id in self.__sessions_prompt_buffer:
-                self.__sessions_prompt_buffer[session_id].clear()
-
-        async with await self._ensure_session_lock(session_id):
             session_event: SessionEvent | None = None
             try:
                 set_memory_context(session_info)
@@ -191,6 +194,7 @@ class CopilotSessionManager:
         prompt: str,
         *,
         rag_docs: list[str] | None = None,
+        buffered_messages: deque[str] | None = None,
         reply_text: str | None = None,
     ) -> str:
         """构建发送给模型的完整提示词"""
@@ -202,6 +206,9 @@ class CopilotSessionManager:
         if rag_docs:
             prompt_parts.append("$检索到可能相关的文档：")
             prompt_parts.extend(rag_docs)
+        if buffered_messages:
+            prompt_parts.append("$下面是之前的消息缓冲区中的消息：")
+            prompt_parts.extend(buffered_messages)
         if reply_text:
             prompt_parts.append("$用户引用了之前的消息：")
             prompt_parts.append(reply_text)
@@ -280,36 +287,33 @@ class CopilotSessionManager:
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
-        if session_id not in self.__sessions_prompt_buffer:
+        async with await self._ensure_session_lock(session_id):
             async with self.__global_lock:
                 if session_id not in self.__sessions_prompt_buffer:
                     self.__sessions_prompt_buffer[session_id] = deque(
                         maxlen=cfg.chat_session_prompt_buffer_max_size
                     )
-        async with await self._ensure_session_lock(session_id):
-            # deque(maxlen)会在溢出时自动丢弃最早的消息
-            self.__sessions_prompt_buffer[session_id].append(prompt)
+                # deque(maxlen)会在溢出时自动丢弃最早的消息
+                self.__sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """删除会话，清空缓冲区。**此操作不可逆**"""
-        # 修改操作，需要获取全局锁，确保__sessions字典和_client对象的线程安全
-        # 需要获取会话锁，确保同一时间只有一个协程在操作同一个会话
+        # 先获取会话锁，确保同一时间只有一个协程在操作同一个会话。
+        # 全局锁只保护字典访问，不包住耗时的客户端 RPC。
         session_lock = await self._ensure_session_lock(session_id)
-        async with self.__global_lock, session_lock:
+        async with session_lock:
+            async with self.__global_lock:
+                session = self.__sessions.pop(session_id, None)
+                if session_id in self.__sessions_prompt_buffer:
+                    del self.__sessions_prompt_buffer[session_id]
+
             # 断开并删除现有会话
             try:
-                if session_id in self.__sessions:
-                    await self.__sessions[session_id].disconnect()
-                    del self.__sessions[session_id]
+                if session:
+                    await session.disconnect()
                 await self._client.delete_session(session_id)
             except RuntimeError as e:
                 logger.warning(f"删除会话{session_id}时发生错误: {e}")
-            # 清空消息缓冲区
-            if session_id in self.__sessions_prompt_buffer:
-                del self.__sessions_prompt_buffer[session_id]
-            # 删除会话锁
-            if session_id in self.__session_locks:
-                del self.__session_locks[session_id]
             delete_session_memory(session_id)
 
 

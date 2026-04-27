@@ -11,10 +11,6 @@ from nonebot_plugin_apscheduler import scheduler
 TOOL_SCHEDULE_JOB_PREFIX = "tool_schedule"
 
 
-bot: Bot | None = None
-"""定时任务使用的Bot实例"""
-
-
 def schedule_id(group_id: int, schedule_name: str) -> str:
     return f"{TOOL_SCHEDULE_JOB_PREFIX}_{group_id}_{schedule_name}"
 
@@ -70,10 +66,7 @@ def remove_schedule(group_id: int, name: str):
         logger.info(f"已移除群 {group_id} 的定时任务 {name}")
 
 
-async def send_scheduled_message(group_id: int, message: Message):
-    if bot is None:
-        logger.warning("Bot实例未就绪，无法发送定时消息")
-        return
+async def send_scheduled_message(bot: Bot, group_id: int, message: Message):
     try:
         await bot.send_group_msg(group_id=group_id, message=message)
     except Exception as e:
@@ -84,9 +77,7 @@ driver = get_driver()
 
 
 @driver.on_bot_connect
-def on_bot_connect(bot_instance: Bot):
-    global bot
-    bot = bot_instance
+def on_bot_connect(bot: Bot):
     for group_id, schedule_list in schedules.root.items():
         for name, schedule in schedule_list.items():
             job_id = schedule_id(group_id, name)
@@ -94,15 +85,13 @@ def on_bot_connect(bot_instance: Bot):
                 send_scheduled_message,
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 id=job_id,
-                args=[group_id, schedule.message],
+                args=[bot, group_id, schedule.message],
             )
         logger.info(f"已加载群 {group_id} 的 {len(schedule_list)} 个定时任务")
 
 
 @driver.on_bot_disconnect
-def on_bot_disconnect():
-    global bot
-    bot = None
+def on_bot_disconnect(bot: Bot):
     jobs = scheduler.get_jobs()
     for job in jobs:
         if job.id.startswith(TOOL_SCHEDULE_JOB_PREFIX):

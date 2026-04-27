@@ -2,7 +2,7 @@ import base64
 from pathlib import Path
 
 from mcstatus import JavaServer
-from nonebot import get_driver, get_plugin_config, logger, on_command
+from nonebot import get_plugin_config, logger, on_command
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
