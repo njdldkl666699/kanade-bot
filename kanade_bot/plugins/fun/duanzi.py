@@ -9,8 +9,6 @@ from .config import Config
 
 cfg = get_plugin_config(Config)
 
-FACE_IDS = [424, 297]
-
 duanzi_list: list[str] = []
 
 
@@ -37,18 +35,30 @@ def list_paged_duanzi(page: int = 1) -> str:
     return "\n".join(messages)
 
 
+FACE_ID_OR_EMOJI_LIST: list[int | str] = [424, 297]
+"""预设的QQ表情ID或emoji列表，int为QQ表情ID，str为emoji字符串"""
+
+
+def _face_or_emoji_to_onebot_segment(face_id_or_emoji: str | int) -> MessageSegment | str:
+    """根据输入的字符串判断是表情ID还是表情emoji，并返回对应的MessageSegment"""
+    if isinstance(face_id_or_emoji, int):
+        return MessageSegment.face(face_id_or_emoji)
+    else:
+        return face_id_or_emoji
+
+
 def duanzi_to_onebot_message(
     duanzi: str,
     *,
     node_threshold: int = 500,
     chaos_face: bool = False,
-    custom_face_id: int | None = None,
+    custom_face_id_or_emoji: int | str | None = None,
 ) -> Message:
     """将一个段子转换为OneBot消息，支持分段和表情"""
-    face_ids = FACE_IDS
-    if custom_face_id is not None:
-        face_ids = FACE_IDS.copy()
-        face_ids.append(custom_face_id)
+    face_ids = FACE_ID_OR_EMOJI_LIST
+    if custom_face_id_or_emoji is not None:
+        face_ids = FACE_ID_OR_EMOJI_LIST.copy()
+        face_ids.append(custom_face_id_or_emoji)
 
     message = Message()
     segments = duanzi.split("{{face}}")
@@ -59,15 +69,15 @@ def duanzi_to_onebot_message(
                 message += segment
             if i != len(segments) - 1:
                 face_id = random.choice(face_ids)
-                message += MessageSegment.face(face_id)
+                message += _face_or_emoji_to_onebot_segment(face_id)
     else:
         # 否则仅抽取一次表情，或直接使用给定表情
-        face_id = custom_face_id or random.choice(face_ids)
+        face_id = custom_face_id_or_emoji or random.choice(face_ids)
         for i, segment in enumerate(segments):
             if segment:
                 message += segment
             if i != len(segments) - 1:
-                message += MessageSegment.face(face_id)
+                message += _face_or_emoji_to_onebot_segment(face_id)
 
     if len(duanzi) <= node_threshold:
         return message

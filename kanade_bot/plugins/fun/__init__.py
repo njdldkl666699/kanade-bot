@@ -365,19 +365,58 @@ random_duanzi = on_command(
 )
 
 
+def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | None] | None:
+    if len(arg_msg) == 1:
+        # 用纯文本解析参数
+        args = parse_arg_message(
+            arg_msg,
+            {
+                "index": int,
+                "chaos_face": str,
+                "custom_face_id_or_emoji": int,
+            },
+        )
+        index: int | None = args["index"]
+        chaos_face: bool = bool_from_str(args["chaos_face"])
+        custom_face_id_or_emoji = args["custom_face_id_or_emoji"]
+        return index, chaos_face, custom_face_id_or_emoji
+
+    if len(arg_msg) == 2:
+        # 第一块为纯文本
+        text_part: MessageSegment = arg_msg[0]
+        text = text_part.get("text", "")
+        args = parse_arg_message(text, {"index": int, "chaos_face": str})
+        index: int | None = args["index"]
+        chaos_face: bool = bool_from_str(args["chaos_face"])
+
+        # 第二块为face或emoji
+        custom_face_id_or_emoji: int | str | None = None
+        face_part: MessageSegment = arg_msg[1]
+        if face_part.type == "face":
+            id: str | None = face_part.data.get("id")
+            if id is not None and id.isdigit():
+                custom_face_id_or_emoji = int(id)
+        if face_part.type == "text":
+            custom_face_id_or_emoji = face_part.data.get("text")
+        return index, chaos_face, custom_face_id_or_emoji
+
+    return None
+
+
 @random_duanzi.handle()
 async def _(bot: Bot, arg_msg: Message = CommandArg()):
+
     args = parse_arg_message(
         arg_msg,
         {
             "index": int,
             "chaos_face": str,
-            "custom_face_id": int,
+            "custom_face_id_or_emoji": int,
         },
     )
     index: int | None = args["index"]
     chaos_face: bool = bool_from_str(args["chaos_face"])
-    custom_face_id: int | None = args["custom_face_id"]
+    custom_face_id_or_emoji: int | None = args["custom_face_id_or_emoji"]
 
     if not (duanzi := get_or_random_duanzi(index)):
         await random_duanzi.finish()
@@ -387,7 +426,7 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
             duanzi,
             node_threshold=500,
             chaos_face=chaos_face,
-            custom_face_id=custom_face_id,
+            custom_face_id_or_emoji=custom_face_id_or_emoji,
         )
 
     await random_duanzi.finish(duanzi)
