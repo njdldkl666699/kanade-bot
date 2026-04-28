@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from nonebot import get_plugin_config, on_command, on_message
-from nonebot.adapters import Bot, Event, Message
+from nonebot.adapters import Bot, Event, Message, MessageSegment
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -15,7 +15,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
 from ..util import build_sender_info, extract_session_info, parse_arg_message
-from .ban import add_to_ban_list, is_event_banned, remove_from_ban_list
+from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
 from .copilot import copilot
@@ -122,6 +122,40 @@ async def handle_chat_reset(event: Event):
 
 
 ### 聊天黑名单
+def _parse_ban_arg_id(arg: MessageSegment) -> str | None:
+    """从消息段中解析出ID，支持文本和@消息"""
+    if arg.type == "text":
+        return arg.data.get("text", "").strip()
+    if arg.type == "at":
+        return arg.data.get("qq", "").strip()
+    return None
+
+
+def _parse_ban_args(arg_msg: Message) -> tuple[str, BanType] | None:
+    """解析聊天黑名单命令的参数，返回ID和类型"""
+    if len(arg_msg) == 1:
+        arg: MessageSegment = arg_msg[0]
+        id = _parse_ban_arg_id(arg)
+        if id:
+            return id, "user"
+    if len(arg_msg) >= 2:
+        # 取前两个参数，解析ID和类型
+        id_arg: MessageSegment = arg_msg[0]
+        id = _parse_ban_arg_id(id_arg)
+
+        type_arg: MessageSegment = arg_msg[1]
+        ban_type: BanType = "user"
+        if type_arg.type == "text":
+            type_str = type_arg.data.get("text", "").strip().lower()
+            if type_str == "group":
+                ban_type = "group"
+
+        if id:
+            return id, ban_type
+
+    return None
+
+
 chat_ban = on_command(
     "聊天拉黑",
     aliases={"chat_ban", "chatban"},
@@ -133,13 +167,10 @@ chat_ban = on_command(
 
 @chat_ban.handle()
 async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
-    id: str = args["id"] or ""
-    id = id.strip()
-    ban_type = args["ban_type"] or "user"
-    ban_type = ban_type.strip().lower()
-    if ban_type not in ("user", "group"):
-        ban_type = "user"
+    args = _parse_ban_args(arg_msg)
+    if not args:
+        await chat_ban.finish()
+    id, ban_type = args
 
     if isinstance(event, ConsoleMessageEvent):
         add_to_ban_list(id, ban_type, "console")
@@ -163,13 +194,10 @@ chat_unban = on_command(
 
 @chat_unban.handle()
 async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"id": str, "ban_type": str})
-    id: str = args["id"] or ""
-    id = id.strip()
-    ban_type = args["ban_type"] or "user"
-    ban_type = ban_type.strip().lower()
-    if ban_type not in ("user", "group"):
-        ban_type = "user"
+    args = _parse_ban_args(arg_msg)
+    if not args:
+        await chat_unban.finish()
+    id, ban_type = args
 
     if isinstance(event, ConsoleMessageEvent):
         remove_from_ban_list(id, ban_type, "console")

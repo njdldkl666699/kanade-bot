@@ -18,6 +18,7 @@ from .tool import (
     read_memory,
     tavily_extract,
     tavily_search,
+    view_image,
     write_memory,
 )
 
@@ -34,6 +35,7 @@ class CopilotSessionManager:
         list_memes,
         read_memory,
         write_memory,
+        view_image,
     ]
 
     available_tools: list[str] = [
@@ -163,9 +165,6 @@ class CopilotSessionManager:
                 buffered_messages=buffered_messages,
                 reply_text=reply_text,
             )
-            if not send_prompt:
-                # 没有任何消息可发送，直接返回
-                return None, new_session
 
             session_event: SessionEvent | None = None
             try:

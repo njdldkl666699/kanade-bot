@@ -64,7 +64,7 @@ async def resolve_message_images(message: OneBotMessage) -> list[Attachment]:
             {
                 "type": "blob",
                 "data": data,
-                "mimeType": "image/png",
+                "mimeType": response.headers.get("Content-Type", "application/octet-stream"),
                 "displayName": displayName,
             }
         )

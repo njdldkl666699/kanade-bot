@@ -57,6 +57,18 @@ def parse_arg_message(
     return arg_dict
 
 
+def bool_from_str(s: str | None) -> bool:
+    """将字符串转换为布尔值，支持常见的真值和假值表示"""
+    if s is None:
+        return False
+    s = s.strip().lower()
+    if s in {"true", "1", "yes", "y", "on"}:
+        return True
+    if s in {"false", "0", "no", "n", "off"}:
+        return False
+    raise ValueError(f"无法将字符串 '{s}' 转换为布尔值")
+
+
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> OneBotMessageSegment:
     """创建一个OneBot动画表情消息段"""
     message = OneBotMessageSegment.image(file)

@@ -1,4 +1,3 @@
-import random
 from io import BytesIO
 from pathlib import Path
 
@@ -8,16 +7,21 @@ from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg, EventPlainText
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
-from ..util import OneBotMessageSegmentMeme, parse_arg_message
+from ..util import OneBotMessageSegmentMeme, bool_from_str, parse_arg_message
 from .config import Config
-from .duanzi import FACE_IDS, add_duanzi, get_or_random_duanzi, list_paged_duanzi, remove_duanzi
+from .duanzi import (
+    add_duanzi,
+    duanzi_to_onebot_message,
+    get_or_random_duanzi,
+    list_paged_duanzi,
+    remove_duanzi,
+)
 from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_music_list_names, get_random_music
 from .sing import get_or_random_sing_song, get_sing_song_pages, list_sing_songs, random_clip_song
@@ -363,37 +367,28 @@ random_duanzi = on_command(
 
 @random_duanzi.handle()
 async def _(bot: Bot, arg_msg: Message = CommandArg()):
-    index_str = arg_msg.extract_plain_text().strip()
-    index: int | None = None
-    if index_str.isdigit():
-        index = int(index_str)
+    args = parse_arg_message(
+        arg_msg,
+        {
+            "index": int,
+            "chaos_face": str,
+            "custom_face_id": int,
+        },
+    )
+    index: int | None = args["index"]
+    chaos_face: bool = bool_from_str(args["chaos_face"])
+    custom_face_id: int | None = args["custom_face_id"]
 
     if not (duanzi := get_or_random_duanzi(index)):
         await random_duanzi.finish()
 
     if isinstance(bot, OneBot):
-        if len(duanzi) >= 500:
-            node_custom = MessageSegment.node_custom(
-                user_id=cfg.bot_id,
-                nickname=cfg.bot_nickname,
-                content=duanzi,
-            )
-            await random_duanzi.finish(OneBotMessage(node_custom))
-
-        if "{{face}}" not in duanzi:
-            await random_duanzi.finish(duanzi)
-
-        segments = duanzi.split("{{face}}")
-        message = OneBotMessage()
-        face_id = random.choice(FACE_IDS)
-
-        for i, segment in enumerate(segments):
-            if segment:
-                message += segment
-            if i != len(segments) - 1:
-                message += MessageSegment.face(face_id)
-
-        await random_duanzi.finish(message)
+        duanzi = duanzi_to_onebot_message(
+            duanzi,
+            node_threshold=500,
+            chaos_face=chaos_face,
+            custom_face_id=custom_face_id,
+        )
 
     await random_duanzi.finish(duanzi)
 

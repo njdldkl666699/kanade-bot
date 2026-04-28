@@ -1,9 +1,11 @@
+import base64
+
 from copilot import define_tool
-from copilot.tools import ToolInvocation
+from copilot.tools import ToolBinaryResult, ToolInvocation, ToolResult
 from nonebot import logger
 from pydantic import BaseModel, Field
 
-from .client import tavily_client as client
+from .client import file_client, tavily_client
 from .config import configs
 from .memory import MemoryType, WriteMode, read_memory_content, write_memory_content
 
@@ -37,7 +39,7 @@ class WriteMemoryParams(BaseModel):
 Ideal for gathering current information, news, and detailed web content analysis.""",
 )
 async def tavily_search(params: TavilySearchParams):
-    response = await client.post(
+    response = await tavily_client.post(
         "/search",
         json={
             "query": params.query,
@@ -61,7 +63,7 @@ async def tavily_search(params: TavilySearchParams):
     description="Extract the content of a web page using Tavily.",
 )
 async def tavily_extract(url: str):
-    response = await client.post(
+    response = await tavily_client.post(
         "/extract",
         json={"url": [url]},
     )
@@ -121,3 +123,46 @@ def write_memory(params: WriteMemoryParams, invocation: ToolInvocation) -> str:
         params.mode,
     )
     return f"已写入 {params.memory_type} 记忆。"
+
+
+@define_tool(
+    "view_image",
+    description="查看图片工具，输入一个或多个图片URL，返回图片二进制内容",
+)
+async def view_image(urls: list[str]) -> ToolResult:
+    binary_results_for_llm: list[ToolBinaryResult] = []
+    error_urls: list[str] = []
+
+    for url in urls:
+        response = await file_client.get(url)
+        logger.info(
+            "模型调用工具{}，查看图片：{}，返回了结果，状态码：{}",
+            view_image.name,
+            url,
+            response.status_code,
+        )
+        if response.status_code == 200:
+            image = ToolBinaryResult(
+                data=base64.b64encode(response.content).decode("utf-8"),
+                mime_type=response.headers.get("Content-Type", "application/octet-stream"),
+                type="blob",
+                description=url,
+            )
+            binary_results_for_llm.append(image)
+        else:
+            error_urls.append(url)
+
+    error = None
+    if error_urls:
+        logger.warning(
+            "模型调用工具{}，查看图片时以下URL返回了错误状态码：{}",
+            view_image.name,
+            error_urls,
+        )
+        error = f"以下URL解析失败：{error_urls}"
+
+    return ToolResult(
+        text_result_for_llm="图片查看结果",
+        error=error,
+        binary_results_for_llm=binary_results_for_llm,
+    )

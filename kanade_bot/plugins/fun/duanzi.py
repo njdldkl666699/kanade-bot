@@ -3,6 +3,7 @@ import random
 from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
 from .config import Config
 
@@ -34,6 +35,49 @@ def list_paged_duanzi(page: int = 1) -> str:
         messages.append(f"{i}. {duanzi}")
     messages.append(f"共{total}条，{page}/{total_pages}页")
     return "\n".join(messages)
+
+
+def duanzi_to_onebot_message(
+    duanzi: str,
+    *,
+    node_threshold: int = 500,
+    chaos_face: bool = False,
+    custom_face_id: int | None = None,
+) -> Message:
+    """将一个段子转换为OneBot消息，支持分段和表情"""
+    face_ids = FACE_IDS
+    if custom_face_id is not None:
+        face_ids = FACE_IDS.copy()
+        face_ids.append(custom_face_id)
+
+    message = Message()
+    segments = duanzi.split("{{face}}")
+    if chaos_face:
+        # 如果开启混乱表情，每次都选一个随机的表情
+        for i, segment in enumerate(segments):
+            if segment:
+                message += segment
+            if i != len(segments) - 1:
+                face_id = random.choice(face_ids)
+                message += MessageSegment.face(face_id)
+    else:
+        # 否则仅抽取一次表情，或直接使用给定表情
+        face_id = custom_face_id or random.choice(face_ids)
+        for i, segment in enumerate(segments):
+            if segment:
+                message += segment
+            if i != len(segments) - 1:
+                message += MessageSegment.face(face_id)
+
+    if len(duanzi) <= node_threshold:
+        return message
+
+    node_custom = MessageSegment.node_custom(
+        user_id=cfg.bot_id,
+        nickname=cfg.bot_nickname,
+        content=duanzi,
+    )
+    return Message(node_custom)
 
 
 def get_or_random_duanzi(index: int | None = None) -> str | None:
