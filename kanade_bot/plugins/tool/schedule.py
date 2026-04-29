@@ -93,8 +93,9 @@ def on_bot_connect(bot: Bot):
 @driver.on_bot_disconnect
 def on_bot_disconnect(bot: Bot):
     jobs = scheduler.get_jobs()
+    count = 0
     for job in jobs:
         if job.id.startswith(TOOL_SCHEDULE_JOB_PREFIX):
             scheduler.remove_job(job.id)
-            logger.info(f"已移除定时任务 {job.id}")
-    logger.info(f"Bot已断开连接，已移除 {len(jobs)} 个定时任务")
+            count += 1
+    logger.info(f"Bot已断开连接，已移除 {count} 个定时任务")

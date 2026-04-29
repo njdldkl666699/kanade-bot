@@ -375,29 +375,29 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
             {
                 "index": int,
                 "chaos_face": str,
-                "custom_face_id_or_emoji": int,
+                "emoji": str,
             },
         )
         index: int | None = args["index"]
         chaos_face: bool = bool_from_str(args["chaos_face"])
-        custom_face_id_or_emoji = args["custom_face_id_or_emoji"]
-        return index, chaos_face, custom_face_id_or_emoji
+        emoji: str | None = args["emoji"]
+        return index, chaos_face, emoji
 
     if len(arg_msg) == 2:
         # 第一块为纯文本
         text_part: MessageSegment = arg_msg[0]
-        args = parse_arg_message(text_part.get("text"), {"index": int, "chaos_face": str})
+        args = parse_arg_message(text_part.data.get("text", ""), {"index": int, "chaos_face": str})
         index: int | None = args["index"]
         chaos_face: bool = bool_from_str(args["chaos_face"])
 
         # 第二块为face
-        custom_face_id_or_emoji: int | str | None = None
+        face_id: int | str | None = None
         face_part: MessageSegment = arg_msg[1]
         if face_part.type == "face":
             id: str | None = face_part.data.get("id")
             if id is not None and id.isdigit():
-                custom_face_id_or_emoji = int(id)
-        return index, chaos_face, custom_face_id_or_emoji
+                face_id = int(id)
+        return index, chaos_face, face_id
 
     return None
 
