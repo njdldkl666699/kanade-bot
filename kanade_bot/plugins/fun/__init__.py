@@ -389,15 +389,13 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
         index: int | None = args["index"]
         chaos_face: bool = bool_from_str(args["chaos_face"])
 
-        # 第二块为face或emoji
+        # 第二块为face
         custom_face_id_or_emoji: int | str | None = None
         face_part: MessageSegment = arg_msg[1]
         if face_part.type == "face":
             id: str | None = face_part.data.get("id")
             if id is not None and id.isdigit():
                 custom_face_id_or_emoji = int(id)
-        if face_part.type == "text":
-            custom_face_id_or_emoji = face_part.data.get("text")
         return index, chaos_face, custom_face_id_or_emoji
 
     return None
@@ -405,18 +403,10 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
 
 @random_duanzi.handle()
 async def _(bot: Bot, arg_msg: Message = CommandArg()):
-
-    args = parse_arg_message(
-        arg_msg,
-        {
-            "index": int,
-            "chaos_face": str,
-            "custom_face_id_or_emoji": int,
-        },
-    )
-    index: int | None = args["index"]
-    chaos_face: bool = bool_from_str(args["chaos_face"])
-    custom_face_id_or_emoji: int | None = args["custom_face_id_or_emoji"]
+    args = _parse_duanzi_args(arg_msg)
+    if args is None:
+        await random_duanzi.finish()
+    index, chaos_face, custom_face_id_or_emoji = args
 
     if not (duanzi := get_or_random_duanzi(index)):
         await random_duanzi.finish()
