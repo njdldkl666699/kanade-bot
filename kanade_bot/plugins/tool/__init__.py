@@ -89,7 +89,7 @@ mc_status = on_command(
 
 @mc_status.handle()
 async def _(event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"address": str, "theme": str})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"address": str, "theme": str})
     address: str | None = args["address"]
     if address is None:
         await mc_status.finish("请提供服务器地址")
@@ -145,7 +145,7 @@ add_a_schedule = on_command(
 @add_a_schedule.handle()
 async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
     group_id = event.group_id
-    args = parse_arg_message(arg_msg, {"name": str, "cron": str}, maxsplit=1)
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"name": str, "cron": str}, maxsplit=1)
     name: str | None = args["name"]
     cron: str | None = args["cron"]
     if not all([name, cron]):

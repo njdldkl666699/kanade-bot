@@ -198,7 +198,7 @@ sing_song = on_command(
 
 @sing_song.handle()
 async def _(bot: Bot, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"query": str, "number": int})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"query": str, "number": int})
     query = args["query"]
     number = args["number"]
 
@@ -227,7 +227,7 @@ list_sing_song = on_command(
 
 @list_sing_song.handle()
 async def _(arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"page": int, "query": str})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"page": int, "query": str})
     page = args["page"] or 1
     query = args["query"] or None
 
@@ -258,7 +258,9 @@ random_lyric = on_command(
 
 @random_lyric.handle()
 async def _(arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"query": str, "length": int, "show_song": bool})
+    args = parse_arg_message(
+        arg_msg.extract_plain_text(), {"query": str, "length": int, "show_song": bool}
+    )
     query: str | None = args["query"]
     length: int | None = args["length"]
     show_song: bool = args["show_song"] or True
@@ -369,7 +371,7 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
     if len(arg_msg) == 1:
         # 用纯文本解析参数
         args = parse_arg_message(
-            arg_msg,
+            arg_msg.extract_plain_text(),
             {
                 "index": int,
                 "chaos_face": str,
@@ -384,8 +386,7 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
     if len(arg_msg) == 2:
         # 第一块为纯文本
         text_part: MessageSegment = arg_msg[0]
-        text = text_part.get("text", "")
-        args = parse_arg_message(text, {"index": int, "chaos_face": str})
+        args = parse_arg_message(text_part.get("text"), {"index": int, "chaos_face": str})
         index: int | None = args["index"]
         chaos_face: bool = bool_from_str(args["chaos_face"])
 

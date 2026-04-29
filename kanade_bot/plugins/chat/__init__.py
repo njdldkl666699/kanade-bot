@@ -239,7 +239,7 @@ add_meme = on_command(
 
 @add_meme.handle()
 async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"name": str, "description": str})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"name": str, "description": str})
     name: str | None = args.get("name") or None
     if not name:
         await add_meme.finish("请输入表情包名称")

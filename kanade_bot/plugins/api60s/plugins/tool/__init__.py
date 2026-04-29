@@ -50,7 +50,7 @@ weather_forecast = on_command(
 
 @weather_forecast.handle()
 async def handle_weather_forecast(arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"query": str, "days": int})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"query": str, "days": int})
     response = await client.get(
         "/v2/weather/forecast",
         params={
@@ -118,7 +118,7 @@ async def process_translation(
 
 @fanyi.handle()
 async def handle_fanyi(state: T_State, event: Event, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg, {"to_query": str, "from_query": str})
+    args = parse_arg_message(arg_msg.extract_plain_text(), {"to_query": str, "from_query": str})
     to_query, from_query = args["to_query"], args["from_query"]
 
     if not isinstance(event, OneBotMessageEvent) or not event.reply:

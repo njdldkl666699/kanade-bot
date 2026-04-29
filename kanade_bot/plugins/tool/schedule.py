@@ -96,4 +96,5 @@ def on_bot_disconnect(bot: Bot):
     for job in jobs:
         if job.id.startswith(TOOL_SCHEDULE_JOB_PREFIX):
             scheduler.remove_job(job.id)
+            logger.info(f"已移除定时任务 {job.id}")
     logger.info(f"Bot已断开连接，已移除 {len(jobs)} 个定时任务")
