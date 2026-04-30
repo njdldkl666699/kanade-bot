@@ -8,3 +8,4 @@ class Config(BaseModel):
     """帮助文档图片的缓存目录，过期会自动更新"""
     help_sakura_bot_link: str = ""
     """Sakura bot的帮助文档链接"""
+    help_haruki_image_file_path: str = "assets/Haruki_help.png"

@@ -112,6 +112,13 @@ async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
 
 @help.handle()
 async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+    sub_command = arg_msg.extract_plain_text().strip()
+    if not sub_command:
+        await help.send(OneBotMessageSegment.image(cfg.help_haruki_image_file_path))
+
+
+@help.handle()
+async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     doc_name = arg_msg.extract_plain_text().strip()
     if doc_name not in doc_names:
         doc_name = "index"
