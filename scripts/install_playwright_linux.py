@@ -8,6 +8,7 @@ Playwright Linux 国内一键安装提速脚本
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,7 @@ CDN_MIRRORS = [
 # Chromium 自 Playwright 1.57+ 改用 Chrome for Testing 构建，需要单独的镜像
 CHROMIUM_CDN_MIRRORS = [
     "https://cdn.npmmirror.com/binaries/chrome-for-testing",
+    "https://registry.npmmirror.com/binary.html?path=chrome-for-testing/",
 ]
 
 
@@ -37,6 +39,50 @@ def run_command(cmd, error_msg, env=None, check=True):
             print(f"[WARN] {error_msg}")
             return False
     return True
+
+
+def command_to_string(parts):
+    """将命令参数转为可安全展示/执行的 shell 字符串"""
+    return " ".join(shlex.quote(str(part)) for part in parts)
+
+
+def python_command_args(use_uv=False):
+    """返回当前安装模式下的 Python 命令参数"""
+    if use_uv:
+        return ["uv", "run", "python"]
+    return [sys.executable]
+
+
+def python_module_command(module, args=None, use_uv=False):
+    """生成 python -m module 命令字符串"""
+    args = args or []
+    return command_to_string(python_command_args(use_uv) + ["-m", module] + args)
+
+
+def check_uv_available():
+    """使用 uv 模式前检查 uv 是否可用"""
+    if shutil.which("uv"):
+        return
+    print("[ERROR] 已指定 --use-uv，但未在 PATH 中找到 uv。")
+    sys.exit(1)
+
+
+def is_playwright_package_installed(use_uv=False):
+    """检查当前命令环境中是否已安装 Playwright Python 包"""
+    cmd = python_command_args(use_uv) + [
+        "-c",
+        "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('playwright') else 1)",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def detect_distro():
@@ -75,7 +121,7 @@ def check_sudo():
     return False
 
 
-def install_system_deps(distro):
+def install_system_deps(distro, use_uv=False):
     """安装 Playwright 浏览器运行所需的系统级依赖"""
     print("[STEP] 检查系统依赖...")
 
@@ -85,7 +131,7 @@ def install_system_deps(distro):
     if not has_sudo and os.geteuid() != 0:
         print("[WARN] 无 sudo 权限，跳过系统依赖安装。")
         print("       如果浏览器安装后无法运行，请以 root 权限重新执行此脚本，")
-        print("       或手动执行: python -m playwright install-deps")
+        print(f"       或手动执行: {python_module_command('playwright', ['install-deps'], use_uv)}")
         return
 
     # playwright install --with-deps 会自动处理系统依赖，
@@ -106,19 +152,44 @@ def install_system_deps(distro):
         print("[WARN] 未识别的发行版，跳过基础工具检查。")
 
 
-def install_playwright():
+def install_playwright(use_uv=False):
     """使用国内镜像源安装 Playwright 核心库"""
+    if is_playwright_package_installed(use_uv):
+        print("[OK] Playwright 库已安装，跳过安装。")
+        return
+
     print("[STEP] 步骤1：使用清华源安装 Playwright 库...")
-    pip_cmd = (
-        f"{sys.executable} -m pip install playwright "
-        f"-i https://pypi.tuna.tsinghua.edu.cn/simple "
-        f"--trusted-host pypi.tuna.tsinghua.edu.cn"
-    )
+    if use_uv:
+        pip_cmd = command_to_string(
+            [
+                "uv",
+                "pip",
+                "install",
+                "playwright",
+                "-i",
+                "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "--trusted-host",
+                "pypi.tuna.tsinghua.edu.cn",
+            ]
+        )
+    else:
+        pip_cmd = python_module_command(
+            "pip",
+            [
+                "install",
+                "playwright",
+                "-i",
+                "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "--trusted-host",
+                "pypi.tuna.tsinghua.edu.cn",
+            ],
+            use_uv,
+        )
     run_command(pip_cmd, "Playwright 库安装失败，请检查网络或 pip 版本。")
     print("[OK] Playwright 库安装成功！")
 
 
-def find_config_file():
+def find_config_file(use_uv=False):
     """
     自动查找 Playwright 的 CDN 配置文件 index.js。
     Linux 下典型路径：
@@ -133,7 +204,7 @@ def find_config_file():
     # 策略0：通过 playwright 命令获取驱动路径
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "playwright", "--path"],
+            python_command_args(use_uv) + ["-m", "playwright", "--path"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -207,11 +278,11 @@ def find_config_file():
     return potential_paths
 
 
-def patch_config_file():
+def patch_config_file(use_uv=False):
     """查找并修补 Playwright 的 CDN 配置文件"""
     print("[STEP] 步骤2：定位并修补 Playwright 浏览器下载配置文件...")
 
-    potential_paths = find_config_file()
+    potential_paths = find_config_file(use_uv)
     target_file = None
     for path in potential_paths:
         if os.path.isfile(path):
@@ -266,12 +337,39 @@ def patch_config_file():
         return False
 
 
-def install_browsers(browsers=None):
+def is_browser_installed(browser, use_uv=False):
+    """通过 Playwright 暴露的可执行文件路径判断浏览器是否已安装"""
+    code = (
+        "import os, sys\n"
+        "from playwright.sync_api import sync_playwright\n"
+        "browser_name = sys.argv[1]\n"
+        "with sync_playwright() as p:\n"
+        "    path = getattr(p, browser_name).executable_path\n"
+        "sys.exit(0 if path and os.path.exists(path) else 1)\n"
+    )
+    cmd = python_command_args(use_uv) + ["-c", code, browser]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def install_browsers(browsers=None, use_uv=False):
     """安装浏览器，默认安装 chromium。支持多镜像自动回退。"""
     if browsers is None:
         browsers = ["chromium"]
 
     for browser in browsers:
+        if is_browser_installed(browser, use_uv):
+            print(f"[OK] {browser} 浏览器已安装，跳过安装。")
+            continue
+
         installed = False
         for i, mirror in enumerate(CDN_MIRRORS):
             label = "国内镜像" if i < len(CDN_MIRRORS) - 1 else "官方 CDN"
@@ -286,7 +384,9 @@ def install_browsers(browsers=None):
                 env["PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"] = CHROMIUM_CDN_MIRRORS[0]
                 print(f"       Chromium 镜像：{CHROMIUM_CDN_MIRRORS[0]}")
 
-            install_cmd = f"{sys.executable} -m playwright install {browser} --with-deps"
+            install_cmd = python_module_command(
+                "playwright", ["install", browser, "--with-deps"], use_uv
+            )
             success = run_command(
                 install_cmd, f"{browser} 从 {mirror} 安装失败。", env=env, check=False
             )
@@ -303,13 +403,13 @@ def install_browsers(browsers=None):
             sys.exit(1)
 
 
-def verify_installation():
+def verify_installation(use_uv=False):
     """验证安装是否成功"""
     print("[STEP] 验证安装...")
     try:
         result = subprocess.run(
-            [
-                sys.executable,
+            python_command_args(use_uv)
+            + [
                 "-c",
                 "from playwright.sync_api import sync_playwright; "
                 "p = sync_playwright().start(); "
@@ -333,7 +433,10 @@ def verify_installation():
                 err_lines = result.stderr.strip().splitlines()[-5:]
                 for line in err_lines:
                     print(f"       {line}")
-            print("       尝试执行: python -m playwright install-deps")
+            print(
+                "       尝试执行: "
+                f"{python_module_command('playwright', ['install-deps'], use_uv)}"
+            )
             return False
     except subprocess.TimeoutExpired:
         print("[WARN] 验证超时，但安装可能已成功。")
@@ -372,6 +475,11 @@ def parse_args():
         action="store_true",
         help="仅修补配置文件，不安装",
     )
+    parser.add_argument(
+        "--use-uv",
+        action="store_true",
+        help="使用 uv 替代 pip/python 相关命令",
+    )
     return parser.parse_args()
 
 
@@ -389,19 +497,21 @@ def main():
         print("       继续执行，但部分功能可能不适用。")
 
     args = parse_args()
+    if args.use_uv:
+        check_uv_available()
 
     distro = detect_distro()
 
     # 安装系统依赖
     if not args.skip_deps and not args.patch_only:
-        install_system_deps(distro)
+        install_system_deps(distro, args.use_uv)
 
     # 安装 Playwright 库
     if not args.patch_only:
-        install_playwright()
+        install_playwright(args.use_uv)
 
     # 修补配置文件
-    patched = patch_config_file()
+    patched = patch_config_file(args.use_uv)
 
     if args.patch_only:
         if patched:
@@ -410,21 +520,21 @@ def main():
 
     # 安装浏览器
     if patched:
-        install_browsers(args.browsers)
+        install_browsers(args.browsers, args.use_uv)
     else:
         print("[WARN] 配置文件未修补成功，尝试通过环境变量加速安装...")
-        install_browsers(args.browsers)
+        install_browsers(args.browsers, args.use_uv)
 
     # 验证
     if not args.skip_verify and "chromium" in args.browsers:
-        verify_installation()
+        verify_installation(args.use_uv)
 
     print()
     print("=" * 60)
     print("  安装完成！")
     print("=" * 60)
-    print("  验证命令: python -m playwright --version")
-    print("  如遇问题: python -m playwright install-deps")
+    print(f"  验证命令: {python_module_command('playwright', ['--version'], args.use_uv)}")
+    print(f"  如遇问题: {python_module_command('playwright', ['install-deps'], args.use_uv)}")
     print("=" * 60)
 
 
