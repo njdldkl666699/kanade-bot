@@ -210,14 +210,17 @@ async def set_msg_emoji_like(bot: OneBot, message_id: int, emoji_id: int):
 
 @send_emoji_like.handle()
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = CommandArg()):
+    message_id = reply.message_id if (reply := event.reply) else event.message_id
     for segment in arg_msg:
         if segment.type == "face":
-            await set_msg_emoji_like(bot, event.message_id, segment.data["id"])
+            await set_msg_emoji_like(bot, message_id, segment.data["id"])
             await send_emoji_like.finish()
         if segment.type == "text":
             text: str = segment.data["text"].strip()
-            if text in emoji.EMOJI_DATA:
-                await set_msg_emoji_like(bot, event.message_id, ord(text))
+            if len(text) == 1 and emoji.is_emoji(text):
+                await set_msg_emoji_like(bot, message_id, ord(text))
                 await send_emoji_like.finish()
 
-    await send_emoji_like.finish("请提供一个表情或单个emoji字符")
+    await send_emoji_like.finish(
+        "请提供一个表情或单个emoji字符（部分emoji可能为多个码位组成，无法使用）"
+    )
