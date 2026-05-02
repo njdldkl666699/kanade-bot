@@ -367,7 +367,7 @@ random_duanzi = on_command(
 )
 
 
-def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | None] | None:
+def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | None]:
     if len(arg_msg) == 1:
         # 用纯文本解析参数
         args = parse_arg_message(
@@ -399,14 +399,12 @@ def _parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | 
                 face_id = int(id)
         return index, chaos_face, face_id
 
-    return None
+    return None, False, None
 
 
 @random_duanzi.handle()
 async def _(bot: Bot, arg_msg: Message = CommandArg()):
     args = _parse_duanzi_args(arg_msg)
-    if args is None:
-        await random_duanzi.finish()
     index, chaos_face, custom_face_id_or_emoji = args
 
     if not (duanzi := get_or_random_duanzi(index)):
