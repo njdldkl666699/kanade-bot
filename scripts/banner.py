@@ -42,12 +42,17 @@ purple = "48;72;136"  # 手旁边
 black1 = "69;67;78"  # 领口
 black2 = "44;38;42"  # 鞋子
 
-# fmt: off
+
 # 0, 2, 4...用前景色
 # 1, 3, 5...用背景色
 # 17列
 # Trick: *[blank]*5 == *([blank]*5)
-KANADE: list[list[str]] = [
+
+type Image = list[list[str]]
+
+# fmt: off
+# 21个实际行，外加1个空行，总共22行，满足偶数行的要求
+KANADE_21: Image = [
     [*[blank]*5, *[lblue1]*7, *[blank]*5],
     [*[blank]*3, *[lblue1]*2, *[lblue2]*2, *[lblue3]*2, lblue2, lblue3, lblue2, *[lblue1]*2, *[blank]*3],
     [*[blank]*2, lblue1, *[lblue2]*6, lblue3, *[lblue2]*4, lblue1, *[blank]*2],
@@ -71,21 +76,27 @@ KANADE: list[list[str]] = [
     [*[blank]*6, *[black2]*2, blank, *[black2]*2, *[blank]*6],
     [blank]*17,
 ]
+
+# 15个实际行
+KANADE_15: Image = [
+    [*[blank]*5, *[lblue1]*7, *[blank]*5],
+    [*[blank]*3, *[lblue1]*2, *[lblue2]*2, *[lblue3]*2, lblue2, lblue3, lblue2, *[lblue1]*2, *[blank]*3],
+    [*[blank]*2, lblue1, *[lblue2]*6, lblue3, *[lblue2]*4, lblue1, *[blank]*2],
+    [blank, lblue1, *[lblue2]*13, lblue1, blank],
+    [blank, lblue1, *[lblue2]*2, lblue3, *[lblue2]*8, lblue3, lblue2, lblue1, blank],
+    [lblue1, *[lblue2]*2, lblue3, *[lblue2]*3, lblue3, *[lblue2]*2, lblue3, *[lblue2]*5, lblue1],
+    [lblue1, *[lblue2]*2, lblue3, *[lblue2]*2, *[lblue3]*2, lblue2, lblue3, yellow1, lblue3, *[lblue2]*3, lblue3, lblue1],
+    [lblue1, lblue2, lblue3, *[lblue2]*2, lblue3, yellow1, lblue3, lblue2, lblue3, *[yellow1]*2, lblue3, *[lblue2]*2, lblue3, lblue1],
+    [lblue1, *[lblue2]*3, *[dblue1]*3, yellow1, *[lblue3]*2, *[dblue1]*3, lblue2, *[lblue3]*2, lblue1],
+    [lblue1, lblue3, yellow2, lblue3, yellow1, *[dblue2]*2, *[yellow1]*2, lblue3, *[dblue2]*2, yellow1, lblue3, yellow2, lblue3, lblue1],
+    [blank, lblue1, yellow1, lblue2, white, *[dblue3]*2, *[yellow1]*3, *[dblue3]*2, white, lblue2, yellow1, lblue1, blank],
+    [*[blank]*2, lblue1, lblue2, *[yellow2]*2, *[yellow1]*5, *[yellow2]*2, lblue2, lblue1, *[blank]*2],
+    [*[blank]*2, lblue1, lblue2, *[lblue3]*2, dblue5, dblue4, yellow3, dblue4, dblue5, *[lblue3]*2, lblue2, lblue1, *[blank]*2],
+    [*[blank]*2, lblue1, lblue2, lblue3, dblue5, dblue4, dblue2, black1, dblue2, dblue4, dblue5, lblue3, lblue2, lblue1, *[blank]*2],
+    [*[blank]*2, lblue1, lblue3, dblue5, *[dblue4]*7, dblue5, lblue3, lblue1, *[blank]*2],
+    [blank]*17,
+]
 # fmt: on
-
-
-def validate_kanade() -> bool:
-    # 验证 KANADE 的格式是否正确
-    # 每行必须有 17 列，且行数必须是偶数
-    # return all(len(row) == 17 for row in KANADE) and len(KANADE) % 2 == 0
-    for row in KANADE:
-        if len(row) != 17:
-            print(f"行长度不正确: {row} (长度: {len(row)})")
-            return False
-    if len(KANADE) % 2 != 0:
-        print(f"行数必须是偶数，但当前行数为: {len(KANADE)}")
-        return False
-    return True
 
 
 def foreground(color: str) -> str:
@@ -131,27 +142,40 @@ def pixel2_html(upper: str, lower: str) -> str:
     )
 
 
-def get_kanade() -> str:
-    if not validate_kanade():
+def validate_kanade(kanade: Image) -> bool:
+    # 验证 kanade 的格式是否正确
+    # 每行必须有 17 列，且行数必须是偶数
+    for row in kanade:
+        if len(row) != 17:
+            print(f"行长度不正确: {row} (长度: {len(row)})")
+            return False
+    if len(kanade) % 2 != 0:
+        print(f"行数必须是偶数，但当前行数为: {len(kanade)}")
+        return False
+    return True
+
+
+def get_kanade(kanade: Image = KANADE_21) -> str:
+    if not validate_kanade(kanade):
         raise ValueError("KANADE 格式不正确")
 
     lines = []
-    for i in range(0, len(KANADE), 2):
-        upper_row = KANADE[i]
-        lower_row = KANADE[i + 1]
+    for i in range(0, len(kanade), 2):
+        upper_row = kanade[i]
+        lower_row = kanade[i + 1]
         line = "".join(pixel2(upper_row[j], lower_row[j]) for j in range(17))
         lines.append(line)
     return "\n".join(lines)
 
 
-def get_kanade_html() -> str:
-    if not validate_kanade():
+def get_kanade_html(kanade: Image = KANADE_21) -> str:
+    if not validate_kanade(kanade):
         raise ValueError("KANADE 格式不正确")
 
     lines = []
-    for i in range(0, len(KANADE), 2):
-        upper_row = KANADE[i]
-        lower_row = KANADE[i + 1]
+    for i in range(0, len(kanade), 2):
+        upper_row = kanade[i]
+        lower_row = kanade[i + 1]
         line = "".join(pixel2_html(upper_row[j], lower_row[j]) for j in range(17))
         lines.append(line)
 
@@ -181,5 +205,6 @@ def get_kanade_html() -> str:
 
 
 if __name__ == "__main__":
-    print(get_kanade())
-    Path("kanade_banner.html").write_text(get_kanade_html(), encoding="utf-8")
+    print(get_kanade(KANADE_15))
+    print(len(KANADE_15))
+    Path("kanade_banner.html").write_text(get_kanade_html(KANADE_15), encoding="utf-8")

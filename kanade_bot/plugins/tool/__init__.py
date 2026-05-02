@@ -1,6 +1,7 @@
 import base64
 from pathlib import Path
 
+import emoji
 from mcstatus import JavaServer
 from nonebot import get_plugin_config, logger, on_command
 from nonebot.adapters import Event, Message
@@ -8,6 +9,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.params import CommandArg, EventMessage
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
@@ -187,3 +189,34 @@ async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
     except ValueError as e:
         await remove_a_schedule.finish(str(e))
     await remove_a_schedule.finish(f"已移除定时任务 {name}")
+
+
+send_emoji_like = on_command(
+    "回应表情",
+    aliases={"贴", "回复表情"},
+    priority=2,
+    block=True,
+)
+
+
+@send_emoji_like.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = CommandArg()):
+    for segment in arg_msg:
+        if segment.type == "face":
+            await bot.call_api(
+                "send_msg_emoji_like",
+                message_id=event.message_id,
+                emoji_id=segment.data["id"],
+            )
+            await send_emoji_like.finish()
+        if segment.type == "text":
+            text: str = segment.data["text"].strip()
+            if text in emoji.EMOJI_DATA:
+                await bot.call_api(
+                    "send_msg_emoji_like",
+                    message_id=event.message_id,
+                    emoji_id=ord(text),
+                )
+                await send_emoji_like.finish()
+
+    await send_emoji_like.finish("请提供一个表情或单个emoji字符")
