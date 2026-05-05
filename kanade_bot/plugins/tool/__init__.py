@@ -1,11 +1,12 @@
 import base64
+import random
 from pathlib import Path
 
 import emoji
 from mcstatus import JavaServer
-from nonebot import get_plugin_config, logger, on_command
+from nonebot import get_driver, get_plugin_config, logger, on_command, on_type
 from nonebot.adapters import Event, Message
-from nonebot.adapters.onebot.v11 import GROUP, MessageSegment
+from nonebot.adapters.onebot.v11 import GROUP, MessageSegment, PokeNotifyEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -13,9 +14,10 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
+from nonebot.rule import to_me
 from nonebot.typing import T_State
 
-from ..util import parse_arg_message
+from ..util import parse_arg_message, send_poke, set_msg_emoji_like
 from .config import Config
 from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
@@ -200,27 +202,105 @@ send_emoji_like = on_command(
 )
 
 
-async def set_msg_emoji_like(bot: OneBot, message_id: int, emoji_id: int):
-    await bot.call_api(
-        "set_msg_emoji_like",
-        message_id=message_id,
-        emoji_id=emoji_id,
-    )
-
-
 @send_emoji_like.handle()
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = CommandArg()):
     message_id = reply.message_id if (reply := event.reply) else event.message_id
+    emoji_id: int | None = None
+
     for segment in arg_msg:
         if segment.type == "face":
-            await set_msg_emoji_like(bot, message_id, segment.data["id"])
-            await send_emoji_like.finish()
+            emoji_id = segment.data["id"]
         if segment.type == "text":
             text: str = segment.data["text"].strip()
             if len(text) == 1 and emoji.is_emoji(text):
-                await set_msg_emoji_like(bot, message_id, ord(text))
-                await send_emoji_like.finish()
+                emoji_id = ord(text)
 
-    await send_emoji_like.finish(
-        "请提供一个表情或单个emoji字符（部分emoji可能为多个码位组成，无法使用）"
-    )
+    if emoji_id is None:
+        await send_emoji_like.finish(
+            "请提供一个表情或单个emoji字符（部分emoji可能为多个码位组成，无法使用）"
+        )
+
+    await set_msg_emoji_like(bot, message_id, emoji_id)
+    await send_emoji_like.finish()
+
+
+send_a_poke = on_command(
+    "戳一戳",
+    aliases={"poke", "戳"},
+    priority=2,
+    permission=GROUP,
+    block=True,
+)
+
+
+@send_a_poke.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = CommandArg()):
+    user_id: int | str = event.user_id
+    group_id: int | None = None
+
+    for segment in message:
+        if segment.type == "at":
+            user_id = segment.data["qq"]
+
+    if isinstance(event, OneBotGroupMessageEvent):
+        group_id = event.group_id
+
+    await send_poke(bot, user_id, group_id)
+    await send_a_poke.finish()
+
+
+receive_poke = on_type(
+    (PokeNotifyEvent,),
+    rule=to_me(),
+    priority=1,
+    block=True,
+)
+
+RECEIVE_POKE_MESSAGES: list[str] = [
+    "（被戳一下后，轻轻晃了晃神）",
+    "啊…嗯？怎么了？",
+    "有点突然…吓到了一下。",
+    "…在听。有什么事吗？",
+    "（稍微顿了一下）…嗯，我在。",
+    "是不是戳错人了…不过，也没关系。",
+    "嗯…？找我吗？",
+    "…别戳太多次，会有点晕。",
+    "啊…抱歉，刚刚在听音乐，没注意到。",
+    "…嗯。我在。",
+    "如果是想聊天的话…直接说就好。",
+]
+
+global_config = get_driver().config
+
+
+@receive_poke.handle()
+async def _(event: PokeNotifyEvent):
+    if event.user_id not in global_config.superusers:
+        await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
+
+
+send_like = on_command(
+    "点赞",
+    aliases={"like", "赞", "赞我"},
+    priority=2,
+    permission=GROUP,
+    block=True,
+)
+
+SEND_LIKE_MESSAGES: list[str] = [
+    "今天也给你点了个赞…希望你能稍微开心一点。",
+    "嗯…点了赞。只是一个小小的表示。",
+    "看到你在努力的样子…就想点一下。",
+    "不太擅长说话…但想让你知道，我有在关注。",
+    "点个赞…如果有打扰到的话，不用在意也没关系。",
+    "嗯，点好了。不用回也没关系。",
+    "看到你头像的时候…随手就点了一个。",
+    "只是想让你知道，有人在看着这边。",
+    "点赞…大概是我能做的、最简单的那种鼓励。",
+]
+
+
+@send_like.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent):
+    await bot.send_like(user_id=event.user_id, times=10)
+    await send_like.finish(random.choice(SEND_LIKE_MESSAGES))

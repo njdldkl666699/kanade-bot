@@ -138,3 +138,41 @@ def build_sender_info(name: str | None, id: str | None) -> str:
     if id:
         parts.append(f"[id={id}]")
     return "".join(parts)
+
+
+async def set_msg_emoji_like(
+    bot: OneBot,
+    message_id: int,
+    emoji_id: int,
+    set: bool = True,
+):
+    """设置表情回复
+
+    :param message_id: 消息ID
+    :param emoji_id: 表情ID
+    """
+    await bot.call_api(
+        "set_msg_emoji_like",
+        message_id=message_id,
+        emoji_id=emoji_id,
+        set=set,
+    )
+
+
+async def send_poke(
+    bot: OneBot,
+    user_id: int | str,
+    group_id: int | None = None,
+    target_id: int | None = None,
+):
+    """发送戳一戳
+
+    :param user_id: 目标用户ID
+    :param group_id: 群聊ID（如果是群聊内戳人则需要提供）
+    """
+    await bot.call_api(
+        "send_poke",
+        user_id=user_id,
+        group_id=group_id,
+        target_id=target_id,
+    )
