@@ -22,7 +22,7 @@ sub_plugins = nonebot.load_plugins(str(Path(__file__).parent.joinpath("plugins")
 
 
 @run_postprocessor
-async def do_something(matcher: Matcher, exception: Exception | None):
+async def _(matcher: Matcher, exception: Exception | None):
     match exception:
         case TimeoutException():
             await matcher.finish("请求超时，请稍后再试")

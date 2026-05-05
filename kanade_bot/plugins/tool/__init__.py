@@ -11,6 +11,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg, EventMessage
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
@@ -302,5 +303,9 @@ SEND_LIKE_MESSAGES: list[str] = [
 
 @send_like.handle()
 async def _(bot: OneBot, event: OneBotMessageEvent):
-    await bot.send_like(user_id=event.user_id, times=10)
+    try:
+        await bot.send_like(user_id=event.user_id, times=10)
+    except ActionFailed:
+        await send_like.finish("好像到上限了。明天再试吧…")
+
     await send_like.finish(random.choice(SEND_LIKE_MESSAGES))
