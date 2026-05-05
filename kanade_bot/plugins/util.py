@@ -161,9 +161,9 @@ async def set_msg_emoji_like(
 
 async def send_poke(
     bot: OneBot,
-    user_id: int | str,
-    group_id: int | None = None,
-    target_id: int | None = None,
+    user_id: str,
+    group_id: str | None = None,
+    target_id: str | None = None,
 ):
     """发送戳一戳
 
