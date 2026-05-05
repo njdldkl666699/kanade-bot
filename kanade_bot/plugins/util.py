@@ -5,6 +5,7 @@ from typing import Any, Literal, SupportsIndex
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.console.event import PrivateMessageEvent as ConsolePrivateMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
@@ -174,3 +175,8 @@ async def send_poke(
         user_id=user_id,
         group_id=group_id,
     )
+
+
+def console_private_permission(event: ConsolePrivateMessageEvent) -> bool:
+    """Console私聊权限检查"""
+    return True

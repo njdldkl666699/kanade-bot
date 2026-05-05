@@ -6,6 +6,7 @@ from nonebot.adapters import Bot, Event, Message, MessageSegment
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import PRIVATE
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
@@ -14,7 +15,12 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from ..util import build_sender_info, extract_session_info, parse_arg_message
+from ..util import (
+    build_sender_info,
+    console_private_permission,
+    extract_session_info,
+    parse_arg_message,
+)
 from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
@@ -109,7 +115,7 @@ chat_reset = on_command(
     "重置会话",
     aliases={"chat_reset", "chatreset", "重置对话"},
     priority=2,
-    permission=SUPERUSER,
+    permission=SUPERUSER | PRIVATE | console_private_permission,
     block=True,
 )
 
