@@ -235,15 +235,15 @@ send_a_poke = on_command(
 
 @send_a_poke.handle()
 async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = CommandArg()):
-    user_id = event.get_user_id()
-    group_id: str | None = None
+    user_id: str | int = event.user_id
+    group_id: int | None = None
 
     for segment in message:
         if segment.type == "at":
-            user_id: str = segment.data["qq"]
+            user_id = segment.data["qq"]
 
     if isinstance(event, OneBotGroupMessageEvent):
-        group_id = str(event.group_id)
+        group_id = event.group_id
 
     await send_poke(bot, user_id, group_id)
     await send_a_poke.finish()
