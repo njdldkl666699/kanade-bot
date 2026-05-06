@@ -3,12 +3,12 @@ import json
 import os
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
 
 import uvicorn
 from dotenv import dotenv_values
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from loguru import logger
+from pydantic import BaseModel, Field
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -31,13 +31,25 @@ def _parse_bool(value: str | None, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _load_watchdog_config() -> dict[str, Any]:
+class WatchdogConfig(BaseModel):
+    """Watchdog 配置模型，用于描述服务启动所需的环境参数。"""
+
+    enabled: bool = Field(default=False, description="是否启用 Watchdog 服务")
+    port: int = Field(default=39211, description="Watchdog 服务端口")
+    secret: str = Field(default="", description="GitHub WebHook 签名密钥")
+    ssl_key_path: str = Field(default="", description="HTTPS 私钥文件路径")
+    ssl_cert_path: str = Field(default="", description="HTTPS 证书文件路径")
+
+
+def _load_watchdog_config() -> WatchdogConfig:
     values = _read_env_values()
-    return {
-        "enabled": _parse_bool(values.get("WATCHDOG_ENABLED"), default=False),
-        "port": int(values.get("WATCHDOG_PORT") or 8000),
-        "secret": values.get("WATCHDOG_SECRET") or "",
-    }
+    return WatchdogConfig(
+        enabled=_parse_bool(values.get("WATCHDOG_ENABLED"), default=False),
+        port=int(values.get("WATCHDOG_PORT") or 39211),
+        secret=values.get("WATCHDOG_SECRET") or "",
+        ssl_key_path=values.get("WATCHDOG_SSL_KEY_PATH") or "",
+        ssl_cert_path=values.get("WATCHDOG_SSL_CERT_PATH") or "",
+    )
 
 
 WATCHDOG_CONFIG = _load_watchdog_config()
@@ -76,7 +88,7 @@ async def hook_push(
     x_github_event: str | None = Header(default=None),
 ):
     payload = await request.body()
-    _verify_github_signature(payload, x_hub_signature_256, WATCHDOG_CONFIG["secret"])
+    _verify_github_signature(payload, x_hub_signature_256, WATCHDOG_CONFIG.secret)
 
     try:
         data = json.loads(payload.decode("utf-8"))
@@ -89,13 +101,24 @@ async def hook_push(
 
 
 def main() -> None:
-    if not WATCHDOG_CONFIG["enabled"]:
-        logger.info("Watchdog disabled (WATCHDOG_ENABLED=false)")
+    if not WATCHDOG_CONFIG.enabled:
+        logger.error("Watchdog disabled (WATCHDOG_ENABLED=false)")
         return
 
-    port = WATCHDOG_CONFIG["port"]
-    logger.info("Starting watchdog on 0.0.0.0:{}", port)
-    uvicorn.run(app, host="::", port=port)
+    port = WATCHDOG_CONFIG.port
+    ssl_key_path = WATCHDOG_CONFIG.ssl_key_path
+    ssl_cert_path = WATCHDOG_CONFIG.ssl_cert_path
+    if not ssl_key_path or not ssl_cert_path:
+        logger.error("SSL key or cert path not configured, cannot start Watchdog")
+        return
+
+    uvicorn.run(
+        app,
+        host="::",
+        port=port,
+        ssl_keyfile=ssl_key_path,
+        ssl_certfile=ssl_cert_path,
+    )
 
 
 if __name__ == "__main__":
