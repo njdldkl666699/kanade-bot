@@ -253,7 +253,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = Com
 receive_poke = on_type(
     (PokeNotifyEvent,),
     rule=to_me(),
-    priority=1,
+    priority=100,
     block=True,
 )
 
