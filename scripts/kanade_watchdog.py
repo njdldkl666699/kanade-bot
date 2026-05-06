@@ -1,12 +1,10 @@
-import hmac
+import asyncio
 import json
 import os
-from hashlib import sha256
 from pathlib import Path
 
-import uvicorn
 from dotenv import dotenv_values
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from httpx import AsyncClient, HTTPStatusError, RequestError, Timeout
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -35,91 +33,140 @@ class WatchdogConfig(BaseModel):
     """Watchdog 配置模型，用于描述服务启动所需的环境参数。"""
 
     enabled: bool = Field(default=False, description="是否启用 Watchdog 服务")
-    port: int = Field(default=39211, description="Watchdog 服务端口")
-    secret: str = Field(default="", description="GitHub WebHook 签名密钥")
-    ssl_key_path: str = Field(default="", description="HTTPS 私钥文件路径")
-    ssl_cert_path: str = Field(default="", description="HTTPS 证书文件路径")
+    github_repo: str = Field(default="", description="GitHub 仓库，格式为 owner/repo")
+    github_branch: str = Field(default="main", description="监听的分支名称")
+    github_token: str = Field(default="", description="GitHub 访问令牌（可选）")
+    poll_interval: int = Field(default=30, description="轮询间隔（秒）")
 
 
 def _load_watchdog_config() -> WatchdogConfig:
     values = _read_env_values()
     return WatchdogConfig(
         enabled=_parse_bool(values.get("WATCHDOG_ENABLED"), default=False),
-        port=int(values.get("WATCHDOG_PORT") or 39211),
-        secret=values.get("WATCHDOG_SECRET") or "",
-        ssl_key_path=values.get("WATCHDOG_SSL_KEY_PATH") or "",
-        ssl_cert_path=values.get("WATCHDOG_SSL_CERT_PATH") or "",
+        github_repo=values.get("WATCHDOG_GITHUB_REPO") or "",
+        github_branch=values.get("WATCHDOG_GITHUB_BRANCH") or "main",
+        github_token=values.get("WATCHDOG_GITHUB_TOKEN") or "",
+        poll_interval=int(values.get("WATCHDOG_POLL_INTERVAL") or 30),
     )
 
 
 WATCHDOG_CONFIG = _load_watchdog_config()
 
-app = FastAPI(title="Kanade Watchdog")
+
+def _build_github_headers(token: str) -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "kanade-watchdog",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
-def _verify_github_signature(payload: bytes, signature: str | None, secret: str) -> None:
-    if not secret:
-        logger.warning("WATCHDOG_SECRET is empty, rejecting webhook")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Secret missing")
-    if not signature:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing signature")
+async def _fetch_latest_commit_sha(client: AsyncClient, config: WatchdogConfig) -> str | None:
+    if not config.github_repo:
+        logger.error("WATCHDOG_GITHUB_REPO is empty")
+        return None
 
+    url = f"https://api.github.com/repos/{config.github_repo}/commits/{config.github_branch}"
     try:
-        scheme, digest = signature.split("=", 1)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature format"
-        ) from exc
+        response = await client.get(url)
+        response.raise_for_status()
+    except HTTPStatusError as exc:
+        logger.warning("GitHub API error: {}", exc.response.status_code)
+        return None
+    except RequestError as exc:
+        logger.warning("GitHub API request failed: {}", exc)
+        return None
 
-    if scheme != "sha256":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported signature scheme"
-        )
-
-    expected = hmac.new(secret.encode("utf-8"), payload, sha256).hexdigest()
-    if not hmac.compare_digest(expected, digest):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bad signature")
+    data = response.json()
+    sha = data.get("sha")
+    if not isinstance(sha, str):
+        logger.warning("Unexpected GitHub API response: {}", json.dumps(data))
+        return None
+    return sha
 
 
-@app.post("/hook/push")
-async def hook_push(
-    request: Request,
-    x_hub_signature_256: str | None = Header(default=None),
-    x_github_event: str | None = Header(default=None),
-):
-    payload = await request.body()
-    _verify_github_signature(payload, x_hub_signature_256, WATCHDOG_CONFIG.secret)
+async def _run_command(*args: str) -> tuple[int, str]:
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        cwd=str(ROOT_DIR),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    output = await process.communicate()
+    text = ""
+    if output[0]:
+        text = output[0].decode("utf-8", errors="replace").strip()
+    return process.returncode or 0, text
 
+
+async def _start_core_process() -> asyncio.subprocess.Process:
+    logger.info("Starting core process with 'nb run'")
+    return await asyncio.create_subprocess_shell(
+        "nb run",
+        cwd=str(ROOT_DIR),
+    )
+
+
+async def _stop_core_process(process: asyncio.subprocess.Process) -> None:
+    if process.returncode is not None:
+        return
+
+    logger.info("Stopping core process (pid={})", process.pid)
+    process.terminate()
     try:
-        data = json.loads(payload.decode("utf-8"))
-    except json.JSONDecodeError:
-        data = {"raw": payload.decode("utf-8", errors="replace")}
-
-    logger.info("GitHub webhook event: {}", x_github_event or "unknown")
-    logger.info("Webhook payload: {}", json.dumps(data, ensure_ascii=False))
-    return {"ok": True}
+        await asyncio.wait_for(process.wait(), timeout=10)
+    except asyncio.TimeoutError:
+        logger.warning("Core process did not exit in time; killing")
+        process.kill()
+        await process.wait()
 
 
-def main() -> None:
+async def main() -> None:
     if not WATCHDOG_CONFIG.enabled:
         logger.error("Watchdog disabled (WATCHDOG_ENABLED=false)")
         return
 
-    port = WATCHDOG_CONFIG.port
-    ssl_key_path = WATCHDOG_CONFIG.ssl_key_path
-    ssl_cert_path = WATCHDOG_CONFIG.ssl_cert_path
-    if not ssl_key_path or not ssl_cert_path:
-        logger.error("SSL key or cert path not configured, cannot start Watchdog")
+    if WATCHDOG_CONFIG.poll_interval <= 0:
+        logger.error("WATCHDOG_POLL_INTERVAL must be greater than 0")
         return
 
-    uvicorn.run(
-        app,
-        host="::",
-        port=port,
-        ssl_keyfile=ssl_key_path,
-        ssl_certfile=ssl_cert_path,
+    logger.info(
+        "Watchdog polling GitHub repo '{}' on branch '{}' every {}s",
+        WATCHDOG_CONFIG.github_repo,
+        WATCHDOG_CONFIG.github_branch,
+        WATCHDOG_CONFIG.poll_interval,
     )
+
+    last_sha: str | None = None
+    timeout = Timeout(10.0)
+    headers = _build_github_headers(WATCHDOG_CONFIG.github_token)
+    core_process = await _start_core_process()
+    async with AsyncClient(timeout=timeout, headers=headers) as client:
+        while True:
+            if core_process.returncode is not None:
+                logger.warning("Core process exited with code {}", core_process.returncode)
+                core_process = await _start_core_process()
+
+            sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
+            if sha:
+                if last_sha is None:
+                    logger.info("Current commit: {}", sha)
+                elif sha != last_sha:
+                    logger.info("New commit detected: {}", sha)
+                    return_code, output = await _run_command("git", "pull", "--ff-only")
+                    if output:
+                        logger.info("git pull output:\n{}", output)
+                    if return_code == 0:
+                        await _stop_core_process(core_process)
+                        core_process = await _start_core_process()
+                    else:
+                        logger.error("git pull failed with code {}", return_code)
+                last_sha = sha
+
+            await asyncio.sleep(WATCHDOG_CONFIG.poll_interval)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
