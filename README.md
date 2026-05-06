@@ -23,7 +23,6 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
 使用方式：
 
 1. 在`.env`或`.env.prod`中设置：
-   - `WATCHDOG_ENABLED=true`
    - `WATCHDOG_GITHUB_REPO=owner/repo`
    - `WATCHDOG_GITHUB_BRANCH=main`
    - `WATCHDOG_GITHUB_TOKEN=...`（可选，用于提高 API 限额）

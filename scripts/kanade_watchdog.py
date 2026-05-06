@@ -24,16 +24,9 @@ def _read_env_values() -> dict[str, str | None]:
     return {**base_env, **env_values}
 
 
-def _parse_bool(value: str | None, *, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
 class WatchdogConfig(BaseModel):
     """Watchdog 配置模型，用于描述服务启动所需的环境参数。"""
 
-    enabled: bool = Field(default=False, description="是否启用 Watchdog 服务")
     github_repo: str = Field(default="", description="GitHub 仓库，格式为 owner/repo")
     github_branch: str = Field(default="main", description="监听的分支名称")
     github_token: str = Field(default="", description="GitHub 访问令牌（可选）")
@@ -43,7 +36,6 @@ class WatchdogConfig(BaseModel):
 def _load_watchdog_config() -> WatchdogConfig:
     values = _read_env_values()
     return WatchdogConfig(
-        enabled=_parse_bool(values.get("WATCHDOG_ENABLED"), default=False),
         github_repo=values.get("WATCHDOG_GITHUB_REPO") or "",
         github_branch=values.get("WATCHDOG_GITHUB_BRANCH") or "main",
         github_token=values.get("WATCHDOG_GITHUB_TOKEN") or "",
@@ -125,10 +117,6 @@ async def _stop_core_process(process: asyncio.subprocess.Process) -> None:
 
 
 async def main() -> None:
-    if not WATCHDOG_CONFIG.enabled:
-        logger.error("Watchdog disabled (WATCHDOG_ENABLED=false)")
-        return
-
     if WATCHDOG_CONFIG.poll_interval <= 0:
         logger.error("WATCHDOG_POLL_INTERVAL must be greater than 0")
         return
