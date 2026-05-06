@@ -16,6 +16,20 @@
 4. 配置RAG功能（可选）：在`.env`或`.env.prod`中设置`CHAT_RAG_ENABLED=true`（默认为false），配置`scripts/kanade_rag_server.py`中所需env，并使用`uv run scripts/kanade_rag_server.py`来启动RAG RPC服务端；
 5. 运行机器人：`nb run`。
 
+## Watchdog（自动更新与重启）
+
+Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pull --ff-only` 并重启核心进程（`nb run`）。
+
+使用方式：
+
+1. 在`.env`或`.env.prod`中设置：
+   - `WATCHDOG_ENABLED=true`
+   - `WATCHDOG_GITHUB_REPO=owner/repo`
+   - `WATCHDOG_GITHUB_BRANCH=main`
+   - `WATCHDOG_GITHUB_TOKEN=...`（可选，用于提高 API 限额）
+   - `WATCHDOG_POLL_INTERVAL=30`
+2. 启动 Watchdog：`uv run scripts/kanade_watchdog.py`
+
 ## 常见问题
 
 1. 服务器查询返回的图片字体不好看：支持Unifont，可以下载Unifont字体并安装到系统中。

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import signal
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -139,33 +140,57 @@ async def main() -> None:
         WATCHDOG_CONFIG.poll_interval,
     )
 
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def _request_shutdown(signal_name: str) -> None:
+        logger.info("Received {}, shutting down", signal_name)
+        shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _request_shutdown, sig.name)
+        except NotImplementedError:
+            signal.signal(
+                sig,
+                lambda _signum, _frame, s=sig: loop.call_soon_threadsafe(_request_shutdown, s.name),
+            )
+
     last_sha: str | None = None
     timeout = Timeout(10.0)
     headers = _build_github_headers(WATCHDOG_CONFIG.github_token)
     core_process = await _start_core_process()
-    async with AsyncClient(timeout=timeout, headers=headers) as client:
-        while True:
-            if core_process.returncode is not None:
-                logger.warning("Core process exited with code {}", core_process.returncode)
-                core_process = await _start_core_process()
+    try:
+        async with AsyncClient(timeout=timeout, headers=headers) as client:
+            while not shutdown_event.is_set():
+                if core_process.returncode is not None:
+                    logger.warning("Core process exited with code {}", core_process.returncode)
+                    core_process = await _start_core_process()
 
-            sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
-            if sha:
-                if last_sha is None:
-                    logger.info("Current commit: {}", sha)
-                elif sha != last_sha:
-                    logger.info("New commit detected: {}", sha)
-                    return_code, output = await _run_command("git", "pull", "--ff-only")
-                    if output:
-                        logger.info("git pull output:\n{}", output)
-                    if return_code == 0:
-                        await _stop_core_process(core_process)
-                        core_process = await _start_core_process()
-                    else:
-                        logger.error("git pull failed with code {}", return_code)
-                last_sha = sha
+                sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
+                if sha:
+                    if last_sha is None:
+                        logger.info("Current commit: {}", sha)
+                    elif sha != last_sha:
+                        logger.info("New commit detected: {}", sha)
+                        return_code, output = await _run_command("git", "pull", "--ff-only")
+                        if output:
+                            logger.info("git pull output:\n{}", output)
+                        if return_code == 0:
+                            await _stop_core_process(core_process)
+                            core_process = await _start_core_process()
+                        else:
+                            logger.error("git pull failed with code {}", return_code)
+                    last_sha = sha
 
-            await asyncio.sleep(WATCHDOG_CONFIG.poll_interval)
+                try:
+                    await asyncio.wait_for(
+                        shutdown_event.wait(), timeout=WATCHDOG_CONFIG.poll_interval
+                    )
+                except asyncio.TimeoutError:
+                    continue
+    finally:
+        await _stop_core_process(core_process)
 
 
 if __name__ == "__main__":
