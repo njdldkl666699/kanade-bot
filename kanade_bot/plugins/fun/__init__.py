@@ -411,7 +411,8 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
         await random_duanzi.finish()
 
     if isinstance(bot, OneBot):
-        duanzi = duanzi_to_onebot_message(
+        duanzi = await duanzi_to_onebot_message(
+            bot,
             duanzi,
             node_threshold=500,
             chaos_face=chaos_face,

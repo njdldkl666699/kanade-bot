@@ -3,8 +3,9 @@ import random
 from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
-from nonebot.adapters.onebot.v11 import Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
+from ..util import get_onebot_info
 from .config import Config
 
 cfg = get_plugin_config(Config)
@@ -47,7 +48,8 @@ def _face_or_emoji_to_onebot_segment(face_id_or_emoji: str | int) -> MessageSegm
         return face_id_or_emoji
 
 
-def duanzi_to_onebot_message(
+async def duanzi_to_onebot_message(
+    bot: Bot,
     duanzi: str,
     *,
     node_threshold: int = 500,
@@ -82,11 +84,9 @@ def duanzi_to_onebot_message(
     if len(duanzi) <= node_threshold:
         return message
 
-    node_custom = MessageSegment.node_custom(
-        user_id=cfg.bot_id,
-        nickname=cfg.bot_nickname,
-        content=duanzi,
-    )
+    # 超过长度阈值则发送为合并转发消息
+    bot_id, bot_nickname = await get_onebot_info(bot)
+    node_custom = MessageSegment.node_custom(bot_id, bot_nickname, duanzi)
     return Message(node_custom)
 
 

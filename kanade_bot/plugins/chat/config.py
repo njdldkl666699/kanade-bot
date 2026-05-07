@@ -23,11 +23,6 @@ class Config(BaseModel):
     chat_memories_dir_path: str = "assets/memories"
     """记忆文件存储路径，每个记忆为一个 Markdown 文件"""
 
-    bot_id: int
-    """使用OneBot协议时，聊天机器人的QQ号"""
-    bot_nickname: str
-    """使用OneBot协议时，聊天机器人的昵称"""
-
     chat_rag_enabled: bool = False
     """是否启用RAG功能"""
     chat_rag_port: int = 39831

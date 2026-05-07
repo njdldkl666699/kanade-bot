@@ -2,17 +2,19 @@ import random
 import re
 from base64 import b64encode
 from pathlib import Path
+from typing import cast
 
 from copilot.generated.session_events import AssistantMessageData
 from copilot.session import Attachment
 from nonebot import logger
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from ..util import OneBotMessageSegmentMeme, PlatformType, extract_session_info
+from ..util import OneBotMessageSegmentMeme, PlatformType, extract_session_info, get_onebot_info
 from .ban import is_banned
 from .client import file_client as client
 from .config import cfg, configs
@@ -105,6 +107,7 @@ def split_content_preserving_code_blocks(content: str) -> list[str]:
 
 async def finish_onebot_message(
     matcher: type[Matcher],
+    bot: OneBot,
     chunks: list[str],
     *,
     reply_id: int | None = None,
@@ -153,9 +156,10 @@ async def finish_onebot_message(
         await matcher.finish()
 
     # 消息数>3，合并转发
+    bot_id, bot_nickname = await get_onebot_info(bot)
     node_custom_message = OneBotMessage()
     for message in messages:
-        node_custom_message += MessageSegment.node_custom(cfg.bot_id, cfg.bot_nickname, message)
+        node_custom_message += MessageSegment.node_custom(bot_id, bot_nickname, message)
     await matcher.finish(node_custom_message)
 
 
@@ -216,7 +220,7 @@ async def send_message_in_chunks(
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):
         chunks = split_content_preserving_code_blocks(content)
-        await finish_onebot_message(matcher, chunks, reply_id=event.message_id)
+        await finish_onebot_message(matcher, cast(OneBot, bot), chunks, reply_id=event.message_id)
 
     # Console消息直接发送原始内容
     await matcher.finish(content)

@@ -8,10 +8,12 @@ from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
+from ..util import get_onebot_info
 from .config import Config
 
 require("nonebot_plugin_htmlrender")
@@ -91,13 +93,6 @@ doc_names: set[str] = set()
 
 
 @help.handle()
-async def sakura_bot(arg_msg: Message = CommandArg()):
-    sub_command = arg_msg.extract_plain_text().strip()
-    if not sub_command:
-        await help.send("Sakura Bot帮助文档：\n" + cfg.help_sakura_bot_link)
-
-
-@help.handle()
 async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
     doc_name = arg_msg.extract_plain_text().strip()
     if doc_name not in doc_names:
@@ -112,18 +107,28 @@ async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
 
 @help.handle()
 async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+    messages = OneBotMessage()
+
     doc_name = arg_msg.extract_plain_text().strip()
     if not doc_name:
         # 发haruki的帮助图片
-        await help.finish(OneBotMessageSegment.image(Path(cfg.help_haruki_image_file_path)))
+        messages.append(OneBotMessageSegment.image(Path(cfg.help_haruki_image_file_path)))
 
     if doc_name not in doc_names:
         doc_name = "index"
     help_image = await ensure_help_image(doc_name)
     if not help_image:
-        await help.finish("帮助文档不可用")
+        messages.append("KanadeBot帮助文档不可用")
+    else:
+        messages.append(OneBotMessageSegment.image(help_image))
 
-    await help.finish(OneBotMessageSegment.image(help_image))
+    if len(messages) == 1:
+        # 直接发
+        await help.finish(messages)
+
+    # 发合并转发消息
+    bot_id, bot_nickname = await get_onebot_info(bot)
+    await help.finish(OneBotMessageSegment.node_custom(bot_id, bot_nickname, messages))
 
 
 driver = get_driver()

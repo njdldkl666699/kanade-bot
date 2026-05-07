@@ -180,3 +180,11 @@ async def send_poke(
 def console_private_permission(event: ConsolePrivateMessageEvent) -> bool:
     """Console私聊权限检查"""
     return True
+
+
+async def get_onebot_info(bot: OneBot) -> tuple[int, str]:
+    """获取OneBot机器人的ID和昵称"""
+    bot_id = int(bot.self_id)
+    bot_info = await bot.get_stranger_info(user_id=bot_id)
+    bot_nickname: str = bot_info.get("nickname", "宵崎奏")
+    return bot_id, bot_nickname
