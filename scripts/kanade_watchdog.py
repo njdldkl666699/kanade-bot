@@ -116,6 +116,65 @@ async def _stop_core_process(process: asyncio.subprocess.Process) -> None:
         await process.wait()
 
 
+async def _restart_core_process(
+    process: asyncio.subprocess.Process,
+) -> asyncio.subprocess.Process:
+    await _stop_core_process(process)
+    return await _start_core_process()
+
+
+async def _ensure_core_running(
+    process: asyncio.subprocess.Process,
+) -> asyncio.subprocess.Process:
+    if process.returncode is None:
+        return process
+
+    logger.warning("Core process exited with code {}", process.returncode)
+    return await _start_core_process()
+
+
+async def _pull_and_sync() -> bool:
+    return_code, output = await _run_command("git", "pull", "--ff-only")
+    if output:
+        logger.info("git pull output:\n{}", output)
+    if return_code != 0:
+        logger.error("git pull failed with code {}", return_code)
+        return False
+
+    sync_code, sync_output = await _run_command("uv", "sync")
+    if sync_output:
+        logger.info("uv sync output:\n{}", sync_output)
+    if sync_code != 0:
+        logger.error("uv sync failed with code {}", sync_code)
+
+    return True
+
+
+async def _handle_commit_update(
+    core_process: asyncio.subprocess.Process,
+    last_sha: str | None,
+    sha: str,
+) -> tuple[asyncio.subprocess.Process, str | None]:
+    if last_sha is None:
+        logger.info("Current commit: {}", sha)
+        return core_process, sha
+
+    if sha == last_sha:
+        return core_process, last_sha
+
+    logger.info("New commit detected: {}", sha)
+    if await _pull_and_sync():
+        core_process = await _restart_core_process(core_process)
+    return core_process, sha
+
+
+async def _wait_for_shutdown(event: asyncio.Event, timeout: int) -> None:
+    try:
+        await asyncio.wait_for(event.wait(), timeout=timeout)
+    except asyncio.TimeoutError:
+        return
+
+
 async def main() -> None:
     if WATCHDOG_CONFIG.poll_interval <= 0:
         logger.error("WATCHDOG_POLL_INTERVAL must be greater than 0")
@@ -151,32 +210,14 @@ async def main() -> None:
     try:
         async with AsyncClient(timeout=timeout, headers=headers) as client:
             while not shutdown_event.is_set():
-                if core_process.returncode is not None:
-                    logger.warning("Core process exited with code {}", core_process.returncode)
-                    core_process = await _start_core_process()
-
+                core_process = await _ensure_core_running(core_process)
                 sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
-                if sha:
-                    if last_sha is None:
-                        logger.info("Current commit: {}", sha)
-                    elif sha != last_sha:
-                        logger.info("New commit detected: {}", sha)
-                        return_code, output = await _run_command("git", "pull", "--ff-only")
-                        if output:
-                            logger.info("git pull output:\n{}", output)
-                        if return_code == 0:
-                            await _stop_core_process(core_process)
-                            core_process = await _start_core_process()
-                        else:
-                            logger.error("git pull failed with code {}", return_code)
-                    last_sha = sha
-
-                try:
-                    await asyncio.wait_for(
-                        shutdown_event.wait(), timeout=WATCHDOG_CONFIG.poll_interval
-                    )
-                except asyncio.TimeoutError:
+                if not sha:
+                    logger.warning("Failed to fetch latest commit SHA")
                     continue
+
+                core_process, last_sha = await _handle_commit_update(core_process, last_sha, sha)
+                await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
     finally:
         await _stop_core_process(core_process)
 
