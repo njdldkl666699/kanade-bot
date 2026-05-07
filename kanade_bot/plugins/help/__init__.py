@@ -107,28 +107,33 @@ async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
 
 @help.handle()
 async def _(bot: OneBot, arg_msg: Message = CommandArg()):
-    messages = OneBotMessage()
+    segments = OneBotMessage()
 
     doc_name = arg_msg.extract_plain_text().strip()
     if not doc_name:
         # 发haruki的帮助图片
-        messages.append(OneBotMessageSegment.image(Path(cfg.help_haruki_image_file_path)))
+        segments.append(OneBotMessageSegment.image(Path(cfg.help_haruki_image_file_path)))
 
     if doc_name not in doc_names:
         doc_name = "index"
     help_image = await ensure_help_image(doc_name)
     if not help_image:
-        messages.append("KanadeBot帮助文档不可用")
+        segments.append("KanadeBot帮助文档不可用")
     else:
-        messages.append(OneBotMessageSegment.image(help_image))
+        segments.append(OneBotMessageSegment.image(help_image))
 
-    if len(messages) == 1:
+    if len(segments) == 1:
         # 直接发
-        await help.finish(messages)
+        await help.finish(segments)
 
     # 发合并转发消息
     bot_id, bot_nickname = await get_onebot_info(bot)
-    await help.finish(OneBotMessageSegment.node_custom(bot_id, bot_nickname, messages))
+    node_custom_message = OneBotMessage()
+    for segment in segments:
+        node_custom_message += OneBotMessageSegment.node_custom(
+            bot_id, bot_nickname, OneBotMessage(segment)
+        )
+    await help.finish(node_custom_message)
 
 
 driver = get_driver()
