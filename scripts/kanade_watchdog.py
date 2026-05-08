@@ -94,6 +94,19 @@ async def _run_command(*args: str) -> tuple[int, str]:
     return process.returncode or 0, text
 
 
+async def _get_local_commit_sha() -> str | None:
+    return_code, output = await _run_command("git", "rev-parse", "HEAD")
+    if return_code != 0:
+        logger.error("Failed to get local commit SHA")
+        return None
+
+    if not output:
+        logger.error("Local commit SHA is empty")
+        return None
+
+    return output.splitlines()[0].strip()
+
+
 async def _start_core_process() -> asyncio.subprocess.Process:
     logger.info("Starting core process with 'nb run'")
     return await asyncio.create_subprocess_shell(
@@ -152,20 +165,21 @@ async def _pull_and_sync() -> bool:
 
 async def _handle_commit_update(
     core_process: asyncio.subprocess.Process,
-    last_sha: str | None,
-    sha: str,
+    last_reported_sha: str | None,
+    local_sha: str,
+    remote_sha: str,
 ) -> tuple[asyncio.subprocess.Process, str | None]:
-    if last_sha is None:
-        logger.info("Current commit: {}", sha)
-        return core_process, sha
+    if remote_sha == local_sha:
+        if last_reported_sha != remote_sha:
+            logger.info("Current commit: {}", remote_sha)
+        return core_process, remote_sha
 
-    if sha == last_sha:
-        return core_process, last_sha
+    if last_reported_sha != remote_sha:
+        logger.info("New commit detected: {} (local {})", remote_sha, local_sha)
 
-    logger.info("New commit detected: {}", sha)
     if await _pull_and_sync():
         core_process = await _restart_core_process(core_process)
-    return core_process, sha
+    return core_process, remote_sha
 
 
 async def _wait_for_shutdown(event: asyncio.Event, timeout: int) -> None:
@@ -203,7 +217,7 @@ async def main() -> None:
                 lambda _signum, _frame, s=sig: loop.call_soon_threadsafe(_request_shutdown, s.name),
             )
 
-    last_sha: str | None = None
+    last_reported_sha: str | None = None
     timeout = Timeout(10.0)
     headers = _build_github_headers(WATCHDOG_CONFIG.github_token)
     core_process = await _start_core_process()
@@ -211,12 +225,23 @@ async def main() -> None:
         async with AsyncClient(timeout=timeout, headers=headers) as client:
             while not shutdown_event.is_set():
                 core_process = await _ensure_core_running(core_process)
-                sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
-                if not sha:
+                remote_sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
+                if not remote_sha:
                     logger.warning("Failed to fetch latest commit SHA")
+                    await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
                     continue
 
-                core_process, last_sha = await _handle_commit_update(core_process, last_sha, sha)
+                local_sha = await _get_local_commit_sha()
+                if not local_sha:
+                    await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
+                    continue
+
+                core_process, last_reported_sha = await _handle_commit_update(
+                    core_process,
+                    last_reported_sha,
+                    local_sha,
+                    remote_sha,
+                )
                 await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
     finally:
         await _stop_core_process(core_process)
