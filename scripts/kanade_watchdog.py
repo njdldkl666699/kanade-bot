@@ -109,24 +109,74 @@ async def _get_local_commit_sha() -> str | None:
 
 async def _start_core_process() -> asyncio.subprocess.Process:
     logger.info("Starting core process with 'nb run'")
-    return await asyncio.create_subprocess_shell(
-        "nb run",
+    return await asyncio.create_subprocess_exec(
+        "nb",
+        "run",
         cwd=str(ROOT_DIR),
+        start_new_session=True,
     )
 
 
+def _get_core_process_group_id(process: asyncio.subprocess.Process) -> int:
+    try:
+        return os.getpgid(process.pid)
+    except ProcessLookupError:
+        return process.pid
+
+
+def _send_core_process_group_signal(pgid: int, sig: int) -> bool:
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _core_process_group_exists(pgid: int) -> bool:
+    return _send_core_process_group_signal(pgid, 0)
+
+
+async def _wait_for_core_process_exit(
+    process: asyncio.subprocess.Process,
+    pgid: int,
+    timeout: float,
+) -> bool:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+
+    while True:
+        process_exited = process.returncode is not None
+        group_exited = not _core_process_group_exists(pgid)
+        if process_exited and group_exited:
+            return True
+
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return False
+
+        step = min(0.2, remaining)
+        if process.returncode is None:
+            try:
+                await asyncio.wait_for(process.wait(), timeout=step)
+            except asyncio.TimeoutError:
+                pass
+        else:
+            await asyncio.sleep(step)
+
+
 async def _stop_core_process(process: asyncio.subprocess.Process) -> None:
-    if process.returncode is not None:
+    pgid = _get_core_process_group_id(process)
+    logger.info("Stopping core process group (pid={}, pgid={})", process.pid, pgid)
+    _send_core_process_group_signal(pgid, signal.SIGTERM)
+
+    if await _wait_for_core_process_exit(process, pgid, timeout=30):
         return
 
-    logger.info("Stopping core process (pid={})", process.pid)
-    process.terminate()
-    try:
-        await asyncio.wait_for(process.wait(), timeout=10)
-    except asyncio.TimeoutError:
-        logger.warning("Core process did not exit in time; killing")
-        process.kill()
-        await process.wait()
+    logger.warning("Core process did not exit in time; killing")
+    _send_core_process_group_signal(pgid, signal.SIGKILL)
+
+    if not await _wait_for_core_process_exit(process, pgid, timeout=30):
+        logger.warning("Core process group may still have leftover processes")
 
 
 async def _restart_core_process(
@@ -143,6 +193,7 @@ async def _ensure_core_running(
         return process
 
     logger.warning("Core process exited with code {}", process.returncode)
+    await _stop_core_process(process)
     return await _start_core_process()
 
 
@@ -209,13 +260,7 @@ async def main() -> None:
         shutdown_event.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, _request_shutdown, sig.name)
-        except NotImplementedError:
-            signal.signal(
-                sig,
-                lambda _signum, _frame, s=sig: loop.call_soon_threadsafe(_request_shutdown, s.name),
-            )
+        loop.add_signal_handler(sig, _request_shutdown, sig.name)
 
     last_reported_sha: str | None = None
     timeout = Timeout(10.0)
