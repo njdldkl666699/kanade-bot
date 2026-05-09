@@ -13,7 +13,8 @@ from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from ..util import get_onebot_info
+from kanade_bot.utils.onebot11 import get_onebot_info
+
 from .config import Config
 
 require("nonebot_plugin_htmlrender")

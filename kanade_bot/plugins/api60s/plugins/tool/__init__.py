@@ -1,13 +1,13 @@
 from nonebot import on_command
 from nonebot.adapters import Event, Message
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventPlainText
 from nonebot.plugin import PluginMetadata
-from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.typing import T_State
 
-from kanade_bot.plugins.api60s.client import client
-from kanade_bot.plugins.util import parse_arg_message
+from kanade_bot.utils.parser import parse_arg_message
 
+from ...client import client
 from .cache import TranslateLang, TranslateLangCache
 from .config import Config
 

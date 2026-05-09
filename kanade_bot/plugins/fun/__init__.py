@@ -13,7 +13,9 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
-from ..util import OneBotMessageSegmentMeme, bool_from_str, parse_arg_message
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
+from kanade_bot.utils.parser import bool_from_str, parse_arg_message
+
 from .config import Config
 from .duanzi import (
     add_duanzi,

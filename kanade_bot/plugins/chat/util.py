@@ -8,13 +8,16 @@ from copilot.generated.session_events import AssistantMessageData
 from copilot.session import Attachment
 from nonebot import logger
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from ..util import OneBotMessageSegmentMeme, PlatformType, extract_session_info, get_onebot_info
+from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
+from kanade_bot.utils.session import extract_session_info
+
 from .ban import is_banned
 from .client import file_client as client
 from .config import cfg, configs

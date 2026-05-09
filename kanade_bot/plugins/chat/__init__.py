@@ -15,12 +15,10 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from ..util import (
-    build_sender_info,
-    console_private_permission,
-    extract_session_info,
-    parse_arg_message,
-)
+from kanade_bot.utils.common import console_private_permission
+from kanade_bot.utils.parser import build_sender_info, parse_arg_message
+from kanade_bot.utils.session import extract_session_info
+
 from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config

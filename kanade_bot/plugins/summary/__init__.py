@@ -15,7 +15,9 @@ from nonebot.plugin import PluginMetadata
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
-from ..util import build_sender_info, extract_session_info
+from kanade_bot.utils.parser import build_sender_info
+from kanade_bot.utils.session import extract_session_info
+
 from .config import Config
 from .summarizer import summarizer
 
@@ -142,7 +144,7 @@ async def _(
     if isinstance(bot, OneBot):
         summary = await summary_future
         try:
-            await bot.delete_msg(message_id=response.message_id)
+            await bot.delete_msg(message_id=response["message_id"])
         except Exception as e:
             logger.warning("删除总结提示消息失败: {}", e)
 

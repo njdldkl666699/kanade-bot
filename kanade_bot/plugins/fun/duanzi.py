@@ -5,7 +5,8 @@ from pathlib import Path
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
-from ..util import get_onebot_info
+from kanade_bot.utils.onebot11 import get_onebot_info
+
 from .config import Config
 
 cfg = get_plugin_config(Config)

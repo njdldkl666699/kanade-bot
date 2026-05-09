@@ -18,7 +18,9 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 
-from ..util import parse_arg_message, send_poke, set_msg_emoji_like
+from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
+from kanade_bot.utils.parser import parse_arg_message
+
 from .config import Config
 from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule

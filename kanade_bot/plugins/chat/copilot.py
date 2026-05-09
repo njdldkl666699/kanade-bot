@@ -10,7 +10,9 @@ from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
 from nonebot import get_driver, logger
 
-from ..util import SessionInfo, build_sender_info
+from kanade_bot.utils.parser import build_sender_info
+from kanade_bot.utils.session import SessionInfo
+
 from .config import cfg
 from .memory import delete_session_memory, set_memory_context
 from .tool import (

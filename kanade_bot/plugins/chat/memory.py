@@ -5,7 +5,8 @@ from typing import Literal
 
 from nonebot import logger
 
-from ..util import SessionInfo
+from kanade_bot.utils.session import SessionInfo
+
 from .config import cfg
 
 MemoryType = Literal["user", "group", "session"]
