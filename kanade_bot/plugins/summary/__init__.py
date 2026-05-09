@@ -1,6 +1,6 @@
 from typing import Any
 
-from nonebot import get_plugin_config, on_command, require
+from nonebot import get_plugin_config, logger, on_command, require
 from nonebot.adapters import Bot, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import Message as ConsoleMessage
@@ -141,11 +141,13 @@ async def _(
 
     if isinstance(bot, OneBot):
         summary = await summary_future
-        await bot.delete_msg(message_id=response)
+        try:
+            await bot.delete_msg(message_id=response.message_id)
+        except Exception as e:
+            logger.warning("删除总结提示消息失败: {}", e)
 
         if not summary:
             await summarize.finish("总结失败")
-
         image = await md_to_pic(summary)
         await summarize.finish(OneBotMessageSegment.image(image))
 
@@ -158,5 +160,4 @@ async def _(
 
         if not summary:
             await summarize.finish("总结失败")
-
         await summarize.finish(summary)

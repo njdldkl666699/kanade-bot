@@ -169,7 +169,7 @@ async def _stop_core_process(process: asyncio.subprocess.Process) -> None:
     logger.info("Stopping core process group (pid={}, pgid={})", process.pid, pgid)
     _send_core_process_group_signal(pgid, signal.SIGTERM)
 
-    if await _wait_for_core_process_exit(process, pgid, timeout=30):
+    if await _wait_for_core_process_exit(process, pgid, timeout=90):
         return
 
     logger.warning("Core process did not exit in time; killing")
