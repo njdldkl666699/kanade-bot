@@ -19,7 +19,7 @@ from kanade_bot.utils.parser import build_sender_info
 from kanade_bot.utils.session import extract_session_info
 
 from .config import Config
-from .summarizer import summarizer
+from .summarizer import SUMMARIZER
 
 require("nonebot_plugin_htmlrender")
 
@@ -50,7 +50,7 @@ async def record_recv_msg(
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"$ {user_info} : {message_str}"
 
-    summarizer.add_message(session_info.session_id, message_str)
+    SUMMARIZER.add_message(session_info.session_id, message_str)
 
 
 @Bot.on_called_api
@@ -97,7 +97,7 @@ async def record_send_msg(
     else:
         return
 
-    summarizer.add_message(session_id, message_str)
+    SUMMARIZER.add_message(session_id, message_str)
 
 
 summarize = on_command(
@@ -133,7 +133,7 @@ async def _(
 
     response = await summarize.send("正在总结中，请稍候...")
     # 准备总结消息但不等待
-    summary_future = summarizer.summarize(
+    summary_future = SUMMARIZER.summarize(
         session_info.session_id,
         size,
         is_group=bool(group_name),

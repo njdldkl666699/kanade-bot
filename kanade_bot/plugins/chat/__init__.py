@@ -22,7 +22,7 @@ from kanade_bot.utils.session import extract_session_info
 from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
 from .config import Config, configs, write_chat_config
-from .copilot import copilot
+from .copilot import COPILOT
 from .util import send_message_in_chunks, should_auto_reply
 
 __plugin_meta__ = PluginMetadata(
@@ -105,7 +105,7 @@ async def handle_chat_monitor(
     # 将用户消息添加到会话缓冲区
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info} : {message_str}"
-    await copilot.add_message(session_id, message_str)
+    await COPILOT.add_message(session_id, message_str)
 
 
 ### 重置会话命令
@@ -121,7 +121,7 @@ chat_reset = on_command(
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
     session_info = await extract_session_info(event)
-    await copilot.reset_session(session_info.session_id)
+    await COPILOT.reset_session(session_info.session_id)
     await chat_reset.finish("会话已重置")
 
 

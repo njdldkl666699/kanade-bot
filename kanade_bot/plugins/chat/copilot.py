@@ -2,14 +2,14 @@ from asyncio import Lock
 from collections import deque
 from pathlib import Path
 
-from copilot import CopilotClient, CopilotSession
-from copilot.client import StopError
+from copilot import CopilotSession
 from copilot.generated.rpc import ModelSwitchToRequest
 from copilot.generated.session_events import AssistantMessageData, SessionEvent, SessionEventType
 from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
-from nonebot import get_driver, logger
+from nonebot import logger
 
+from kanade_bot.utils.common import COPILOT_CLIENT
 from kanade_bot.utils.parser import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
@@ -75,9 +75,6 @@ class CopilotSessionManager:
     }
 
     def __init__(self):
-        self._client = CopilotClient()
-        """Copilot客户端对象，负责与Copilot服务进行通信，创建和恢复会话等操作"""
-
         self.__sessions: dict[str, CopilotSession] = {}
         """会话对象缓存，键为会话ID，值为CopilotSession对象"""
 
@@ -94,11 +91,11 @@ class CopilotSessionManager:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
         new_session = False
         try:
-            session = await self._client.resume_session(session_id, **self.SESSION_CONFIG)
+            session = await COPILOT_CLIENT.resume_session(session_id, **self.SESSION_CONFIG)
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
-            session = await self._client.create_session(
+            session = await COPILOT_CLIENT.create_session(
                 session_id=session_id, **self.SESSION_CONFIG
             )
             new_session = True
@@ -312,28 +309,10 @@ class CopilotSessionManager:
             try:
                 if session:
                     await session.disconnect()
-                await self._client.delete_session(session_id)
+                await COPILOT_CLIENT.delete_session(session_id)
             except RuntimeError as e:
                 logger.warning(f"删除会话{session_id}时发生错误: {e}")
             delete_session_memory(session_id)
 
 
-copilot = CopilotSessionManager()
-
-
-driver = get_driver()
-
-
-@driver.on_startup
-async def startup():
-    await copilot._client.start()
-    logger.info("Copilot客户端已启动")
-
-
-@driver.on_shutdown
-async def shutdown():
-    try:
-        await copilot._client.stop()
-    except* StopError as eg:
-        logger.warning(f"停止Copilot客户端时发生错误: {eg.message}")
-    logger.info("Copilot客户端已关闭")
+COPILOT = CopilotSessionManager()

@@ -3,11 +3,13 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-from copilot import CopilotClient, CopilotSession
-from copilot.client import StopError
-from copilot.session import PermissionHandler, SystemMessageConfig
-from nonebot import get_driver, get_plugin_config, logger
+from copilot import CopilotSession
 from copilot.generated.session_events import AssistantMessageData
+from copilot.session import PermissionHandler, SystemMessageConfig
+from nonebot import get_plugin_config, logger
+
+from kanade_bot.utils.common import COPILOT_CLIENT
+
 from .config import Config
 
 cfg = get_plugin_config(Config)
@@ -37,9 +39,6 @@ class Summarizer:
     }
 
     def __init__(self):
-        self._client = CopilotClient()
-        """Copilot客户端对象，负责与Copilot服务进行通信，创建和恢复会话等操作"""
-
         self._message_records: dict[str, deque[str]] = {}
         """记录每个会话的消息历史，用于生成总结
 
@@ -109,7 +108,7 @@ class Summarizer:
 
         session: CopilotSession | None = None
         try:
-            session = await self._client.create_session(
+            session = await COPILOT_CLIENT.create_session(
                 session_id=copilot_session_id, **self.SESSION_CONFIG
             )
             session_event = await session.send_and_wait(prompt, timeout=timeout)
@@ -127,34 +126,4 @@ class Summarizer:
         return session_event.data.content
 
 
-summarizer = Summarizer()
-
-
-driver = get_driver()
-
-
-@driver.on_startup
-async def startup():
-    try:
-        summarizer.load_message_records()
-        logger.info("总结消息记录已加载")
-    except Exception as e:
-        logger.warning(f"加载总结消息记录时发生错误: {e}")
-
-    await summarizer._client.start()
-    logger.info("总结器 Copilot客户端已启动")
-
-
-@driver.on_shutdown
-async def shutdown():
-    try:
-        summarizer.save_message_records()
-        logger.info("总结消息记录已保存")
-    except Exception as e:
-        logger.warning(f"保存总结消息记录时发生错误: {e}")
-
-    try:
-        await summarizer._client.stop()
-        logger.info("总结器 Copilot客户端已关闭")
-    except* StopError as eg:
-        logger.warning(f"停止总结器 Copilot客户端时发生错误: {eg.message}")
+SUMMARIZER = Summarizer()

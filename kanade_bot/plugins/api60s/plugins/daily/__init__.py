@@ -8,8 +8,7 @@ from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_htmlrender import md_to_pic
 
-from kanade_bot.plugins.api60s.client import client
-
+from ...client import client
 from .config import Config
 
 __plugin_meta__ = PluginMetadata(

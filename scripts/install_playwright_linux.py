@@ -434,8 +434,7 @@ def verify_installation(use_uv=False):
                 for line in err_lines:
                     print(f"       {line}")
             print(
-                "       尝试执行: "
-                f"{python_module_command('playwright', ['install-deps'], use_uv)}"
+                f"       尝试执行: {python_module_command('playwright', ['install-deps'], use_uv)}"
             )
             return False
     except subprocess.TimeoutExpired:

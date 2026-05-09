@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from dotenv import load_dotenv
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field

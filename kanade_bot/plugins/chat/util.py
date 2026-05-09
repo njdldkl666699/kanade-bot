@@ -21,7 +21,7 @@ from kanade_bot.utils.session import extract_session_info
 from .ban import is_banned
 from .client import file_client as client
 from .config import cfg, configs
-from .copilot import copilot
+from .copilot import COPILOT
 from .rag import query
 
 
@@ -39,7 +39,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
         return False
     auto_reply_config = group_config[group_id]
 
-    size = copilot.get_session_prompt_buffer_size(session_id)
+    size = COPILOT.get_session_prompt_buffer_size(session_id)
     threshold = auto_reply_config.threshold
     # 阈值小于等于0，或当前消息数小于阈值，不触发自动回复
     if threshold <= 0 or size < threshold:
@@ -196,7 +196,7 @@ async def send_message_in_chunks(
     session_info = await extract_session_info(event, bot)
     session_id = session_info.session_id
 
-    response, new_session = await copilot.send_and_wait(
+    response, new_session = await COPILOT.send_and_wait(
         session_info,
         message_str,
         rag_docs=rag_docs,
