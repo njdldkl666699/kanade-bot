@@ -129,20 +129,34 @@ async def _(
     group_name = session_info.group_name
     group_or_user_name = group_name or session_info.nickname
 
-    summary = await summarizer.summarize(
+    response = await summarize.send("正在总结中，请稍候...")
+    # 准备总结消息但不等待
+    summary_future = summarizer.summarize(
         session_info.session_id,
         size,
         is_group=bool(group_name),
         group_or_user_name=group_or_user_name,
         timeout=300,
     )
-    if not summary:
-        await summarize.finish("总结失败")
 
-    if not isinstance(bot, OneBot):
-        # Console消息直接发送总结文本
+    if isinstance(bot, OneBot):
+        summary = await summary_future
+        await bot.delete_msg(message_id=response)
+
+        if not summary:
+            await summarize.finish("总结失败")
+
+        image = await md_to_pic(summary)
+        await summarize.finish(OneBotMessageSegment.image(image))
+
+    elif isinstance(bot, ConsoleBot):
+        summary = await summary_future
+        await bot.recall_message(
+            message_id=response.message_id,
+            channel_id=response.channel_id,
+        )
+
+        if not summary:
+            await summarize.finish("总结失败")
+
         await summarize.finish(summary)
-
-    # OneBot消息发送图片
-    image = await md_to_pic(summary)
-    await summarize.finish(OneBotMessageSegment.image(image))
