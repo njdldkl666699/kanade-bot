@@ -2,7 +2,7 @@ import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
-from scripts.banner import get_kanade
+from kanade_bot.utils.banner import get_kanade
 
 
 def init_nonebot():
@@ -20,6 +20,7 @@ def init_nonebot():
     nonebot.load_plugin("nonebot_plugin_status")
     nonebot.load_plugin("nonebot_plugin_apscheduler")
     nonebot.load_plugin("nonebot_plugin_htmlrender")
+    nonebot.load_plugin("nonebot_plugin_disconnect_notice")
 
     nonebot.load_plugins("kanade_bot/plugins")
 

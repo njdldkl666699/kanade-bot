@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v3.12.8"
+version = "v3.12.9"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13, <4.0"
@@ -20,6 +20,7 @@ dependencies = [
     "rpyc>=6.0.2",
     "nonebot-plugin-htmlrender>=0.6.7",
     "emoji>=2.15.0",
+    "nonebot-plugin-disconnect-notice>=0.4.4",
 ]
 
 [tool.nonebot]
@@ -40,6 +41,7 @@ nonebot-adapter-console = [
 nonebot-plugin-status = ["nonebot_plugin_status"]
 nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
 nonebot-plugin-htmlrender = ["nonebot_plugin_htmlrender"]
+nonebot-plugin-disconnect-notice = ["nonebot_plugin_disconnect_notice"]
 
 [dependency-groups]
 dev = ["check-requirements-txt>=1.4.2"]

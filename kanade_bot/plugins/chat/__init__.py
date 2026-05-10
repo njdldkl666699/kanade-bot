@@ -10,12 +10,12 @@ from nonebot.adapters.onebot.v11 import PRIVATE
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.params import CommandArg, EventMessage, EventToMe
+from nonebot.params import CommandArg, EventMessage
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from kanade_bot.utils.common import console_private_permission
+from kanade_bot.utils.common import console_private_permission, not_to_me
 from kanade_bot.utils.parser import build_sender_info, parse_arg_message
 from kanade_bot.utils.session import extract_session_info
 
@@ -59,10 +59,6 @@ async def handle_chat(
         message_str = str(message)
 
     await send_message_in_chunks(chat, bot, event, message_str)
-
-
-def not_to_me(to_me: bool = EventToMe()):
-    return not to_me
 
 
 ### 聊天监听命令

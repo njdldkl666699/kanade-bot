@@ -16,20 +16,20 @@ class TavilySearchParams(BaseModel):
 
 class ReadMemoryParams(BaseModel):
     memory_type: MemoryType = Field(
-        description="要读取的记忆类型：user 为当前用户，group 为当前群聊，session 为当前会话。"
+        description="Memory type to read: user for current user, group for current group chat, session for current session."
     )
 
 
 class WriteMemoryParams(BaseModel):
     memory_type: MemoryType = Field(
-        description="要写入的记忆类型：user 为当前用户，group 为当前群聊，session 为当前会话。"
+        description="Memory type to write: user for current user, group for current group chat, session for current session."
     )
     content: str = Field(
-        description="要写入的 Markdown 内容。replace 模式下这是完整文件内容；append 模式下会追加到文件末尾。"
+        description="Markdown content to write. In replace mode this is the full file content; in append mode it is added to the end."
     )
     mode: WriteMode = Field(
         default="replace",
-        description="写入模式：replace 覆盖当前记忆，append 追加到当前记忆末尾。",
+        description="Write mode: replace overwrites current memory, append adds to the end.",
     )
 
 
@@ -78,9 +78,9 @@ async def tavily_extract(url: str):
 
 @define_tool(
     "list_memes",
-    description="""列出当前可用的表情包字典，键为表情包名称，值为表情包描述。
-需要在回复的消息中使用表情包时，只需使用{{表情包名称}}的格式引用它们，
-例如{{开心}}，发送时将自动替换为相应的表情包图片。""",
+    description="""List the available meme dictionary where keys are meme names and values are descriptions.
+To use a meme in a reply, reference it as {{meme_name}}, for example {{happy}};
+it will be automatically replaced with the corresponding meme image when sent.""",
 )
 def list_memes():
     return configs.memes
@@ -88,12 +88,12 @@ def list_memes():
 
 @define_tool(
     "read_memory",
-    description="""读取 Agent 的 Markdown 记忆。
-记忆分为三类：
-- user：当前用户的长期记忆，跨群聊、跨会话保留。
-- group：当前群聊的长期记忆，只和当前群聊相关。
-- session：当前群聊/私聊会话的短期记忆，重置会话时会被清空。
-当需要了解已记录的偏好、事实、约定或当前会话暂存信息时使用。""",
+    description="""Read your memory.
+Memory types:
+- user: long-term memory for the current user, shared across groups and sessions.
+- group: long-term memory for the current group chat only.
+- session: short-term memory for the current group/private session, cleared on reset.
+Use this to retrieve recorded preferences, facts, agreements, or temporary session notes, and any other content that needs to be remembered persistently.""",
 )
 def read_memory(params: ReadMemoryParams, invocation: ToolInvocation) -> str:
     logger.info("模型调用工具{}，读取{}记忆", read_memory.name, params.memory_type)
@@ -102,12 +102,12 @@ def read_memory(params: ReadMemoryParams, invocation: ToolInvocation) -> str:
 
 @define_tool(
     "write_memory",
-    description="""写入 Agent 的 Markdown 记忆。
-记忆分为三类：
-- user：当前用户的长期记忆，跨群聊、跨会话保留，适合记录用户偏好、长期事实和稳定约定。
-- group：当前群聊的长期记忆，只和当前群聊相关，适合记录群内约定、群聊背景和共同偏好。
-- session：当前群聊/私聊会话的短期记忆，重置会话时会被清空，适合记录当前话题的临时状态。
-只记录用户明确表达或对后续对话明显有帮助的信息，内容使用 Markdown。""",
+    description="""Write your memory.
+Memory types:
+- user: long-term memory for the current user, shared across groups and sessions; good for stable preferences and long-term facts.
+- group: long-term memory for the current group chat only; good for group agreements, context, and shared preferences.
+- session: short-term memory for the current group/private session, cleared on reset; good for temporary state.
+Use this to record preferences, facts, agreements, or temporary session notes, and any other content that needs to be remembered persistently.""",
 )
 def write_memory(params: WriteMemoryParams, invocation: ToolInvocation) -> str:
     logger.info(
@@ -127,7 +127,7 @@ def write_memory(params: WriteMemoryParams, invocation: ToolInvocation) -> str:
 
 @define_tool(
     "view_image",
-    description="查看图片工具，输入一个或多个图片URL，返回图片二进制内容",
+    description="Image viewer tool. Provide one or more image URLs and it returns the image binary content.",
 )
 async def view_image(urls: list[str]) -> ToolResult:
     binary_results_for_llm: list[ToolBinaryResult] = []
