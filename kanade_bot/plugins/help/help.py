@@ -74,12 +74,12 @@ driver = get_driver()
 
 @driver.on_startup
 def on_startup():
-    global doc_names
+    global DOC_NAMES
 
     doc_dir = Path(cfg.help_docs_dir_path)
     if not doc_dir.is_dir():
         logger.warning(f"帮助文档目录不存在，路径: {doc_dir.absolute()}")
         return
 
-    doc_names = {file.stem for file in doc_dir.glob("*.md")}
-    logger.info(f"加载帮助文档完成，文档列表: {doc_names}")
+    DOC_NAMES = {file.stem for file in doc_dir.glob("*.md")}
+    logger.info(f"加载帮助文档完成，文档列表: {DOC_NAMES}")
