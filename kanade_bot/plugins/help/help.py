@@ -81,5 +81,5 @@ def on_startup():
         logger.warning(f"帮助文档目录不存在，路径: {doc_dir.absolute()}")
         return
 
-    DOC_NAMES = {file.stem for file in doc_dir.glob("*.md")}
+    DOC_NAMES.update({file.stem for file in doc_dir.glob("*.md")})
     logger.info(f"加载帮助文档完成，文档列表: {DOC_NAMES}")
