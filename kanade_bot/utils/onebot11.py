@@ -68,3 +68,7 @@ class BotOfflineNoticeEvent(NoticeEvent):
     @override
     def get_user_id(self) -> str:
         return str(self.user_id)
+
+    @override
+    def get_session_id(self) -> str:
+        return str(self.user_id)

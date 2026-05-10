@@ -3,6 +3,7 @@ from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
 from kanade_bot.utils.banner import get_kanade
+from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
 
 def init_nonebot():
@@ -13,6 +14,9 @@ def init_nonebot():
     driver = nonebot.get_driver()
     driver.register_adapter(ConsoleAdapter)
     driver.register_adapter(OneBotV11Adapter)
+
+    # 为 OneBotV11Adapter 添加自定义事件模型
+    nonebot.get_adapter(OneBotV11Adapter).add_custom_model(BotOfflineNoticeEvent)
 
     # 在这里加载插件
     nonebot.load_builtin_plugins("echo")
