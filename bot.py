@@ -20,7 +20,6 @@ def init_nonebot():
     nonebot.load_plugin("nonebot_plugin_status")
     nonebot.load_plugin("nonebot_plugin_apscheduler")
     nonebot.load_plugin("nonebot_plugin_htmlrender")
-    nonebot.load_plugin("nonebot_plugin_disconnect_notice")
 
     nonebot.load_plugins("kanade_bot/plugins")
 
