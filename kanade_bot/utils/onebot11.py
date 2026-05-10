@@ -1,7 +1,8 @@
 from io import BytesIO
 from pathlib import Path
+from typing import Literal, override
 
-from nonebot.adapters.onebot.v11 import Bot, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment, NoticeEvent
 
 
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
@@ -54,3 +55,16 @@ async def get_onebot_info(bot: Bot) -> tuple[int, str]:
     bot_info = await bot.get_stranger_info(user_id=bot_id)
     bot_nickname: str = bot_info.get("nickname", "宵崎奏")
     return bot_id, bot_nickname
+
+
+class BotOfflineNoticeEvent(NoticeEvent):
+    """Bot掉线通知事件"""
+
+    notice_type: Literal["bot_offline"]  # pyright: ignore[reportIncompatibleVariableOverride]
+    user_id: int
+    tag: str
+    message: str
+
+    @override
+    def get_user_id(self) -> str:
+        return str(self.user_id)

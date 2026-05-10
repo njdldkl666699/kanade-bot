@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from nonebot import get_plugin_config, on_command
+from nonebot import get_plugin_config, on_command, on_notice
 from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
@@ -10,10 +10,11 @@ from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
-from kanade_bot.utils.onebot11 import get_onebot_info
+from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent, get_onebot_info
 
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
+from .offline import send_offline_notice
 
 __plugin_meta__ = PluginMetadata(
     name="help",
@@ -75,3 +76,18 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
             bot_id, bot_nickname, OneBotMessage(segment)
         )
     await help_command.finish(node_custom_message)
+
+
+offline_notice = on_notice(
+    priority=1,
+    block=False,
+)
+
+
+@offline_notice.handle()
+async def _(event: BotOfflineNoticeEvent):
+    bot_id = event.self_id
+    tag = event.tag
+    message = event.message
+
+    await send_offline_notice(bot_id, tag, message)

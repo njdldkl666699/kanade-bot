@@ -16,15 +16,6 @@ wheels = [
 ]
 
 [[package]]
-name = "aiosmtplib"
-version = "2.0.2"
-source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/8f/66/64d78bcb36c0a3da4610d5564c0422cb726051fb5dbd136a8839d8b91574/aiosmtplib-2.0.2.tar.gz", hash = "sha256:138599a3227605d29a9081b646415e9e793796ca05322a78f69179f0135016a3", size = 56295, upload-time = "2023-06-03T19:48:36.957Z" }
-wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/66/be/6902c91523a5faedee22e260e17fc23521fd63b2fec46dd5e5fcda62da8f/aiosmtplib-2.0.2-py3-none-any.whl", hash = "sha256:1e631a7a3936d3e11c6a144fb8ffd94bb4a99b714f2cb433e825d88b698e37bc", size = 27149, upload-time = "2023-06-03T19:48:35.562Z" },
-]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
@@ -803,7 +794,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "3.12.10"
+version = "3.12.11"
 source = { virtual = "." }
 dependencies = [
     { name = "audioop-lts" },
@@ -815,7 +806,6 @@ dependencies = [
     { name = "nonebot-adapter-console" },
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot-plugin-apscheduler" },
-    { name = "nonebot-plugin-disconnect-notice" },
     { name = "nonebot-plugin-htmlrender" },
     { name = "nonebot-plugin-status" },
     { name = "nonebot2", extra = ["fastapi"] },
@@ -840,7 +830,6 @@ requires-dist = [
     { name = "nonebot-adapter-console", specifier = ">=0.9.0" },
     { name = "nonebot-adapter-onebot", specifier = ">=2.4.6" },
     { name = "nonebot-plugin-apscheduler", specifier = ">=0.5.0" },
-    { name = "nonebot-plugin-disconnect-notice", specifier = ">=0.4.4" },
     { name = "nonebot-plugin-htmlrender", specifier = ">=0.6.7" },
     { name = "nonebot-plugin-status", specifier = ">=0.9.0" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.4.4" },
@@ -1250,22 +1239,6 @@ dependencies = [
 sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d6/53/019bfea58c506c0166d8ef77959fd8676019469d0d3d8e135ae8f1a4b772/nonebot_plugin_apscheduler-0.5.0.tar.gz", hash = "sha256:6c0230e99765f275dc83d6639ff33bd6f71203fa10cd1b8a204b0f95530cda86", size = 3816, upload-time = "2024-06-28T13:17:10.57Z" }
 wheels = [
     { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/fb/f4/8a3334dcd91e368d2f4e2b21f4805ac70b5dd8a1f9dac94fea5269e82bd3/nonebot_plugin_apscheduler-0.5.0-py3-none-any.whl", hash = "sha256:8b99b5ee60c4bc195d4df2fd27dab3d6963691e3332f6cee31a06eb4277c307f", size = 4307, upload-time = "2024-06-28T13:17:09.593Z" },
-]
-
-[[package]]
-name = "nonebot-plugin-disconnect-notice"
-version = "0.4.4"
-source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
-dependencies = [
-    { name = "aiosmtplib" },
-    { name = "httpx" },
-    { name = "nonebot-adapter-onebot" },
-    { name = "nonebot-plugin-apscheduler" },
-    { name = "nonebot2" },
-]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/3e/e8/11ecc7eef48159f68e9866bb49ea6800cff280ebef017ec8bfb2b3ac8715/nonebot_plugin_disconnect_notice-0.4.4.tar.gz", hash = "sha256:02858d26b98b6b00eca73bcf9b2271b3c02413f2a88e1a80b6f524eb11af8936", size = 16015, upload-time = "2026-02-28T03:02:05.646Z" }
-wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/64/5b/b1d74d1cd500c8b6b5a1feed6bec5215c5f7477d18fdebab7861ca6772e9/nonebot_plugin_disconnect_notice-0.4.4-py3-none-any.whl", hash = "sha256:5b94993f9a9e35c0c52f84df1291b70de34d4b2ef027a64f0fe282e2c1ea58b8", size = 16057, upload-time = "2026-02-28T03:02:04.584Z" },
 ]
 
 [[package]]
