@@ -3,25 +3,16 @@ from typing import Literal
 from copilot import CopilotClient
 from copilot.client import StopError
 from nonebot import get_driver, logger
-from nonebot.adapters import Event
 from nonebot.adapters.console.event import PrivateMessageEvent
 from nonebot.params import EventToMe
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
 
-driver = get_driver()
-
 
 def console_private_permission(event: PrivateMessageEvent) -> bool:
     """匹配任意Console私聊消息类型事件"""
     return True
-
-
-def not_superuser(event: Event):
-    """匹配任意非超级用户事件"""
-    user_id = event.get_user_id()
-    return user_id not in driver.config.superusers
 
 
 def not_to_me(to_me: bool = EventToMe()):
@@ -34,6 +25,9 @@ COPILOT_CLIENT = CopilotClient()
 
 负责与Copilot服务进行通信，创建和恢复会话等操作
 """
+
+
+driver = get_driver()
 
 
 @driver.on_startup

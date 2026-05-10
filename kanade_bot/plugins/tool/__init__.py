@@ -4,7 +4,7 @@ from pathlib import Path
 
 import emoji
 from mcstatus import JavaServer
-from nonebot import get_plugin_config, logger, on_command, on_notice
+from nonebot import get_driver, get_plugin_config, logger, on_command, on_notice
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GROUP, MessageSegment, PokeNotifyEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
@@ -18,7 +18,6 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 
-from kanade_bot.utils.common import not_superuser
 from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
 from kanade_bot.utils.parser import parse_arg_message
 
@@ -256,7 +255,6 @@ async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = Com
 receive_poke = on_notice(
     rule=to_me(),
     priority=100,
-    permission=not_superuser,
     block=True,
 )
 
@@ -277,7 +275,8 @@ RECEIVE_POKE_MESSAGES: list[str] = [
 
 @receive_poke.handle()
 async def _(event: PokeNotifyEvent):
-    await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
+    if event.get_user_id() not in get_driver().config.superusers:
+        await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
 
 
 send_like = on_command(
