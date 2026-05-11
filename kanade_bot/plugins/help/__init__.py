@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from nonebot import get_plugin_config, on_command, on_notice
+from nonebot import get_driver, get_plugin_config, on_command, on_notice
 from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
@@ -91,3 +91,15 @@ async def _(event: BotOfflineNoticeEvent):
     message = event.message
 
     await send_offline_notice(bot_id, tag, message)
+
+
+driver = get_driver()
+
+
+@driver.on_bot_connect
+async def notify_bot_online(bot: OneBot):
+    if not cfg.help_online_notice_group_ids:
+        return
+
+    for group_id in cfg.help_online_notice_group_ids:
+        await bot.send_group_msg(group_id=group_id, message="宵崎奏Bot 已上线")

@@ -10,3 +10,5 @@ class Config(BaseModel):
     """Haruki的帮助图片路径，不存在则不发送"""
     help_server_chan_turbo_key: str = ""
     """Server酱Turbo的Key，配置后会在Bot掉线时推送通知到微信"""
+    help_online_notice_group_ids: list[int] = []
+    """Bot上线通知的群聊ID列表，配置后会在Bot上线时发送通知到这些群聊"""
