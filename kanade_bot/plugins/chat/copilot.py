@@ -10,7 +10,7 @@ from copilot.tools import Tool
 from nonebot import logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
-from kanade_bot.utils.parser import build_sender_info
+from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
 from .config import cfg

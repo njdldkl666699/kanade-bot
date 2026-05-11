@@ -15,7 +15,7 @@ from nonebot.plugin import PluginMetadata
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
-from kanade_bot.utils.parser import build_sender_info
+from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
 from .config import Config
@@ -40,12 +40,7 @@ async def record_recv_msg(
     event: OneBotMessageEvent | ConsoleMessageEvent,
     message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
-    message_str = ""
-    if isinstance(message, OneBotMessage):
-        message_str = message.to_rich_text()
-    if isinstance(message, ConsoleMessage):
-        message_str = str(message)
-
+    message_str, _ = await parse_message_for_ai(message, None)
     session_info = await extract_session_info(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"$ {user_info} : {message_str}"

@@ -5,7 +5,7 @@ from nonebot.params import CommandArg, EventPlainText
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
-from kanade_bot.utils.parser import parse_arg_message
+from kanade_bot.utils.parse import parse_arg_message
 
 from ...client import client
 from .cache import TranslateLang, TranslateLangCache

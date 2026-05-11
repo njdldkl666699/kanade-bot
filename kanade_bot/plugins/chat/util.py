@@ -1,11 +1,9 @@
 import random
 import re
-from base64 import b64encode
 from pathlib import Path
 from typing import cast
 
 from copilot.generated.session_events import AssistantMessageData
-from copilot.session import Attachment
 from nonebot import logger
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import Bot as OneBot
@@ -16,6 +14,7 @@ from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
+from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
 from .ban import is_banned
@@ -48,32 +47,6 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     # 达到阈值，按照概率决定是否自动回复
     # 生成一个0.0到1.0之间的随机数，如果小于配置的概率，则触发自动回复
     return random.random() < auto_reply_config.probability
-
-
-async def resolve_message_images(message: OneBotMessage) -> list[Attachment]:
-    """解析消息中的图片并返回附件列表"""
-    attachments: list[Attachment] = []
-    for segment in message:
-        if segment.type != "image":
-            continue
-
-        displayName: str = segment.data["file"] or "image.png"
-        url: str | None = segment.data["url"]
-        if not url:
-            continue
-
-        response = await client.get(url)
-        response.raise_for_status()
-        data = b64encode(response.content).decode()
-        attachments.append(
-            {
-                "type": "blob",
-                "data": data,
-                "mimeType": response.headers.get("Content-Type", "application/octet-stream"),
-                "displayName": displayName,
-            }
-        )
-    return attachments
 
 
 def split_content_preserving_code_blocks(content: str) -> list[str]:
@@ -170,27 +143,19 @@ async def send_message_in_chunks(
     matcher: type[Matcher],
     bot: Bot,
     event: Event,
-    message_str: str,
 ):
-    # 处理消息中的图片附件
-    attachments: list[Attachment] = []
-    # 1. 回复的消息中的图片
-    if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply_message_attachments = await resolve_message_images(event.reply.message)
-        attachments.extend(reply_message_attachments)
-    # 2. 发送的消息中的图片
     message = event.get_message()
-    if isinstance(message, OneBotMessage):
-        message_attachments = await resolve_message_images(message)
-        attachments.extend(message_attachments)
+    prompt, attachments = await parse_message_for_ai(message, client)
 
-    # 处理引用（回复）消息中的文本内容
+    # 处理引用（回复）消息
     reply_text: str | None = None
     if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply_text = event.reply.message.extract_plain_text().strip()
+        reply = event.reply.message
+        reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, client)
+        attachments.extend(reply_attachments)
 
     # 进行RAG查询，获取相关文档
-    query_str = event.get_message().extract_plain_text().strip()
+    query_str = message.extract_plain_text().strip()
     rag_docs = query(query_str) if query_str else None
 
     session_info = await extract_session_info(event, bot)
@@ -198,7 +163,7 @@ async def send_message_in_chunks(
 
     response, new_session = await COPILOT.send_and_wait(
         session_info,
-        message_str,
+        prompt,
         rag_docs=rag_docs,
         reply_text=reply_text,
         attachments=attachments,

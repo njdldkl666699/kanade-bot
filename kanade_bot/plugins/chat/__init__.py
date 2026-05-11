@@ -16,7 +16,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
 from kanade_bot.utils.common import console_private_permission, not_to_me
-from kanade_bot.utils.parser import build_sender_info, parse_arg_message
+from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
 from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
@@ -46,19 +46,12 @@ chat = on_message(
 async def handle_chat(
     bot: Bot,
     event: OneBotMessageEvent | ConsoleMessageEvent,
-    message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
     # 检查用户或群聊是否在聊天黑名单中
     if is_event_banned(event):
         return
 
-    message_str = ""
-    if isinstance(message, OneBotMessage):
-        message_str = message.to_rich_text()
-    if isinstance(message, ConsoleMessage):
-        message_str = str(message)
-
-    await send_message_in_chunks(chat, bot, event, message_str)
+    await send_message_in_chunks(chat, bot, event)
 
 
 ### 聊天监听命令
@@ -88,17 +81,11 @@ async def handle_chat_monitor(
     else:
         return
 
-    if isinstance(message, ConsoleMessage):
-        message_str = str(message)
-    elif isinstance(message, OneBotMessage):
-        message_str = message.to_rich_text()
-    else:
-        return
-
     if session_info.group_name and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, bot, event, message_str)
+        await send_message_in_chunks(chat, bot, event)
 
-    # 将用户消息添加到会话缓冲区
+    # 添加消息到会话缓冲区，不需要图片
+    message_str, _ = await parse_message_for_ai(message, None)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info} : {message_str}"
     await COPILOT.add_message(session_id, message_str)
