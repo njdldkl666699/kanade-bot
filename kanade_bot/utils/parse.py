@@ -117,7 +117,7 @@ async def parse_onebot_message_for_ai(
 
         for fwd_msg_event in fwd_msg_events:
             e = OneBotMessageEvent.model_validate(fwd_msg_event)
-            text, attachments = await parse_onebot_message_for_ai(e.message, client, bot)
+            text, fwd_attachments = await parse_onebot_message_for_ai(e.message, client, bot)
 
             # 附带发送者信息
             session_info = await extract_session_info(e, bot)
@@ -125,7 +125,7 @@ async def parse_onebot_message_for_ai(
                 text = f"{user_info} : {text}"
 
             text_parts.append(text)
-            attachments.extend(attachments)
+            attachments.extend(fwd_attachments)
 
         text_parts.append("</forward>")
 
