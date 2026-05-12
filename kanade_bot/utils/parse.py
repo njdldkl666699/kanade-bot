@@ -5,6 +5,7 @@ from copilot.session import Attachment
 from httpx import AsyncClient
 from nonebot.adapters import Message
 from nonebot.adapters.console import Message as ConsoleMessage
+from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 
 
@@ -77,30 +78,28 @@ def build_sender_info(name: str | None, id: str | None) -> str:
 async def parse_onebot_message_for_ai(
     message: OneBotMessage,
     client: AsyncClient | None = None,
+    bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
     """解析OneBot消息，返回AI可读的文本和附件列表
 
     :param client: 用于请求图片的HTTP客户端，如果需要提取图片附件则必须提供
+    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息
     """
     text_parts: list[str] = []
     attachments: list[Attachment] = []
 
     # 如果消息只有一个segment且是转发消息，直接解析转发消息中的内容
-    if len(message) == 1 and message[0].type == "forward":
-        forward_segment = message[0]
-        forward_id: int = forward_segment.data["id"]
-        forward_message: str | OneBotMessage = forward_segment.data["content"]
+    if len(message) == 1 and message[0].type == "forward" and bot:
+        forward_id: str = message[0].data["id"]
+        forward_msg = await bot.get_forward_msg(id=forward_id)
 
-        if isinstance(forward_message, str):
-            text_parts.append(forward_message)
-        else:
-            forward_text, forward_attachments = await parse_onebot_message_for_ai(
-                forward_message, client
-            )
-            text_parts.append(f"<forward id={forward_id}>")
-            text_parts.append(forward_text)
-            text_parts.append("</forward>")
-            attachments.extend(forward_attachments)
+        forward_text, forward_attachments = await parse_onebot_message_for_ai(
+            forward_msg["message"], client, bot
+        )
+        text_parts.append(f"<forward id={forward_id}>")
+        text_parts.append(forward_text)
+        text_parts.append("</forward>")
+        attachments.extend(forward_attachments)
 
         return "\n".join(text_parts), attachments
 
@@ -147,10 +146,12 @@ async def parse_onebot_message_for_ai(
 async def parse_message_for_ai(
     message: Message,
     client: AsyncClient | None = None,
+    bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
     """解析消息，返回AI可读的文本和附件列表
 
     :param client: 用于请求图片的HTTP客户端，如果需要提取图片附件则必须提供
+    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息
     """
     prompt: str = ""
     attachments: list[Attachment] = []
@@ -161,6 +162,6 @@ async def parse_message_for_ai(
     ## OneBot消息
     # 处理发送消息
     if isinstance(message, OneBotMessage):
-        prompt, attachments = await parse_onebot_message_for_ai(message, client)
+        prompt, attachments = await parse_onebot_message_for_ai(message, client, bot)
 
     return prompt, attachments

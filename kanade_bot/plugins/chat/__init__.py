@@ -85,7 +85,7 @@ async def handle_chat_monitor(
         await send_message_in_chunks(chat, bot, event)
 
     # 添加消息到会话缓冲区，不需要图片
-    message_str, _ = await parse_message_for_ai(message, None)
+    message_str, _ = await parse_message_for_ai(message)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info} : {message_str}"
     await COPILOT.add_message(session_id, message_str)

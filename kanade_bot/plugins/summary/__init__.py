@@ -40,7 +40,7 @@ async def record_recv_msg(
     event: OneBotMessageEvent | ConsoleMessageEvent,
     message: OneBotMessage | ConsoleMessage = EventMessage(),
 ):
-    message_str, _ = await parse_message_for_ai(message, None)
+    message_str, _ = await parse_message_for_ai(message)
     session_info = await extract_session_info(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"$ {user_info} : {message_str}"
@@ -73,8 +73,12 @@ async def record_send_msg(
         else:
             session_id = f"qq-private-{data['user_id']}"
 
-        message: OneBotMessage = data["message"]
-        message_str = f"$ {cfg.summary_bot_name} ：{message.to_rich_text()}"
+        message: str | OneBotMessage = data["message"]
+        message_str = f"$ {cfg.summary_bot_name} ："
+        if isinstance(message, OneBotMessage):
+            message_str = message_str + message.to_rich_text()
+        else:
+            message_str = message_str + message
 
     elif isinstance(bot, ConsoleBot):
         if api != "send_msg":
