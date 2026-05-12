@@ -152,7 +152,7 @@ async def send_message_in_chunks(
     reply_text: str | None = None
     if isinstance(event, OneBotMessageEvent) and event.reply:
         reply = event.reply.message
-        reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, client)
+        reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, client, onebot)
         attachments.extend(reply_attachments)
 
     # 进行RAG查询，获取相关文档

@@ -3,10 +3,14 @@ from typing import Any, SupportsIndex
 
 from copilot.session import Attachment
 from httpx import AsyncClient
+from nonebot import logger
 from nonebot.adapters import Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import ActionFailed
 
 
 def parse_arg_message(
@@ -75,6 +79,31 @@ def build_sender_info(name: str | None, id: str | None) -> str:
     return "".join(parts)
 
 
+async def _parse_onebot_forward_message_for_ai(
+    segment: OneBotMessageSegment,
+    bot: OneBot,
+):
+    """解析OneBot转发消息，返回AI可读的文本和附件列表"""
+    text_parts: list[str] = []
+    attachments: list[Attachment] = []
+
+    forward_id: str = segment.data["id"]
+    forward_response = await bot.get_forward_msg(id=forward_id)
+    fwd_msg_events: list[dict[str, Any]] = forward_response["messages"]
+
+    text_parts.append(f"<forward id={forward_id}>")
+
+    for e in fwd_msg_events:
+        fwd_msg = OneBotMessageEvent.model_validate(e).message
+        text, fwd_attachments = await parse_onebot_message_for_ai(fwd_msg, None, bot)
+        text_parts.append(text)
+        attachments.extend(fwd_attachments)
+
+    text_parts.append("</forward>")
+
+    return "\n".join(text_parts), attachments
+
+
 async def parse_onebot_message_for_ai(
     message: OneBotMessage,
     client: AsyncClient | None = None,
@@ -90,16 +119,33 @@ async def parse_onebot_message_for_ai(
 
     # 如果消息只有一个segment且是转发消息，直接解析转发消息中的内容
     if len(message) == 1 and message[0].type == "forward" and bot:
-        forward_id: str = message[0].data["id"]
-        forward_msg = await bot.get_forward_msg(id=forward_id)
+        forward_message = message[0]
+        forward_id: str = forward_message.data["id"]
+        fwd_msg_events: list[dict[str, Any]] = []
 
-        forward_text, forward_attachments = await parse_onebot_message_for_ai(
-            forward_msg["message"], client, bot
-        )
+        if "content" in forward_message.data:
+            # 情况一：有content字段，直接视作fwd_msg_events使用
+            # 这种情况我测试下是message是从reply中拿到的，content里直接是转发消息事件列表
+            # 这种情况可以拿到嵌套合并转发的消息事件
+            fwd_msg_events = forward_message.data["content"]
+        else:
+            # 如果message直接是event.message，就没有content字段
+            # 这种情况下无法获取嵌套合并转发。
+            try:
+                forward_response = await bot.get_forward_msg(id=forward_id)
+                fwd_msg_events = forward_response["messages"]
+            except ActionFailed as e:
+                logger.warning("获取转发消息失败: {}", e)
+
         text_parts.append(f"<forward id={forward_id}>")
-        text_parts.append(forward_text)
+
+        for e in fwd_msg_events:
+            fwd_msg = OneBotMessageEvent.model_validate(e).message
+            text, attachments = await parse_onebot_message_for_ai(fwd_msg, client, bot)
+            text_parts.append(text)
+            attachments.extend(attachments)
+
         text_parts.append("</forward>")
-        attachments.extend(forward_attachments)
 
         return "\n".join(text_parts), attachments
 
