@@ -164,6 +164,7 @@ class CopilotSessionManager:
                 buffered_messages=buffered_messages,
                 reply_text=reply_text,
             )
+            logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
             session_event: SessionEvent | None = None
             try:

@@ -6,11 +6,12 @@ from httpx import AsyncClient
 from nonebot import logger
 from nonebot.adapters import Message
 from nonebot.adapters.console import Message as ConsoleMessage
+from nonebot.adapters.onebot.v11 import ActionFailed
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
-from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.adapters.onebot.v11 import ActionFailed
+
+from .session import extract_session_info
 
 
 def parse_arg_message(
@@ -79,31 +80,6 @@ def build_sender_info(name: str | None, id: str | None) -> str:
     return "".join(parts)
 
 
-async def _parse_onebot_forward_message_for_ai(
-    segment: OneBotMessageSegment,
-    bot: OneBot,
-):
-    """解析OneBot转发消息，返回AI可读的文本和附件列表"""
-    text_parts: list[str] = []
-    attachments: list[Attachment] = []
-
-    forward_id: str = segment.data["id"]
-    forward_response = await bot.get_forward_msg(id=forward_id)
-    fwd_msg_events: list[dict[str, Any]] = forward_response["messages"]
-
-    text_parts.append(f"<forward id={forward_id}>")
-
-    for e in fwd_msg_events:
-        fwd_msg = OneBotMessageEvent.model_validate(e).message
-        text, fwd_attachments = await parse_onebot_message_for_ai(fwd_msg, None, bot)
-        text_parts.append(text)
-        attachments.extend(fwd_attachments)
-
-    text_parts.append("</forward>")
-
-    return "\n".join(text_parts), attachments
-
-
 async def parse_onebot_message_for_ai(
     message: OneBotMessage,
     client: AsyncClient | None = None,
@@ -139,9 +115,15 @@ async def parse_onebot_message_for_ai(
 
         text_parts.append(f"<forward id={forward_id}>")
 
-        for e in fwd_msg_events:
-            fwd_msg = OneBotMessageEvent.model_validate(e).message
-            text, attachments = await parse_onebot_message_for_ai(fwd_msg, client, bot)
+        for fwd_msg_event in fwd_msg_events:
+            e = OneBotMessageEvent.model_validate(fwd_msg_event)
+            text, attachments = await parse_onebot_message_for_ai(e.message, client, bot)
+
+            # 附带发送者信息
+            session_info = await extract_session_info(e, bot)
+            if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+                text = f"{user_info} : {text}"
+
             text_parts.append(text)
             attachments.extend(attachments)
 
