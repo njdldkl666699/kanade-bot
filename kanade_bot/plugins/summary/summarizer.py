@@ -12,19 +12,19 @@ from kanade_bot.utils.common import COPILOT_CLIENT
 
 from .config import Config
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).summary
 
 
 class Summarizer:
     """总结器类，负责管理总结会话和生成总结"""
 
-    system_prompt_path = Path(cfg.summary_system_prompt_file_path)
+    system_prompt_path = Path(cfg.system_prompt_file_path)
     system_prompt = "总结以下对话内容，提取关键信息并生成简洁的总结：\n\n"
     if not system_prompt_path.is_file():
         logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
     else:
         system_prompt = system_prompt_path.read_text(encoding="utf-8")
-        system_prompt = system_prompt.replace("{{summary_bot_name}}", cfg.summary_bot_name)
+        system_prompt = system_prompt.replace("{{summary_bot_name}}", cfg.bot_name)
 
     system_message: SystemMessageConfig = {
         "mode": "replace",
@@ -33,7 +33,7 @@ class Summarizer:
 
     SESSION_CONFIG = {
         "on_permission_request": PermissionHandler.approve_all,
-        "model": cfg.summary_model,
+        "model": cfg.model,
         "reasoning_effort": "medium",
         "system_message": system_message,
     }
@@ -52,12 +52,12 @@ class Summarizer:
         :param message: 要添加的消息文本
         """
         if session_id not in self._message_records:
-            self._message_records[session_id] = deque(maxlen=cfg.summary_max_size)
+            self._message_records[session_id] = deque(maxlen=cfg.max_size)
         self._message_records[session_id].append(message)
 
     def load_message_records(self):
         """从缓存文件中加载历史消息记录到内存中"""
-        cache_path = Path(cfg.summary_message_records_file_path)
+        cache_path = Path(cfg.message_records_file_path)
         if not cache_path.is_file():
             logger.info(f"总结缓存文件不存在，路径: {cache_path.absolute()}")
             return
@@ -65,11 +65,11 @@ class Summarizer:
         with cache_path.open("r", encoding="utf-8") as f:
             data: dict[str, list[str]] = json.load(f)
         for session_id, messages in data.items():
-            self._message_records[session_id] = deque(messages, maxlen=cfg.summary_max_size)
+            self._message_records[session_id] = deque(messages, maxlen=cfg.max_size)
 
     def save_message_records(self):
         """将当前的消息记录缓存保存到文件中"""
-        cache_path = Path(cfg.summary_message_records_file_path)
+        cache_path = Path(cfg.message_records_file_path)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
         data = {

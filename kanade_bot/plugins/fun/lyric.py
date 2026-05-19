@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from .config import Config
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).fun
 
 
 class LyricLine(BaseModel):
@@ -46,7 +46,7 @@ def get_random_lyric(
 ) -> tuple[Path, Lyric] | None:
     """查询歌词列表中包含query的歌曲，随机选择一首，并返回歌曲文件和随机裁剪的歌词片段"""
     if length is None:
-        length = cfg.fun_lyric_default_length
+        length = cfg.lyric_default_length
 
     filtered_files = query_lyric_files(query)
     if not filtered_files:
@@ -82,7 +82,7 @@ def add_lyric_txt(song_name: str, lyric_txt: str):
     if not lyric_txt:
         raise ValueError("歌词内容不能为空")
 
-    lyric_dir = Path(cfg.fun_lyrics_dir_path)
+    lyric_dir = Path(cfg.lyrics_dir_path)
     lyric_dir.mkdir(parents=True, exist_ok=True)
 
     normalized_song_name = _normalize_song_name(song_name)
@@ -100,7 +100,7 @@ def remove_song_lyric(song_name: str):
         raise ValueError("歌曲名不能为空")
 
     normalized_song_name = _normalize_song_name(song_name)
-    lyric_dir = Path(cfg.fun_lyrics_dir_path)
+    lyric_dir = Path(cfg.lyrics_dir_path)
     txt_file = lyric_dir / f"{normalized_song_name}.txt"
     lrc_file = lyric_dir / f"{normalized_song_name}.lrc"
 
@@ -218,7 +218,7 @@ driver = get_driver()
 @driver.on_startup
 def load_lyrics():
     global lyric_files
-    path = Path(cfg.fun_lyrics_dir_path)
+    path = Path(cfg.lyrics_dir_path)
     if not path.is_dir():
         logger.warning(f"歌词目录 {path} 不存在或不是一个目录，已跳过加载歌词")
         return

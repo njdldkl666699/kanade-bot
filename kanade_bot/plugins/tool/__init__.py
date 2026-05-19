@@ -275,8 +275,7 @@ RECEIVE_POKE_MESSAGES: list[str] = [
 
 @receive_poke.handle()
 async def _(event: PokeNotifyEvent):
-    if event.get_user_id() not in get_driver().config.superusers:
-        await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
+    await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
 
 
 send_like = on_command(

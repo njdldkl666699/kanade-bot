@@ -35,7 +35,7 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).fun
 
 
 ciallo = on_fullmatch(
@@ -53,7 +53,7 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    ciallo_image_path = Path(cfg.fun_ciallo_image_file_path)
+    ciallo_image_path = Path(cfg.ciallo_image_file_path)
     if not ciallo_image_path.is_file():
         await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
 
@@ -67,7 +67,7 @@ group_message_cache: dict[str | int, list[str]] = {}
 @plus_one.handle()
 async def _(event: Event):
     # 获取触发阈值
-    threshold = cfg.fun_plus_one_threshold
+    threshold = cfg.plus_one_threshold
     if threshold <= 0:
         return
 
@@ -185,7 +185,7 @@ async def handle_music_list():
     await music_list.finish(
         "可用的歌单列表：\n"
         + "\n".join(get_music_list_names())
-        + f"\n\n完整歌单见：{cfg.fun_music_list_link}"
+        + f"\n\n完整歌单见：{cfg.music_list_link}"
     )
 
 
@@ -241,7 +241,7 @@ async def _(arg_msg: Message = CommandArg()):
     if not songs:
         await list_sing_song.finish("没有找到符合条件的歌曲")
 
-    start_number = 1 + (page - 1) * cfg.fun_sing_page_size
+    start_number = 1 + (page - 1) * cfg.sing_page_size
 
     await list_sing_song.finish(
         f"符合条件的歌曲列表（{page}/{total_pages} 页）:\n"

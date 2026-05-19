@@ -9,6 +9,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.exception import ActionFailed
 from nonebot.message import event_postprocessor
 from nonebot.params import CommandArg, EventMessage
 from nonebot.plugin import PluginMetadata
@@ -32,7 +33,7 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).summary
 
 
 @event_postprocessor
@@ -74,7 +75,7 @@ async def record_send_msg(
             session_id = f"qq-private-{data['user_id']}"
 
         message: str | OneBotMessage = data["message"]
-        message_str = f"$ {cfg.summary_bot_name} ："
+        message_str = f"$ {cfg.bot_name} ："
         if isinstance(message, OneBotMessage):
             message_str = message_str + message.to_rich_text()
         else:
@@ -92,7 +93,7 @@ async def record_send_msg(
 
         elements: NoneChatConsoleMessage = data["content"]
         console_message = ConsoleMessage.from_console_message(elements)
-        message_str = f"$ {cfg.summary_bot_name} : {console_message}"
+        message_str = f"$ {cfg.bot_name} : {console_message}"
     else:
         return
 
@@ -114,8 +115,8 @@ async def _(
     arg_msg: Message = CommandArg(),
 ):
     size = arg_msg.extract_plain_text().strip()
-    min = cfg.summary_min_size
-    max = cfg.summary_max_size
+    min = cfg.min_size
+    max = cfg.max_size
 
     if not size.isdigit():
         await summarize.finish(f"请提供消息条数，范围 {min}-{max}")
@@ -141,15 +142,20 @@ async def _(
     )
 
     if isinstance(bot, OneBot):
-        summary = await summary_future
-        try:
-            await bot.delete_msg(message_id=response["message_id"])
-        except Exception as e:
-            logger.warning("删除总结提示消息失败: {}", e)
 
+        async def try_delete_msg():
+            try:
+                await bot.delete_msg(message_id=response["message_id"])
+            except ActionFailed as e:
+                logger.warning("删除总结提示消息失败: {}", e)
+
+        summary = await summary_future
         if not summary:
+            await try_delete_msg()
             await summarize.finish("总结失败")
+
         image = await md_to_pic(summary)
+        await try_delete_msg()
         await summarize.finish(OneBotMessageSegment.image(image))
 
     elif isinstance(bot, ConsoleBot):

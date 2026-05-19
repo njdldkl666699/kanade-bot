@@ -1,18 +1,47 @@
+from pathlib import Path
+
 from apscheduler.triggers.cron import CronTrigger
-from nonebot import get_driver, logger, require
+from nonebot import get_driver, get_plugin_config, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message
 
-from .config import ScheduleConfig, schedules, write_schedules
+from .config import Config, ScheduleConfig, ScheduleConfigs
 
 require("nonebot_plugin_apscheduler")
 
 from nonebot_plugin_apscheduler import scheduler
+
+cfg = get_plugin_config(Config).tool
 
 TOOL_SCHEDULE_JOB_PREFIX = "tool_schedule"
 
 
 def schedule_id(group_id: int, schedule_name: str) -> str:
     return f"{TOOL_SCHEDULE_JOB_PREFIX}_{group_id}_{schedule_name}"
+
+
+def _ensure_schedules() -> ScheduleConfigs:
+    path = Path(cfg.schedule_configs_file_path)
+    if not path.exists():
+        logger.warning(f"定时任务配置文件 {path} 不存在，已创建空文件")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}")
+        return ScheduleConfigs({})
+
+    try:
+        return ScheduleConfigs.model_validate_json(path.read_text())
+    except Exception as e:
+        logger.error(f"加载定时任务配置失败: {e}")
+        return ScheduleConfigs({})
+
+
+schedules: ScheduleConfigs = _ensure_schedules()
+
+
+def _write_schedules():
+    """将定时任务配置写入配置文件"""
+    Path(cfg.schedule_configs_file_path).write_text(
+        schedules.model_dump_json(indent=2, ensure_ascii=False)
+    )
 
 
 def print_schedules_pretty(group_id: int) -> str | None:
@@ -45,7 +74,7 @@ def add_schedule(group_id: int, name: str, cron: str, message: Message):
     # 添加到配置
     group_schedules = schedules.root.setdefault(group_id, {})
     group_schedules[name] = ScheduleConfig(cron=cron, message=message)
-    write_schedules()
+    _write_schedules()
     logger.info(f"已添加群 {group_id} 的定时任务 {name}: {cron} -> {message.to_rich_text()}")
 
 
@@ -62,7 +91,7 @@ def remove_schedule(group_id: int, name: str):
     group_schedules = schedules.root.get(group_id, {})
     if name in group_schedules:
         del group_schedules[name]
-        write_schedules()
+        _write_schedules()
         logger.info(f"已移除群 {group_id} 的定时任务 {name}")
 
 

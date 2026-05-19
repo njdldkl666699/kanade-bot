@@ -14,8 +14,8 @@ def query(query_text: str) -> list[str] | None:
     try:
         results = client.root.query(
             query_text,
-            n_results=cfg.chat_rag_query_n_results,
-            threshold=cfg.chat_rag_distance_threshold,
+            n_results=cfg.rag_query_n_results,
+            threshold=cfg.rag_distance_threshold,
         )
         return results
     except Exception as e:
@@ -28,13 +28,13 @@ driver = get_driver()
 
 @driver.on_startup
 async def startup():
-    if not cfg.chat_rag_enabled:
+    if not cfg.rag_enabled:
         logger.info("RAG功能已禁用，跳过RAG RPC客户端初始化")
         return
     logger.info("RAG功能已启用，正在连接RAG RPC服务器...")
 
     global client
-    port = cfg.chat_rag_port
+    port = cfg.rag_port
 
     try:
         client = rpyc.connect("localhost", port)

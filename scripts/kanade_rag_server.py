@@ -9,16 +9,16 @@ from rpyc import Service, ThreadedServer
 
 load_dotenv()
 
-PORT = int(os.getenv("CHAT_RAG_PORT", 39831))
+PORT = int(os.getenv("RAG_PORT", 39831))
 """RAG服务器端口号"""
 
-MODEL_NAME_OR_PATH = os.getenv("CHAT_RAG_MODEL_OR_PATH", "BAAI/bge-small-zh-v1.5")
+MODEL_NAME_OR_PATH = os.getenv("RAG_MODEL_OR_PATH", "BAAI/bge-small-zh-v1.5")
 """RAG使用的模型名称或路径，默认为BGE小型中文模型，支持从Hugging Face下载"""
 
-DB_PATH = os.getenv("CHAT_RAG_DB_PATH", "./chroma")
+DB_PATH = os.getenv("RAG_DB_PATH", "./chroma")
 """向量数据库的存储路径"""
 
-COLLECTION_NAME = os.getenv("CHAT_RAG_DB_COLLECTION_NAME", "kanade_wiki_collection")
+COLLECTION_NAME = os.getenv("RAG_DB_COLLECTION_NAME", "kanade_wiki_collection")
 """向量数据库中集合的名称"""
 
 IDS = [

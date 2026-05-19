@@ -52,7 +52,7 @@ class CopilotSessionManager:
     ]
     """工具列表，包含所有可用工具的名称"""
 
-    system_prompt_path = Path(cfg.chat_system_prompt_file_path)
+    system_prompt_path = Path(cfg.system_prompt_file_path)
     system_prompt = ""
     """系统提示词"""
     if not system_prompt_path.is_file():
@@ -67,7 +67,7 @@ class CopilotSessionManager:
 
     SESSION_CONFIG = {
         "on_permission_request": PermissionHandler.approve_all,
-        "model": cfg.chat_model,
+        "model": cfg.model,
         "reasoning_effort": "medium",
         "tools": tools,
         "available_tools": available_tools,
@@ -101,11 +101,11 @@ class CopilotSessionManager:
             new_session = True
 
         current_model = await session.rpc.model.get_current()
-        if current_model.model_id != cfg.chat_model:
+        if current_model.model_id != cfg.model:
             logger.warning(
                 "会话{}模型设置失败，期望{}，但实际是{}，请检查模型是否可用或名称是否正确，将设置为gpt-4.1",
                 session_id,
-                cfg.chat_model,
+                cfg.model,
                 current_model.model_id,
             )
             await session.rpc.model.switch_to(ModelSwitchToRequest("gpt-4.1"))
@@ -144,7 +144,7 @@ class CopilotSessionManager:
             async with self.__global_lock:
                 if new_session:
                     self.__sessions_prompt_buffer[session_id] = deque(
-                        maxlen=cfg.chat_session_prompt_buffer_max_size
+                        maxlen=cfg.session_prompt_buffer_max_size
                     )
 
                 # 将消息缓冲区中的消息添加到选项中
@@ -290,7 +290,7 @@ class CopilotSessionManager:
             async with self.__global_lock:
                 if session_id not in self.__sessions_prompt_buffer:
                     self.__sessions_prompt_buffer[session_id] = deque(
-                        maxlen=cfg.chat_session_prompt_buffer_max_size
+                        maxlen=cfg.session_prompt_buffer_max_size
                     )
                 # deque(maxlen)会在溢出时自动丢弃最早的消息
                 self.__sessions_prompt_buffer[session_id].append(prompt)

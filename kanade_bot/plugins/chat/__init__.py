@@ -21,7 +21,7 @@ from kanade_bot.utils.session import extract_session_info
 
 from .ban import BanType, add_to_ban_list, is_event_banned, remove_from_ban_list
 from .client import file_client as client
-from .config import Config, configs, write_chat_config
+from .config import ScopedConfig, configs, write_chat_config
 from .copilot import COPILOT
 from .util import send_message_in_chunks, should_auto_reply
 
@@ -29,10 +29,10 @@ __plugin_meta__ = PluginMetadata(
     name="chat",
     description="",
     usage="",
-    config=Config,
+    config=ScopedConfig,
 )
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(ScopedConfig)
 
 ### 聊天命令
 chat = on_message(
@@ -249,7 +249,7 @@ async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandA
     response.raise_for_status()
     image = response.content
     # 确保表情包目录存在
-    meme_path = Path(cfg.chat_memes_dir_path) / name
+    meme_path = Path(cfg.memes_dir_path) / name
     meme_path.mkdir(parents=True, exist_ok=True)
     # 保存图片到表情包目录
     image_path = meme_path / f"{uuid.uuid4()}.png"

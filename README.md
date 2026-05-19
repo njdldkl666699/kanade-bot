@@ -18,7 +18,7 @@
 
 ## Watchdog（自动更新与重启）
 
-Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pull --ff-only` 并重启核心进程（`nb run`）。
+Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pull --ff-only` 并重启核心进程（`nb run`）。仅支持POSIX规范的系统（如Linux、MacOS），不支持Windows。
 
 使用方式：
 

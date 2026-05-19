@@ -3,7 +3,7 @@ from nonebot import get_driver, get_plugin_config, logger
 
 from .config import Config
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).help
 
 
 client = AsyncClient(
@@ -23,7 +23,7 @@ async def send_offline_notice(
     :param tag: 通知事件的标签
     :param message: 通知消息内容
     """
-    if not (key := cfg.help_server_chan_turbo_key):
+    if not (key := cfg.server_chan_turbo_key):
         logger.warning("未配置 Server酱Turbo 的Key，无法发送Bot掉线通知")
         return
 

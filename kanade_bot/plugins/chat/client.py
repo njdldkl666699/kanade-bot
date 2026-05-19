@@ -10,7 +10,7 @@ tavily_client = AsyncClient(
     base_url="https://api.tavily.com",
     headers={
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg.chat_tavily_api_key}",
+        "Authorization": f"Bearer {cfg.tavily_api_key}",
     },
 )
 

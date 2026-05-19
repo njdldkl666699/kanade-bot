@@ -6,7 +6,7 @@ from pydub import AudioSegment
 
 from .config import Config
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).fun
 
 sing_songs: list[Path] = []
 
@@ -14,7 +14,7 @@ sing_songs: list[Path] = []
 def get_sing_song_pages():
     """获取歌曲列表的总页数"""
     total_songs = len(sing_songs)
-    page_size = cfg.fun_sing_page_size
+    page_size = cfg.sing_page_size
     total_pages = (total_songs + page_size - 1) // page_size
     return total_pages
 
@@ -28,7 +28,7 @@ def list_sing_songs(query: str | None = None, page: int = 1) -> list[Path]:
         filtered_songs = sing_songs
 
     # 分页展示
-    page_size = cfg.fun_sing_page_size
+    page_size = cfg.sing_page_size
     start_index = (page - 1) * page_size
     end_index = start_index + page_size
     return filtered_songs[start_index:end_index]
@@ -75,7 +75,7 @@ driver = get_driver()
 @driver.on_startup
 def load_sing_songs():
     global sing_songs
-    directory = Path(cfg.fun_sing_dir_path)
+    directory = Path(cfg.sing_dir_path)
     if not directory.is_dir():
         logger.warning("唱歌功能的歌曲文件目录不存在，路径: {}", directory.absolute())
         return

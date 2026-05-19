@@ -23,7 +23,7 @@ __plugin_meta__ = PluginMetadata(
     config=Config,
 )
 
-cfg = get_plugin_config(Config)
+cfg = get_plugin_config(Config).help
 
 
 help_command = on_command(
@@ -54,7 +54,7 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     doc_name = arg_msg.extract_plain_text().strip()
     if not doc_name:
         # 发haruki的帮助图片
-        segments.append(OneBotMessageSegment.image(Path(cfg.help_haruki_image_file_path)))
+        segments.append(OneBotMessageSegment.image(Path(cfg.haruki_image_file_path)))
 
     if doc_name not in DOC_NAMES:
         doc_name = "index"
@@ -98,8 +98,8 @@ driver = get_driver()
 
 @driver.on_bot_connect
 async def notify_bot_online(bot: OneBot):
-    if not cfg.help_online_notice_group_ids:
+    if not cfg.online_notice_group_ids:
         return
 
-    for group_id in cfg.help_online_notice_group_ids:
+    for group_id in cfg.online_notice_group_ids:
         await bot.send_group_msg(group_id=group_id, message="宵崎奏Bot 已上线")

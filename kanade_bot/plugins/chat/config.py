@@ -4,33 +4,40 @@ from nonebot import get_plugin_config
 from pydantic import BaseModel
 
 
-class Config(BaseModel):
-    chat_model: str = "gpt-5-mini"
+class ScopedConfig(BaseModel):
+    model: str = "gpt-5-mini"
     """模型ID，需要支持图片输入"""
-    chat_system_prompt_file_path: str = "assets/prompts/Kanade-v3.md"
+    system_prompt_file_path: str = "assets/prompts/Kanade-v3.md"
     """系统提示词文件路径"""
-    chat_tavily_api_key: str
+    tavily_api_key: str
     """Tavily API Key"""
 
-    chat_session_prompt_buffer_max_size: int = 100
+    session_prompt_buffer_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
-    chat_configs_file_path: str = "assets/chat_configs.json"
+    configs_file_path: str = "assets/chat_configs.json"
     """聊天配置文件路径"""
-    chat_memes_dir_path: str = "assets/memes"
+    memes_dir_path: str = "assets/memes"
     """表情包存储路径"""
-    chat_fail_image_file_path: str = "assets/images/chat_fail.jpg"
+    fail_image_file_path: str = "assets/images/chat_fail.jpg"
     """聊天失败时发送的图片路径，不存在则返回默认的文本消息"""
-    chat_memories_dir_path: str = "assets/memories"
+    memories_dir_path: str = "assets/memories"
     """记忆文件存储路径，每个记忆为一个 Markdown 文件"""
 
-    chat_rag_enabled: bool = False
+    rag_enabled: bool = False
     """是否启用RAG功能"""
-    chat_rag_port: int = 39831
+    rag_port: int = 39831
     """RAG服务器端口号"""
-    chat_rag_query_n_results: int = 3
+    rag_query_n_results: int = 3
     """RAG查询返回的相关文档数量"""
-    chat_rag_distance_threshold: float = 0.7
+    rag_distance_threshold: float = 0.7
     """RAG相关文档的距离阈值，数值越小表示越相关"""
+
+
+class Config(BaseModel):
+    chat: ScopedConfig
+
+
+cfg = get_plugin_config(Config).chat
 
 
 class AutoReplyConfig(BaseModel):
@@ -76,12 +83,9 @@ class ChatConfigs(BaseModel):
     """
 
 
-cfg = get_plugin_config(Config)
-
-
 def _ensure_chat_configs() -> ChatConfigs:
     """确保聊天配置文件存在并返回配置对象，如果文件不存在则创建默认配置文件并返回默认配置对象"""
-    path = Path(cfg.chat_configs_file_path)
+    path = Path(cfg.configs_file_path)
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         default_configs = ChatConfigs()
@@ -99,6 +103,6 @@ configs = _ensure_chat_configs()
 
 def write_chat_config():
     """将聊天配置对象写入配置文件"""
-    Path(cfg.chat_configs_file_path).write_text(
+    Path(cfg.configs_file_path).write_text(
         configs.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"
     )

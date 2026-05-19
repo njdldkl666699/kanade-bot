@@ -12,7 +12,7 @@ from .config import cfg
 MemoryType = Literal["user", "group", "session"]
 WriteMode = Literal["replace", "append"]
 
-MEMORIES_DIR = Path(cfg.chat_memories_dir_path)
+MEMORIES_DIR = Path(cfg.memories_dir_path)
 _memory_contexts: dict[str, SessionInfo] = {}
 _memory_lock = Lock()
 
