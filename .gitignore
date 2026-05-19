@@ -17,6 +17,9 @@ wheels/
 .env.*
 !.env.example
 
+# LocalStore
+cache/
+
 # 杂项
 copilot-sdk_docs/
 kanade_banner.html
