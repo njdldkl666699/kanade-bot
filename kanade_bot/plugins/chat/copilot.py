@@ -1,6 +1,5 @@
 from asyncio import Lock
 from collections import deque
-from pathlib import Path
 
 from copilot import CopilotSession
 from copilot.generated.rpc import ModelSwitchToRequest
@@ -52,7 +51,7 @@ class CopilotSessionManager:
     ]
     """工具列表，包含所有可用工具的名称"""
 
-    system_prompt_path = Path(cfg.system_prompt_file_path)
+    system_prompt_path = cfg.system_prompt_file_path
     system_prompt = ""
     """系统提示词"""
     if not system_prompt_path.is_file():

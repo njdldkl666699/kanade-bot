@@ -1,10 +1,9 @@
 import base64
 import random
-from pathlib import Path
 
 import emoji
 from mcstatus import JavaServer
-from nonebot import get_driver, get_plugin_config, logger, on_command, on_notice
+from nonebot import logger, on_command, on_notice, require
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GROUP, MessageSegment, PokeNotifyEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
@@ -25,14 +24,16 @@ from .config import Config
 from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 
+require("nonebot_plugin_localstore")
+
+from nonebot_plugin_localstore import get_plugin_cache_file
+
 __plugin_meta__ = PluginMetadata(
     name="tool",
     description="",
     usage="",
     config=Config,
 )
-
-cfg = get_plugin_config(Config)
 
 
 thunder_link_parse = on_command(
@@ -120,7 +121,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         await mc_status.finish(MessageSegment.image(image))
 
     # 其他平台保存图片文件
-    image_path = Path("mc_status.png")
+    image_path = get_plugin_cache_file("mc_status.png")
     image_path.write_bytes(image)
     await mc_status.finish("服务器状态已保存到 mc_status.png")
 

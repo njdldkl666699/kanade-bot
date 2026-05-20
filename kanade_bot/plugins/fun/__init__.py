@@ -1,5 +1,4 @@
 from io import BytesIO
-from pathlib import Path
 
 from nonebot import get_plugin_config, on_command, on_fullmatch, on_message
 from nonebot.adapters import Bot, Event, Message
@@ -53,7 +52,7 @@ async def handle_ciallo_console(bot: ConsoleBot):
 
 @ciallo.handle()
 async def handle_ciallo_onebot(bot: OneBot):
-    ciallo_image_path = Path(cfg.ciallo_image_file_path)
+    ciallo_image_path = cfg.ciallo_image_file_path
     if not ciallo_image_path.is_file():
         await ciallo.finish("Ciallo～(∠・ω< )⌒☆")
 

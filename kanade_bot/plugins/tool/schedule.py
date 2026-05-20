@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from apscheduler.triggers.cron import CronTrigger
 from nonebot import get_driver, get_plugin_config, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message
@@ -20,7 +18,7 @@ def schedule_id(group_id: int, schedule_name: str) -> str:
 
 
 def _ensure_schedules() -> ScheduleConfigs:
-    path = Path(cfg.schedule_configs_file_path)
+    path = cfg.schedule_configs_file_path
     if not path.exists():
         logger.warning(f"定时任务配置文件 {path} 不存在，已创建空文件")
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +37,7 @@ schedules: ScheduleConfigs = _ensure_schedules()
 
 def _write_schedules():
     """将定时任务配置写入配置文件"""
-    Path(cfg.schedule_configs_file_path).write_text(
+    cfg.schedule_configs_file_path.write_text(
         schedules.model_dump_json(indent=2, ensure_ascii=False)
     )
 

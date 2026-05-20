@@ -24,7 +24,7 @@ def get_project_version() -> str:
 
 def get_help_md(doc_name: str) -> str | None:
     """确保帮助文档存在，如果文档不存在则返回None"""
-    doc_path = Path(cfg.docs_dir_path) / f"{doc_name}.md"
+    doc_path = cfg.docs_dir_path / f"{doc_name}.md"
     if not doc_path.is_file():
         logger.warning(f"帮助文档文件不存在，路径: {doc_path.absolute()}")
         return None
@@ -38,7 +38,7 @@ def get_help_md(doc_name: str) -> str | None:
 async def ensure_help_image(doc_name: str) -> bytes | None:
     """确保帮助文档图片存在且未过期，如果图片不存在或过期则重新生成并返回图片内容"""
     pic_name = f"{doc_name}-{get_project_version()}.png"
-    pic_dir = Path(cfg.images_cache_dir_path)
+    pic_dir = cfg.images_cache_dir_path
     pic_dir.mkdir(parents=True, exist_ok=True)
 
     pic_path = pic_dir / pic_name
@@ -76,7 +76,7 @@ driver = get_driver()
 def on_startup():
     global DOC_NAMES
 
-    doc_dir = Path(cfg.docs_dir_path)
+    doc_dir = cfg.docs_dir_path
     if not doc_dir.is_dir():
         logger.warning(f"帮助文档目录不存在，路径: {doc_dir.absolute()}")
         return

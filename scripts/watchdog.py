@@ -1,49 +1,36 @@
 import asyncio
 import json
 import os
-import signal
 from pathlib import Path
+import signal
 
-from dotenv import dotenv_values
 from httpx import AsyncClient, HTTPStatusError, RequestError, Timeout
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from .util import get_config
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
-def _read_env_values() -> dict[str, str | None]:
-    base_env = dotenv_values(ROOT_DIR / ".env")
-    environment = (base_env.get("ENVIRONMENT") or os.getenv("ENVIRONMENT") or "").strip()
-    env_values: dict[str, str | None] = {}
-    if environment:
-        env_path = ROOT_DIR / f".env.{environment}"
-        env_values = dotenv_values(env_path)
-
-    # Merge base and environment values, env-specific overrides base.
-    return {**base_env, **env_values}
-
-
-class WatchdogConfig(BaseModel):
+class ScopedConfig(BaseModel):
     """Watchdog 配置模型，用于描述服务启动所需的环境参数。"""
 
-    github_repo: str = Field(default="", description="GitHub 仓库，格式为 owner/repo")
-    github_branch: str = Field(default="main", description="监听的分支名称")
-    github_token: str = Field(default="", description="GitHub 访问令牌（可选）")
-    poll_interval: int = Field(default=30, description="轮询间隔（秒）")
+    github_repo: str = "njdldkl666699/kanade-bot"
+    """GitHub 仓库，格式为 owner/repo"""
+    github_branch: str = "main"
+    """GitHub 分支名称"""
+    github_token: str = ""
+    """GitHub 访问令牌，建议使用具有 repo 访问权限的个人访问令牌（PAT），以避免 API 速率限制"""
+    poll_interval: int = 30
+    """轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0"""
 
 
-def _load_watchdog_config() -> WatchdogConfig:
-    values = _read_env_values()
-    return WatchdogConfig(
-        github_repo=values.get("WATCHDOG_GITHUB_REPO") or "",
-        github_branch=values.get("WATCHDOG_GITHUB_BRANCH") or "main",
-        github_token=values.get("WATCHDOG_GITHUB_TOKEN") or "",
-        poll_interval=int(values.get("WATCHDOG_POLL_INTERVAL") or 30),
-    )
+class Config(BaseModel):
+    watchdog: ScopedConfig
 
 
-WATCHDOG_CONFIG = _load_watchdog_config()
+cfg = get_config(Config).watchdog
 
 
 def _build_github_headers(token: str) -> dict[str, str]:
@@ -56,12 +43,12 @@ def _build_github_headers(token: str) -> dict[str, str]:
     return headers
 
 
-async def _fetch_latest_commit_sha(client: AsyncClient, config: WatchdogConfig) -> str | None:
-    if not config.github_repo:
+async def _fetch_latest_commit_sha(client: AsyncClient) -> str | None:
+    if not cfg.github_repo:
         logger.error("WATCHDOG_GITHUB_REPO is empty")
         return None
 
-    url = f"https://api.github.com/repos/{config.github_repo}/commits/{config.github_branch}"
+    url = f"https://api.github.com/repos/{cfg.github_repo}/commits/{cfg.github_branch}"
     try:
         response = await client.get(url)
         response.raise_for_status()
@@ -241,15 +228,15 @@ async def _wait_for_shutdown(event: asyncio.Event, timeout: int) -> None:
 
 
 async def main() -> None:
-    if WATCHDOG_CONFIG.poll_interval <= 0:
+    if cfg.poll_interval <= 0:
         logger.error("WATCHDOG_POLL_INTERVAL must be greater than 0")
         return
 
     logger.info(
         "Watchdog polling GitHub repo '{}' on branch '{}' every {}s",
-        WATCHDOG_CONFIG.github_repo,
-        WATCHDOG_CONFIG.github_branch,
-        WATCHDOG_CONFIG.poll_interval,
+        cfg.github_repo,
+        cfg.github_branch,
+        cfg.poll_interval,
     )
 
     shutdown_event = asyncio.Event()
@@ -264,21 +251,21 @@ async def main() -> None:
 
     last_reported_sha: str | None = None
     timeout = Timeout(10.0)
-    headers = _build_github_headers(WATCHDOG_CONFIG.github_token)
+    headers = _build_github_headers(cfg.github_token)
     core_process = await _start_core_process()
     try:
         async with AsyncClient(timeout=timeout, headers=headers) as client:
             while not shutdown_event.is_set():
                 core_process = await _ensure_core_running(core_process)
-                remote_sha = await _fetch_latest_commit_sha(client, WATCHDOG_CONFIG)
+                remote_sha = await _fetch_latest_commit_sha(client)
                 if not remote_sha:
                     logger.warning("Failed to fetch latest commit SHA")
-                    await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
+                    await _wait_for_shutdown(shutdown_event, cfg.poll_interval)
                     continue
 
                 local_sha = await _get_local_commit_sha()
                 if not local_sha:
-                    await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
+                    await _wait_for_shutdown(shutdown_event, cfg.poll_interval)
                     continue
 
                 core_process, last_reported_sha = await _handle_commit_update(
@@ -287,7 +274,7 @@ async def main() -> None:
                     local_sha,
                     remote_sha,
                 )
-                await _wait_for_shutdown(shutdown_event, WATCHDOG_CONFIG.poll_interval)
+                await _wait_for_shutdown(shutdown_event, cfg.poll_interval)
     finally:
         await _stop_core_process(core_process)
 

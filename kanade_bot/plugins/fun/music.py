@@ -1,6 +1,5 @@
 import json
 import random
-from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
 from pydantic import BaseModel
@@ -81,7 +80,7 @@ driver = get_driver()
 @driver.on_startup
 def load_music_list():
     global list_cache
-    path = Path(cfg.music_list_file_path)
+    path = cfg.music_list_file_path
     lists = json.load(path.open("r", encoding="utf-8"))["data"]
     logger.info(f"正在加载音乐列表，路径: {path.absolute()}, 共 {len(lists)} 个列表")
     for list in lists:

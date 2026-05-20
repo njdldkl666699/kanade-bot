@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from nonebot import get_driver, get_plugin_config, on_command, on_notice
 from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
@@ -54,7 +52,7 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     doc_name = arg_msg.extract_plain_text().strip()
     if not doc_name:
         # 发haruki的帮助图片
-        segments.append(OneBotMessageSegment.image(Path(cfg.haruki_image_file_path)))
+        segments.append(OneBotMessageSegment.image(cfg.haruki_image_file_path))
 
     if doc_name not in DOC_NAMES:
         doc_name = "index"

@@ -1,7 +1,6 @@
 import json
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 
 from copilot import CopilotSession
 from copilot.generated.session_events import AssistantMessageData
@@ -18,7 +17,7 @@ cfg = get_plugin_config(Config).summary
 class Summarizer:
     """总结器类，负责管理总结会话和生成总结"""
 
-    system_prompt_path = Path(cfg.system_prompt_file_path)
+    system_prompt_path = cfg.system_prompt_file_path
     system_prompt = "总结以下对话内容，提取关键信息并生成简洁的总结：\n\n"
     if not system_prompt_path.is_file():
         logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
@@ -57,7 +56,7 @@ class Summarizer:
 
     def load_message_records(self):
         """从缓存文件中加载历史消息记录到内存中"""
-        cache_path = Path(cfg.message_records_file_path)
+        cache_path = cfg.message_records_file_path
         if not cache_path.is_file():
             logger.info(f"总结缓存文件不存在，路径: {cache_path.absolute()}")
             return
@@ -69,7 +68,7 @@ class Summarizer:
 
     def save_message_records(self):
         """将当前的消息记录缓存保存到文件中"""
-        cache_path = Path(cfg.message_records_file_path)
+        cache_path = cfg.message_records_file_path
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
         data = {

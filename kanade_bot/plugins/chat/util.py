@@ -95,7 +95,7 @@ async def finish_onebot_message(
         if meme_name not in configs.memes:
             return ""
 
-        meme_path = Path(cfg.memes_dir_path) / meme_name
+        meme_path = cfg.memes_dir_path / meme_name
         if not meme_path.is_dir():
             return ""
 

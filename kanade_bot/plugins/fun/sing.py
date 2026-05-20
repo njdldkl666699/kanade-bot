@@ -75,10 +75,10 @@ driver = get_driver()
 @driver.on_startup
 def load_sing_songs():
     global sing_songs
-    directory = Path(cfg.sing_dir_path)
-    if not directory.is_dir():
-        logger.warning("唱歌功能的歌曲文件目录不存在，路径: {}", directory.absolute())
+    path = cfg.sing_dir_path
+    if not path.is_dir():
+        logger.warning("唱歌功能的歌曲文件目录不存在，路径: {}", path.absolute())
         return
 
-    sing_songs = list(directory.glob("*.mp3"))
-    logger.info(f"加载唱歌功能的歌曲文件，共 {len(sing_songs)} 首，路径: {directory.absolute()}")
+    sing_songs = list(path.glob("*.mp3"))
+    logger.info(f"加载唱歌功能的歌曲文件，共 {len(sing_songs)} 首，路径: {path.absolute()}")

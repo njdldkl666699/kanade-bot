@@ -36,8 +36,7 @@ def _resolve_icon_src(icon_data: str | None) -> str:
         except Exception:
             pass
 
-    fallback = Path(cfg.fallback_icon_file_path)
-    return _encode_image_as_data_url(fallback)
+    return _encode_image_as_data_url(cfg.fallback_icon_file_path)
 
 
 type Theme = Literal["light", "dark"]
@@ -75,7 +74,7 @@ async def render_mc_status(
 
     latency = status.latency
 
-    template_path = Path(cfg.template_file_path)
+    template_path = cfg.template_file_path
     template_name = template_path.name
 
     return await template_to_pic(

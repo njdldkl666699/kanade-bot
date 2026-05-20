@@ -12,7 +12,7 @@ from .config import cfg
 MemoryType = Literal["user", "group", "session"]
 WriteMode = Literal["replace", "append"]
 
-MEMORIES_DIR = Path(cfg.memories_dir_path)
+memories_dir = cfg.memories_dir_path
 _memory_contexts: dict[str, SessionInfo] = {}
 _memory_lock = Lock()
 
@@ -104,7 +104,7 @@ def _memory_path(
     session_info: SessionInfo | None = None,
 ) -> Path:
     if memory_type == "session":
-        return MEMORIES_DIR / "sessions" / f"{_safe_name(session_id)}.md"
+        return memories_dir / "sessions" / f"{_safe_name(session_id)}.md"
 
     if session_info is None:
         raise ValueError("当前工具调用没有可用的聊天上下文")
@@ -115,12 +115,12 @@ def _memory_path(
         if not session_info.user_id:
             raise ValueError("当前上下文没有用户 id，无法访问用户记忆")
         filename = f"{_safe_name(session_info.platform)}-{_safe_name(session_info.user_id)}.md"
-        return MEMORIES_DIR / "users" / filename
+        return memories_dir / "users" / filename
 
     if memory_type == "group":
         if not session_info.group_id:
             raise ValueError("当前上下文没有群聊 id，无法访问群聊记忆")
         filename = f"{_safe_name(session_info.platform)}-{_safe_name(session_info.group_id)}.md"
-        return MEMORIES_DIR / "groups" / filename
+        return memories_dir / "groups" / filename
 
     raise ValueError(f"未知的记忆类型：{memory_type}")
