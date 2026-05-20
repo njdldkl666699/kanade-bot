@@ -13,7 +13,7 @@ cfg = get_plugin_config(Config).tool
 TOOL_SCHEDULE_JOB_PREFIX = "tool_schedule"
 
 
-def schedule_id(group_id: int, schedule_name: str) -> str:
+def _schedule_id(group_id: int, schedule_name: str) -> str:
     return f"{TOOL_SCHEDULE_JOB_PREFIX}_{group_id}_{schedule_name}"
 
 
@@ -57,13 +57,13 @@ def print_schedules_pretty(group_id: int) -> str | None:
 
 def add_schedule(group_id: int, name: str, cron: str, message: Message):
     """添加定时任务"""
-    job_id = schedule_id(group_id, name)
+    job_id = _schedule_id(group_id, name)
     if scheduler.get_job(job_id):
         raise ValueError(f"定时任务 {name} 已存在")
 
     # 添加到调度器
     scheduler.add_job(
-        send_scheduled_message,
+        _send_scheduled_message,
         trigger=CronTrigger.from_crontab(cron),
         id=job_id,
         args=[group_id, message],
@@ -78,7 +78,7 @@ def add_schedule(group_id: int, name: str, cron: str, message: Message):
 
 def remove_schedule(group_id: int, name: str):
     """移除定时任务"""
-    job_id = schedule_id(group_id, name)
+    job_id = _schedule_id(group_id, name)
     if not scheduler.get_job(job_id):
         raise ValueError(f"定时任务 {name} 不存在")
 
@@ -93,7 +93,7 @@ def remove_schedule(group_id: int, name: str):
         logger.info(f"已移除群 {group_id} 的定时任务 {name}")
 
 
-async def send_scheduled_message(bot: Bot, group_id: int, message: Message):
+async def _send_scheduled_message(bot: Bot, group_id: int, message: Message):
     try:
         await bot.send_group_msg(group_id=group_id, message=message)
     except Exception as e:
@@ -107,9 +107,9 @@ driver = get_driver()
 def on_bot_connect(bot: Bot):
     for group_id, schedule_list in schedules.root.items():
         for name, schedule in schedule_list.items():
-            job_id = schedule_id(group_id, name)
+            job_id = _schedule_id(group_id, name)
             scheduler.add_job(
-                send_scheduled_message,
+                _send_scheduled_message,
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 id=job_id,
                 args=[bot, group_id, schedule.message],

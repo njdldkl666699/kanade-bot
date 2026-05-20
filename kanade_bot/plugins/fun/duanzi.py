@@ -2,15 +2,53 @@ import json
 import random
 
 from nonebot import get_driver, get_plugin_config, logger
-from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
+from nonebot.adapters import Message
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 
 from kanade_bot.utils.onebot11 import get_onebot_info
+from kanade_bot.utils.parse import bool_from_str, parse_arg_message
 
 from .config import Config
 
 cfg = get_plugin_config(Config).fun
 
 duanzi_list: list[str] = []
+
+
+def parse_duanzi_args(arg_msg: Message) -> tuple[int | None, bool, int | str | None]:
+    if len(arg_msg) == 1:
+        # 用纯文本解析参数
+        args = parse_arg_message(
+            arg_msg.extract_plain_text(),
+            {
+                "index": int,
+                "chaos_face": str,
+                "emoji": str,
+            },
+        )
+        index: int | None = args["index"]
+        chaos_face: bool = bool_from_str(args["chaos_face"])
+        emoji: str | None = args["emoji"]
+        return index, chaos_face, emoji
+
+    if len(arg_msg) == 2 and isinstance(arg_msg, OneBotMessage):
+        # 第一块为纯文本
+        text_part: MessageSegment = arg_msg[0]
+        args = parse_arg_message(text_part.data.get("text", ""), {"index": int, "chaos_face": str})
+        index: int | None = args["index"]
+        chaos_face: bool = bool_from_str(args["chaos_face"])
+
+        # 第二块为face
+        face_id: int | str | None = None
+        face_part: MessageSegment = arg_msg[1]
+        if face_part.type == "face":
+            id: str | None = face_part.data.get("id")
+            if id is not None and id.isdigit():
+                face_id = int(id)
+        return index, chaos_face, face_id
+
+    return None, False, None
 
 
 def list_paged_duanzi(page: int = 1) -> str:
@@ -55,14 +93,14 @@ async def duanzi_to_onebot_message(
     node_threshold: int = 500,
     chaos_face: bool = False,
     custom_face_id_or_emoji: int | str | None = None,
-) -> Message:
+) -> OneBotMessage:
     """将一个段子转换为OneBot消息，支持分段和表情"""
     face_ids = FACE_ID_OR_EMOJI_LIST
     if custom_face_id_or_emoji is not None:
         face_ids = FACE_ID_OR_EMOJI_LIST.copy()
         face_ids.append(custom_face_id_or_emoji)
 
-    message = Message()
+    message = OneBotMessage()
     segments = duanzi.split("{{face}}")
     if chaos_face:
         # 如果开启混乱表情，每次都选一个随机的表情
@@ -87,7 +125,7 @@ async def duanzi_to_onebot_message(
     # 超过长度阈值则发送为合并转发消息
     bot_id, bot_nickname = await get_onebot_info(bot)
     node_custom = MessageSegment.node_custom(bot_id, bot_nickname, duanzi)
-    return Message(node_custom)
+    return OneBotMessage(node_custom)
 
 
 def get_or_random_duanzi(index: int | None = None) -> str | None:

@@ -125,4 +125,7 @@ class Summarizer:
         return session_event.data.content
 
 
-SUMMARIZER = Summarizer()
+summarizer = Summarizer()
+
+
+__all__ = ["summarizer"]

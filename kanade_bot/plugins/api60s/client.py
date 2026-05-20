@@ -19,3 +19,6 @@ def startup():
 async def shutdown():
     await client.aclose()
     logger.info("API60s HTTP客户端已关闭")
+
+
+__all__ = ["client"]

@@ -1,8 +1,8 @@
 import asyncio
 import json
 import os
-from pathlib import Path
 import signal
+from pathlib import Path
 
 from httpx import AsyncClient, HTTPStatusError, RequestError, Timeout
 from loguru import logger

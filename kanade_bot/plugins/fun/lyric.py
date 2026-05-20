@@ -29,7 +29,7 @@ type Lyric = list[LyricLine] | str
 lyric_files: set[Path] = set()
 
 
-def query_lyric_files(query: str | None = None) -> set[Path] | None:
+def _query_lyric_files(query: str | None = None) -> set[Path] | None:
     """查询歌词列表中包含query的歌词文件，返回匹配的歌词文件列表"""
     if not lyric_files:
         raise ValueError("歌词列表未加载")
@@ -48,7 +48,7 @@ def get_random_lyric(
     if length is None:
         length = cfg.lyric_default_length
 
-    filtered_files = query_lyric_files(query)
+    filtered_files = _query_lyric_files(query)
     if not filtered_files:
         return None
 

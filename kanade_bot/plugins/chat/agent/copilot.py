@@ -12,7 +12,7 @@ from kanade_bot.utils.common import COPILOT_CLIENT
 from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
-from .config import cfg
+from ..config import cfg
 from .memory import delete_session_memory, set_memory_context
 from .tool import (
     list_memes,
@@ -315,4 +315,7 @@ class CopilotSessionManager:
             delete_session_memory(session_id)
 
 
-COPILOT = CopilotSessionManager()
+copilot = CopilotSessionManager()
+
+
+__all__ = ["copilot"]

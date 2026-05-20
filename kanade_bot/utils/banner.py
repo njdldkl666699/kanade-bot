@@ -99,50 +99,50 @@ KANADE_15: Image = [
 # fmt: on
 
 
-def foreground(color: str) -> str:
+def _fg(color: str) -> str:
     return f"\033[38;2;{color}m"
 
 
-def background(color: str) -> str:
+def _bg(color: str) -> str:
     return f"\033[48;2;{color}m"
 
 
 reset = "\033[0m"
 
 
-def rgb_semicolon_to_css(color: str) -> str:
+def _rgb_semicolon_to_css(color: str) -> str:
     return f"rgb({color.replace(';', ',')})"
 
 
-def pixel2(upper: str, lower: str) -> str:
+def _pixel2(upper: str, lower: str) -> str:
     if upper == blank and lower == blank:
         # 上下都为空白，直接返回空格
         return " " + reset
     elif upper == blank:
         # 只有下面一块，用下半块的前景色
-        return foreground(lower) + "▄" + reset
+        return _fg(lower) + "▄" + reset
     elif lower == blank:
         # 只有上面一块，用上半块的前景色
-        return foreground(upper) + "▀" + reset
+        return _fg(upper) + "▀" + reset
     else:
         # 上下都有颜色，使用上半块的前景色和下半块的背景色
-        return foreground(upper) + background(lower) + "▀" + reset
+        return _fg(upper) + _bg(lower) + "▀" + reset
 
 
-def pixel2_html(upper: str, lower: str) -> str:
+def _pixel2_html(upper: str, lower: str) -> str:
     if upper == blank and lower == blank:
         return "<span>&nbsp;</span>"
     if upper == blank:
-        return f'<span style="color:{rgb_semicolon_to_css(lower)}">▄</span>'
+        return f'<span style="color:{_rgb_semicolon_to_css(lower)}">▄</span>'
     if lower == blank:
-        return f'<span style="color:{rgb_semicolon_to_css(upper)}">▀</span>'
+        return f'<span style="color:{_rgb_semicolon_to_css(upper)}">▀</span>'
     return (
-        f'<span style="color:{rgb_semicolon_to_css(upper)};'
-        f'background-color:{rgb_semicolon_to_css(lower)}">▀</span>'
+        f'<span style="color:{_rgb_semicolon_to_css(upper)};'
+        f'background-color:{_rgb_semicolon_to_css(lower)}">▀</span>'
     )
 
 
-def validate_kanade(kanade: Image) -> bool:
+def _validate_kanade(kanade: Image) -> bool:
     # 验证 kanade 的格式是否正确
     # 每行必须有 17 列，且行数必须是偶数
     for row in kanade:
@@ -156,27 +156,27 @@ def validate_kanade(kanade: Image) -> bool:
 
 
 def get_kanade(kanade: Image = KANADE_21) -> str:
-    if not validate_kanade(kanade):
+    if not _validate_kanade(kanade):
         raise ValueError("KANADE 格式不正确")
 
     lines = []
     for i in range(0, len(kanade), 2):
         upper_row = kanade[i]
         lower_row = kanade[i + 1]
-        line = "".join(pixel2(upper_row[j], lower_row[j]) for j in range(17))
+        line = "".join(_pixel2(upper_row[j], lower_row[j]) for j in range(17))
         lines.append(line)
     return "\n".join(lines)
 
 
 def get_kanade_html(kanade: Image = KANADE_21) -> str:
-    if not validate_kanade(kanade):
+    if not _validate_kanade(kanade):
         raise ValueError("KANADE 格式不正确")
 
     lines = []
     for i in range(0, len(kanade), 2):
         upper_row = kanade[i]
         lower_row = kanade[i + 1]
-        line = "".join(pixel2_html(upper_row[j], lower_row[j]) for j in range(17))
+        line = "".join(_pixel2_html(upper_row[j], lower_row[j]) for j in range(17))
         lines.append(line)
 
     html_body = "<br/>".join(lines)
@@ -202,6 +202,9 @@ def get_kanade_html(kanade: Image = KANADE_21) -> str:
 </body>
 </html>
 """
+
+
+__all__ = ["KANADE_15", "KANADE_21", "get_kanade", "get_kanade_html"]
 
 
 if __name__ == "__main__":

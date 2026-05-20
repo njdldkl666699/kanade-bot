@@ -5,8 +5,8 @@ from copilot.tools import ToolBinaryResult, ToolInvocation, ToolResult
 from nonebot import logger
 from pydantic import BaseModel, Field
 
-from .client import file_client, tavily_client
-from .config import configs
+from ..client import file_client, tavily_client
+from ..config import configs
 from .memory import MemoryType, WriteMode, read_memory_content, write_memory_content
 
 

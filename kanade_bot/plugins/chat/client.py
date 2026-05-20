@@ -29,3 +29,6 @@ async def shutdown():
     logger.info("聊天文件读取 HTTP客户端已关闭")
     await tavily_client.aclose()
     logger.info("Tavily Search HTTP客户端已关闭")
+
+
+__all__ = ["file_client", "tavily_client"]

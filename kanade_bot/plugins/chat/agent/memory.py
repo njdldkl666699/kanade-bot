@@ -7,7 +7,7 @@ from nonebot import logger
 
 from kanade_bot.utils.session import SessionInfo
 
-from .config import cfg
+from ..config import cfg
 
 MemoryType = Literal["user", "group", "session"]
 WriteMode = Literal["replace", "append"]
