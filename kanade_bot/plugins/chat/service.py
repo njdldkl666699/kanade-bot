@@ -17,7 +17,7 @@ from .agent.copilot import copilot
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
 from .client import file_client as client
-from .config import cfg, configs, write_chat_config
+from .config import cfg, chat_configs, write_chat_config
 
 
 @chat.handle()
@@ -105,10 +105,12 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
 
 @list_memes.handle()
 async def handle_list_memes():
-    if not configs.memes:
+    if not chat_configs.memes:
         await list_memes.finish("当前没有表情包")
 
-    meme_list = "\n".join(f"{name}: {description}" for name, description in configs.memes.items())
+    meme_list = "\n".join(
+        f"{name}: {description}" for name, description in chat_configs.memes.items()
+    )
     await list_memes.finish(f"当前表情包列表：\n{meme_list}")
 
 
@@ -144,7 +146,7 @@ async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandA
     image_path.write_bytes(image)
 
     # 将表情包信息添加（或更新）到配置中
-    memes = configs.memes
+    memes = chat_configs.memes
     # 如果表情包名称不存在，或新描述不为空，则更新配置文件
     if name not in memes or description:
         memes[name] = description

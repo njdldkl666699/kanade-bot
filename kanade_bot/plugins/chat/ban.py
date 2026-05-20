@@ -4,7 +4,7 @@ from nonebot.adapters import Message, MessageSegment
 
 from kanade_bot.utils.common import PlatformType
 
-from .config import configs, write_chat_config
+from .config import chat_configs, write_chat_config
 
 type BanType = Literal["user", "group"]
 
@@ -47,9 +47,9 @@ def _get_ban_list(ban_type: BanType, platform: PlatformType):
     ban_list: set[str] = set()
 
     if platform == "console":
-        config = configs.console
+        config = chat_configs.console
     elif platform == "onebot":
-        config = configs.onebot
+        config = chat_configs.onebot
 
     if ban_type == "user":
         ban_list = config.banned_users

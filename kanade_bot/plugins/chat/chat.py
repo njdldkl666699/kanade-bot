@@ -23,7 +23,7 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.copilot import copilot
 from .ban import is_banned
 from .client import file_client as client
-from .config import cfg, configs
+from .config import cfg, chat_configs
 from .rag import query
 
 
@@ -45,7 +45,7 @@ async def _finish_onebot_message(
 
     def replace_meme(match: re.Match[str]) -> str:
         meme_name = match.group(1)
-        if meme_name not in configs.memes:
+        if meme_name not in chat_configs.memes:
             return ""
 
         meme_path = cfg.memes_dir_path / meme_name
@@ -215,9 +215,9 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
         return False
 
     if platform == "console":
-        group_config = configs.console.auto_reply_group_config
+        group_config = chat_configs.console.auto_reply_group_config
     elif platform == "onebot":
-        group_config = configs.onebot.auto_reply_group_config
+        group_config = chat_configs.onebot.auto_reply_group_config
 
     # 无配置项，默认不自动回复
     if group_id not in group_config:

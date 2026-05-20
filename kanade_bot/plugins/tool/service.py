@@ -29,6 +29,7 @@ from . import (
     send_like,
     thunder_link_parse,
 )
+from .config import preset_reaction_cfg
 from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 
@@ -186,37 +187,9 @@ async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = Com
     await send_a_poke.finish()
 
 
-RECEIVE_POKE_MESSAGES: list[str] = [
-    "（被戳一下后，轻轻晃了晃神）",
-    "啊…嗯？怎么了？",
-    "有点突然…吓到了一下。",
-    "…在听。有什么事吗？",
-    "（稍微顿了一下）…嗯，我在。",
-    "是不是戳错人了…不过，也没关系。",
-    "嗯…？找我吗？",
-    "…别戳太多次，会有点晕。",
-    "啊…抱歉，刚刚在听音乐，没注意到。",
-    "…嗯。我在。",
-    "如果是想聊天的话…直接说就好。",
-]
-
-
 @receive_poke.handle()
 async def _(event: PokeNotifyEvent):
-    await receive_poke.finish(random.choice(RECEIVE_POKE_MESSAGES))
-
-
-SEND_LIKE_MESSAGES: list[str] = [
-    "今天也给你点了个赞…希望你能稍微开心一点。",
-    "嗯…点了赞。只是一个小小的表示。",
-    "看到你在努力的样子…就想点一下。",
-    "不太擅长说话…但想让你知道，我有在关注。",
-    "点个赞…如果有打扰到的话，不用在意也没关系。",
-    "嗯，点好了。不用回也没关系。",
-    "看到你头像的时候…随手就点了一个。",
-    "只是想让你知道，有人在看着这边。",
-    "点赞…大概是我能做的、最简单的那种鼓励。",
-]
+    await receive_poke.finish(random.choice(preset_reaction_cfg.receive_poke_messages))
 
 
 @send_like.handle()
@@ -224,6 +197,6 @@ async def _(bot: OneBot, event: OneBotMessageEvent):
     try:
         await bot.send_like(user_id=event.user_id, times=10)
     except ActionFailed:
-        await send_like.finish("好像到上限了。明天再试吧…")
+        await send_like.finish(preset_reaction_cfg.send_like_limited_message)
 
-    await send_like.finish(random.choice(SEND_LIKE_MESSAGES))
+    await send_like.finish(random.choice(preset_reaction_cfg.send_like_messages))

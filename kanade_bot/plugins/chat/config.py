@@ -3,6 +3,8 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
+from kanade_bot.utils.config import ensure_json_config, write_json_config
+
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_config_file, get_plugin_data_file
@@ -113,26 +115,9 @@ class ChatConfigs(BaseModel):
     """
 
 
-def _ensure_chat_configs() -> ChatConfigs:
-    """确保聊天配置文件存在并返回配置对象，如果文件不存在则创建默认配置文件并返回默认配置对象"""
-    path = cfg.configs_file_path
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        default_configs = ChatConfigs()
-        path.write_text(
-            default_configs.model_dump_json(indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return default_configs
-
-    return ChatConfigs.model_validate_json(path.read_text(encoding="utf-8"))
-
-
-configs = _ensure_chat_configs()
+chat_configs = ensure_json_config(cfg.configs_file_path, ChatConfigs)
 
 
 def write_chat_config():
     """将聊天配置对象写入配置文件"""
-    cfg.configs_file_path.write_text(
-        configs.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    write_json_config(cfg.configs_file_path, chat_configs)

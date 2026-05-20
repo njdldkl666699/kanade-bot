@@ -3,15 +3,13 @@ from pathlib import Path
 from typing import Literal
 
 from mcstatus.responses import JavaStatusResponse
-from nonebot import get_plugin_config, require
+from nonebot import require
 
-from .config import Config
+from .config import cfg
 
 require("nonebot_plugin_htmlrender")
 
 from nonebot_plugin_htmlrender import template_to_pic
-
-cfg = get_plugin_config(Config).tool
 
 
 def _encode_image_as_data_url(image_path: Path) -> str:
