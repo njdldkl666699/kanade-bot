@@ -25,9 +25,9 @@ class ScopedConfig(BaseModel):
     fail_image_file: str = "chat_fail.jpg"
     """聊天失败时发送的图片名，不存在则返回默认的文本消息"""
 
-    memes_dir: str = "memes"
+    memes_dir: str = "memes/"
     """表情包存储目录名"""
-    memories_dir: str = "memories"
+    memories_dir: str = "memories/"
     """记忆文件存储目录名称，每个记忆为一个 Markdown 文件"""
 
     rag_enabled: bool = False

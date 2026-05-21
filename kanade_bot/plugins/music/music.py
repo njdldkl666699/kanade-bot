@@ -7,7 +7,7 @@ from pydantic.alias_generators import to_camel
 
 from .config import Config
 
-cfg = get_plugin_config(Config).fun
+cfg = get_plugin_config(Config).music
 
 
 class MusicQuality(BaseModel):
@@ -51,7 +51,7 @@ class MusicList(BaseModel):
 list_cache: dict[str, MusicList] = {}
 
 
-def get_music_list_names() -> list[str]:
+def get_playlist_names() -> list[str]:
     if not list_cache:
         raise ValueError("音乐列表未加载")
     return list(list_cache.keys())
@@ -80,7 +80,7 @@ driver = get_driver()
 @driver.on_startup
 def load_music_list():
     global list_cache
-    path = cfg.music_list_file_path
+    path = cfg.playlist_file_path
     lists = json.load(path.open("r", encoding="utf-8"))["data"]
     logger.info(f"正在加载音乐列表，路径: {path.absolute()}, 共 {len(lists)} 个列表")
     for list in lists:

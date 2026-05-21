@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from .config import Config
 
-cfg = get_plugin_config(Config).fun
+cfg = get_plugin_config(Config).music
 
 
 class LyricLine(BaseModel):

@@ -6,20 +6,20 @@ from pydub import AudioSegment
 
 from .config import Config
 
-cfg = get_plugin_config(Config).fun
+cfg = get_plugin_config(Config).music
 
 sing_songs: list[Path] = []
 
 
-def get_sing_song_pages():
+def get_audio_pages():
     """获取歌曲列表的总页数"""
     total_songs = len(sing_songs)
-    page_size = cfg.sing_page_size
+    page_size = cfg.audio_page_size
     total_pages = (total_songs + page_size - 1) // page_size
     return total_pages
 
 
-def list_sing_songs(query: str | None = None, page: int = 1) -> list[Path]:
+def query_audios(query: str | None = None, page: int = 1) -> list[Path]:
     """列出符合query条件的歌曲文件，分页展示，每页10首"""
     if query:
         query = query.lower()
@@ -28,13 +28,13 @@ def list_sing_songs(query: str | None = None, page: int = 1) -> list[Path]:
         filtered_songs = sing_songs
 
     # 分页展示
-    page_size = cfg.sing_page_size
+    page_size = cfg.audio_page_size
     start_index = (page - 1) * page_size
     end_index = start_index + page_size
     return filtered_songs[start_index:end_index]
 
 
-def get_or_random_sing_song(query: str | None = None, number: int | None = None) -> Path | None:
+def get_or_random_audio(query: str | None = None, number: int | None = None) -> Path | None:
     """列出符合query条件的歌曲文件，并返回随机或指定序号的歌曲文件路径"""
     if query:
         query = query.lower()
@@ -56,7 +56,7 @@ def get_or_random_sing_song(query: str | None = None, number: int | None = None)
     return random.choice(song_files)
 
 
-def random_clip_song(song_path: Path) -> AudioSegment:
+def random_clip_audio(song_path: Path) -> AudioSegment:
     """随机裁剪长度为clip_length_ms的片段"""
     audio = AudioSegment.from_file(song_path)
     audio_length = len(audio)
@@ -75,7 +75,7 @@ driver = get_driver()
 @driver.on_startup
 def load_sing_songs():
     global sing_songs
-    path = cfg.sing_dir_path
+    path = cfg.audios_dir_path
     if not path.is_dir():
         logger.warning("唱歌功能的歌曲文件目录不存在，路径: {}", path.absolute())
         return
