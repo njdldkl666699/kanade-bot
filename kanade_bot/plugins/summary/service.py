@@ -18,8 +18,8 @@ from nonechat.model import Channel
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
-from . import summarize
 from .config import Config
+from .matcher import summarize
 from .summarizer import summarizer
 
 require("nonebot_plugin_htmlrender")

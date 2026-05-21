@@ -25,20 +25,20 @@ class Luck(BaseModel):
 
 
 class UserDailyLuckCache:
-    __cache: dict[str, Luck] = {}
+    _cache: dict[str, Luck] = {}
 
-    @staticmethod
-    def get_user_luck_cache(user_id: str) -> Luck | None:
+    @classmethod
+    def get(cls, user_id: str) -> Luck | None:
         """获取用户的运势数据"""
-        return UserDailyLuckCache.__cache.get(user_id)
+        return cls._cache.get(user_id)
 
-    @staticmethod
-    def set_user_luck_cache(user_id: str, luck: Luck):
+    @classmethod
+    def set(cls, user_id: str, luck: Luck):
         """设置用户的运势数据"""
-        UserDailyLuckCache.__cache[user_id] = luck
+        cls._cache[user_id] = luck
 
     @staticmethod
     @scheduler.scheduled_job("cron", hour=0, minute=0)
     def _auto_clear_cache():
         """每天凌晨自动清除运势缓存"""
-        UserDailyLuckCache.__cache.clear()
+        UserDailyLuckCache._cache.clear()

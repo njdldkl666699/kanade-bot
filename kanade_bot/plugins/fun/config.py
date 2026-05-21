@@ -15,6 +15,8 @@ class ScopedConfig(BaseModel):
     """+1功能的触发阈值，单位为条消息，小于等于0表示禁用"""
     duanzi_list_file: str = "duanzi.json"
     """段子(史)JSON列表文件名"""
+    lolicon_proxy: str = "i.yuki.sh"
+    """Lolicon API 图片代理"""
 
     @property
     def ciallo_image_file_path(self) -> Path:

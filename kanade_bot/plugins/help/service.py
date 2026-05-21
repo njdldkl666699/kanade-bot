@@ -9,9 +9,9 @@ from nonebot.params import CommandArg
 
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent, get_onebot_info
 
-from . import help_command, offline_notice
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
+from .matcher import help_command, offline_notice
 from .offline import send_offline_notice
 
 cfg = get_plugin_config(Config).help

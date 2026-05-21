@@ -8,7 +8,7 @@ from nonebot_plugin_htmlrender import md_to_pic
 
 from kanade_bot.plugins.api60s.client import client
 
-from . import ai_news, daily60s, epic, it_news
+from .matcher import ai_news, daily60s, epic, it_news
 
 
 @daily60s.handle()

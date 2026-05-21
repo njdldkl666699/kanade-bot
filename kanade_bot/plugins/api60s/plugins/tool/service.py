@@ -6,7 +6,7 @@ from nonebot.typing import T_State
 from kanade_bot.plugins.api60s.client import client
 from kanade_bot.utils.parse import parse_arg_message
 
-from . import fanyi, moyu, weather, weather_forecast
+from .matcher import fanyi, moyu, weather, weather_forecast
 from .translation import process_translation
 
 

@@ -12,12 +12,12 @@ from nonebot.params import CommandArg, EventMessage
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
-from . import add_meme, chat, chat_ban, chat_monitor, chat_reset, chat_unban, list_memes
 from .agent.copilot import copilot
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
 from .client import file_client as client
 from .config import cfg, chat_configs, write_chat_config
+from .matcher import add_meme, chat, chat_ban, chat_monitor, chat_reset, chat_unban, list_memes
 
 
 @chat.handle()

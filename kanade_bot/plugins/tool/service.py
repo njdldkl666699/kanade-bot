@@ -17,7 +17,8 @@ from nonebot.typing import T_State
 from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
-from . import (
+from .config import preset_reaction_cfg
+from .matcher import (
     add_a_schedule,
     list_schedules,
     mc_status,
@@ -29,7 +30,6 @@ from . import (
     send_like,
     thunder_link_parse,
 )
-from .config import preset_reaction_cfg
 from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 

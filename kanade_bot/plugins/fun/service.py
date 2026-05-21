@@ -1,14 +1,17 @@
-from nonebot import get_plugin_config
+from nonebot import get_plugin_config, logger
 from nonebot.adapters import Bot, Event, Message
-from nonebot.adapters.console.bot import Bot as ConsoleBot
+from nonebot.adapters.console import Bot as ConsoleBot
+from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg, EventPlainText
 
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 
-from . import add_a_duanzi, ciallo, list_duanzi, plus_one, random_duanzi, remove_a_duanzi
+from .cache import UserDailyWaifuCache
 from .config import Config
 from .duanzi import (
     add_duanzi,
@@ -18,6 +21,18 @@ from .duanzi import (
     parse_duanzi_args,
     remove_duanzi,
 )
+from .matcher import (
+    add_a_duanzi,
+    ciallo,
+    list_duanzi,
+    plus_one,
+    random_duanzi,
+    random_waifu,
+    refresh_waifu,
+    remove_a_duanzi,
+    today_waifu,
+)
+from .waifu import get_random_waifu, query_lolicon_waifus
 
 cfg = get_plugin_config(Config).fun
 
@@ -169,3 +184,48 @@ async def _(arg_msg: Message = CommandArg()):
         await remove_a_duanzi.finish("删除失败，请检查序号是否正确")
 
     await remove_a_duanzi.finish("删除完成")
+
+
+@today_waifu.handle()
+async def _(event: ConsoleMessageEvent):
+    user_id = event.get_user_id()
+    cache = UserDailyWaifuCache.get(user_id)
+    if cache:
+        await today_waifu.finish(cache)
+
+    url = await get_random_waifu()
+    UserDailyWaifuCache.set(user_id, url)
+    await today_waifu.finish(url)
+
+
+@today_waifu.handle()
+async def _(event: OneBotMessageEvent):
+    user_id = event.get_user_id()
+    cache = UserDailyWaifuCache.get(user_id)
+    if cache:
+        await today_waifu.finish(MessageSegment.image(cache))
+
+    url = await get_random_waifu()
+    UserDailyWaifuCache.set(user_id, url)
+    await today_waifu.finish(MessageSegment.image(url))
+
+
+@refresh_waifu.handle()
+async def _(event: Event):
+    UserDailyWaifuCache.delete(event.get_user_id())
+    await refresh_waifu.finish("今日老婆已刷新")
+
+
+@random_waifu.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    logger.info(f"触发随机图，参数消息: {arg_msg}")
+    json_str = arg_msg.extract_plain_text().strip()
+    if json_str:
+        urls = await query_lolicon_waifus(json_str)
+        await random_waifu.finish("\n".join(urls))
+
+    url = await get_random_waifu()
+    if isinstance(event, OneBotMessageEvent):
+        await random_waifu.finish(MessageSegment.image(url))
+    logger.info(f"随机图 URL: {url}")
+    await random_waifu.finish(url)

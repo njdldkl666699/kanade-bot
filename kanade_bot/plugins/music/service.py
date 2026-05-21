@@ -12,7 +12,10 @@ from nonebot.typing import T_State
 
 from kanade_bot.utils.parse import parse_arg_message
 
-from . import (
+from .audio import get_audio_pages, get_or_random_audio, query_audios, random_clip_audio
+from .config import Config
+from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
+from .matcher import (
     add_lyric,
     list_audios,
     music_recommend,
@@ -21,9 +24,6 @@ from . import (
     remove_lyric,
     sing_song,
 )
-from .audio import get_audio_pages, get_or_random_audio, query_audios, random_clip_audio
-from .config import Config
-from .lyric import add_lyric_txt, get_random_lyric, remove_song_lyric
 from .music import get_playlist_names, get_random_music
 
 cfg = get_plugin_config(Config).music

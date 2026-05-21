@@ -25,6 +25,7 @@ def init_nonebot():
     nonebot.load_plugin("nonebot_plugin_htmlrender")
     nonebot.load_plugin("nonebot_plugin_localstore")
     nonebot.load_plugin("nonebot_plugin_picstatus_ng")
+    nonebot.load_plugin("nonebot_plugin_whateat_pic")
 
     nonebot.load_plugins("kanade_bot/plugins")
 
