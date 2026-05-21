@@ -1,4 +1,4 @@
-from nonebot import get_plugin_config, logger
+from nonebot import get_plugin_config
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -218,7 +218,6 @@ async def _(event: Event):
 
 @random_waifu.handle()
 async def _(event: Event, arg_msg: Message = CommandArg()):
-    logger.info(f"触发随机图，参数消息: {arg_msg}")
     json_str = arg_msg.extract_plain_text().strip()
     if json_str:
         urls = await query_lolicon_waifus(json_str)
@@ -227,5 +226,4 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     url = await get_random_waifu()
     if isinstance(event, OneBotMessageEvent):
         await random_waifu.finish(MessageSegment.image(url))
-    logger.info(f"随机图 URL: {url}")
     await random_waifu.finish(url)

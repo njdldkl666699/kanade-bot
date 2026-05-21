@@ -120,6 +120,7 @@ async def random_loli_waifu() -> str:
 async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
     request = LoliconRequest.model_validate_json(json_str)
     request.proxy = cfg.lolicon_proxy
+    request.size = "regular"
 
     resp = await client.post(
         LOLICON_API_URL,
