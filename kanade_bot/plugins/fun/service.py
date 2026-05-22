@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 
 from nonebot import get_plugin_config, require
@@ -253,7 +254,7 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
 
     # 30秒后撤回消息
     scheduler.add_job(
-        lambda: bot.delete_msg(message_id=resp["message_id"]),
+        lambda id=resp["message_id"]: asyncio.create_task(bot.delete_msg(message_id=id)),
         trigger="date",
         run_date=datetime.now() + timedelta(seconds=30),
     )
