@@ -1,4 +1,6 @@
-from nonebot import get_plugin_config
+from datetime import datetime, timedelta
+
+from nonebot import get_plugin_config, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -33,6 +35,10 @@ from .matcher import (
     today_waifu,
 )
 from .waifu import get_random_waifu, query_lolicon_waifus
+
+require("nonebot_plugin_apscheduler")
+
+from nonebot_plugin_apscheduler import scheduler
 
 cfg = get_plugin_config(Config).fun
 
@@ -217,15 +223,38 @@ async def _(event: Event):
 
 
 @random_waifu.handle()
-async def _(event: Event, arg_msg: Message = CommandArg()):
+async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
-    if json_str:
-        urls = await query_lolicon_waifus(json_str)
-        if not urls:
-            await random_waifu.finish("查询失败，请检查参数是否正确")
-        await random_waifu.finish("\n".join(urls))
+    if not json_str:
+        url = await get_random_waifu()
+        await random_waifu.finish(url)
 
-    url = await get_random_waifu()
-    if isinstance(event, OneBotMessageEvent):
+    # 隐藏功能
+    urls = await query_lolicon_waifus(json_str)
+    if not urls:
+        await random_waifu.finish("查询失败，请检查参数是否正确")
+    await random_waifu.finish("\n\n".join(urls))
+
+
+@random_waifu.handle()
+async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+    json_str = arg_msg.extract_plain_text().strip()
+    if not json_str:
+        url = await get_random_waifu()
         await random_waifu.finish(MessageSegment.image(url))
-    await random_waifu.finish(url)
+
+    # 隐藏功能
+    urls = await query_lolicon_waifus(json_str)
+    if not urls:
+        await random_waifu.finish("查询失败，请检查参数是否正确")
+
+    obscured_urls = [url.replace(".", "点") for url in urls]
+    resp = await random_waifu.send("\n\n".join(obscured_urls))
+
+    # 30秒后撤回消息
+    scheduler.add_job(
+        lambda: bot.delete_msg(message_id=resp["message_id"]),
+        trigger="date",
+        run_date=datetime.now() + timedelta(seconds=30),
+    )
+    await random_waifu.finish()

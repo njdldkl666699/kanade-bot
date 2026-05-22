@@ -136,7 +136,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
 
 async def get_random_waifu() -> str:
     i = random.randint(0, 9)
-    if i == 0:
+    if i != 0:
         return await random_loli_waifu()
     else:
         waifus = await query_lolicon_waifus()
