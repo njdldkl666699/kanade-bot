@@ -100,16 +100,29 @@ class LoliconResponse(BaseModel):
     """色图数组"""
 
 
+request = LoliconRequest(
+    r18=0,
+    proxy="i.yuki.sh",
+    size=["regular"],
+    num=20,
+)
+req_dict = request.model_dump(exclude_none=True)
+print(req_dict)
+
 resp = httpx.post(
     "https://api.lolicon.app/setu/v2",
     json=LoliconRequest(
-        r18=1,
+        r18=0,
         proxy="i.yuki.sh",
-    ).model_dump(),
+        size=["regular"],
+        num=20,
+    ).model_dump(exclude_none=True),
+    timeout=10,
 )
 
 response = LoliconResponse.model_validate(resp.json())
-image_resp = httpx.get(response.data[0].urls["original"])
+# print(response.model_dump_json(indent=2, ensure_ascii=False))
+image_resp = httpx.get(response.data[0].urls["regular"])
 Path("lolicon.png").write_bytes(image_resp.content)
 
 test = LoliconRequest.model_validate_json("{}")

@@ -124,7 +124,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
 
     resp = await client.post(
         LOLICON_API_URL,
-        json=request.model_dump(),
+        json=request.model_dump(exclude_none=True),
     )
     response = LoliconResponse.model_validate(resp.json())
 
