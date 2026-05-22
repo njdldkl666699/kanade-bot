@@ -115,13 +115,13 @@ resp = httpx.post(
         r18=0,
         proxy="i.yuki.sh",
         size=["regular"],
-        num=20,
+        num=21,
     ).model_dump(exclude_none=True),
     timeout=10,
 )
 
 response = LoliconResponse.model_validate(resp.json())
-# print(response.model_dump_json(indent=2, ensure_ascii=False))
+print(response.model_dump_json(indent=2, ensure_ascii=False))
 image_resp = httpx.get(response.data[0].urls["regular"])
 Path("lolicon.png").write_bytes(image_resp.content)
 

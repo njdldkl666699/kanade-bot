@@ -109,7 +109,7 @@ LOLI_API_URL = "https://www.loliapi.com/bg/?type=url"
 
 LOLICON_API_URL = "https://api.lolicon.app/setu/v2"
 
-client = AsyncClient()
+client = AsyncClient(timeout=10)
 
 
 async def random_loli_waifu() -> str:
@@ -135,7 +135,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
 
 
 async def get_random_waifu() -> str:
-    i = random.randint(0, 1)
+    i = random.randint(0, 9)
     if i == 0:
         return await random_loli_waifu()
     else:

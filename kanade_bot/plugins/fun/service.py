@@ -221,6 +221,8 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
     if json_str:
         urls = await query_lolicon_waifus(json_str)
+        if not urls:
+            await random_waifu.finish("查询失败，请检查参数是否正确")
         await random_waifu.finish("\n".join(urls))
 
     url = await get_random_waifu()
