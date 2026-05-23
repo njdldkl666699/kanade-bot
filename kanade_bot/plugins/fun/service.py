@@ -233,7 +233,7 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
 
 
 @random_waifu.handle(
-    (Cooldown(prompt="别太压抑了。", isolate_level=CooldownIsolateLevel.GROUP_USER))
+    (Cooldown(prompt="别太压抑了。", isolate_level=CooldownIsolateLevel.GROUP_USER),)
 )
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
