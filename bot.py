@@ -1,7 +1,7 @@
 import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
-
+from nonebot.permission import SUPERUSER
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
@@ -30,7 +30,28 @@ def init_nonebot():
     nonebot.load_plugins("kanade_bot/plugins")
 
 
+def patch_whateat_pic():
+    from nonebot_plugin_whateat_pic.matcher import drink_pic_matcher, eat_pic_matcher
+
+    # 删除原有的错误快捷方式
+    eat_pic_matcher.command()._get_shortcuts().clear()
+    drink_pic_matcher.command()._get_shortcuts().clear()
+
+    # 添加新的快捷方式
+    eat_pic_matcher.shortcut(
+        r"[今明后]?[天日]?(早|中|晚)?(上|午|餐|饭|夜宵|宵夜|早|晚)吃(什么|啥|点啥)",
+        fuzzy=False,
+        prefix=True,
+    )
+    drink_pic_matcher.shortcut(
+        r"[今明后]?[天日]?(早|中|晚)?(上|午|餐|饭|夜宵|宵夜|早|晚)喝(什么|啥|点啥)",
+        fuzzy=False,
+        prefix=True,
+    )
+
+
 if __name__ == "__main__":
     print(get_kanade())
     init_nonebot()
+    patch_whateat_pic()
     nonebot.run()

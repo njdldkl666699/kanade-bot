@@ -5,6 +5,7 @@ import emoji
 from mcstatus import JavaServer
 from nonebot import logger, require
 from nonebot.adapters import Event, Message
+from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -55,7 +56,7 @@ async def _(arg_msg: Message = CommandArg()):
 
 
 @pjsk_skill_multiplier.handle()
-async def _(arg_msg: Message = CommandArg()):
+async def _(bot: ConsoleBot, arg_msg: Message = CommandArg()):
     args = arg_msg.extract_plain_text().strip().split()
     multipliers = [int(arg) for arg in args if arg.isdigit()]
     if len(multipliers) != 5:
