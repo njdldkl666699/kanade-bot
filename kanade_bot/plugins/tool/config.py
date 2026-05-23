@@ -93,6 +93,9 @@ class PresetReactionConfig(BaseModel):
     ]
     """收到戳一戳消息时的随机回复列表"""
 
+    send_poke_probability: int = 30
+    """发送戳一戳的概率，范围0-100"""
+
     send_like_messages: list[str] = [
         "今天也给你点了个赞…希望你能稍微开心一点。",
         "嗯…点了赞。只是一个小小的表示。",

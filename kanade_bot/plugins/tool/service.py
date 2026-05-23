@@ -189,7 +189,11 @@ async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = Com
 
 
 @receive_poke.handle()
-async def _(event: PokeNotifyEvent):
+async def _(bot: OneBot, event: PokeNotifyEvent):
+    i = random.randint(1, 100)
+    if i < preset_reaction_cfg.send_poke_probability:
+        # 戳回去
+        await send_poke(bot, event.user_id, event.group_id)
     await receive_poke.finish(random.choice(preset_reaction_cfg.receive_poke_messages))
 
 
