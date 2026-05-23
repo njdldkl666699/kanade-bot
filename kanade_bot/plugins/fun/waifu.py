@@ -1,8 +1,10 @@
 import random
+from io import BytesIO
 from typing import Literal
 
-from httpx import AsyncClient
+from httpx import AsyncClient, TimeoutException
 from nonebot import get_plugin_config
+from PIL import Image
 from pydantic import BaseModel
 
 from .config import Config
@@ -138,6 +140,28 @@ async def get_random_waifu() -> str:
     i = random.randint(0, 9)
     if i != 0:
         return await random_loli_waifu()
-    else:
-        waifus = await query_lolicon_waifus()
-        return waifus[0]
+
+    waifus = await query_lolicon_waifus()
+    return waifus[0]
+
+
+async def get_compressed_image(
+    url: str,
+    *,
+    quality: int = 80,
+    lossless: bool = False,
+) -> bytes | None:
+    try:
+        resp = await client.get(url)
+    except TimeoutException:
+        return None
+
+    raw = resp.content
+    if len(raw) < 2 * 1024 * 1024:
+        return raw
+
+    # 压缩图片
+    img = Image.open(BytesIO(raw))
+    compressed_io = BytesIO()
+    img.save(compressed_io, format="WEBP", quality=quality, lossless=lossless)
+    return compressed_io.getvalue()

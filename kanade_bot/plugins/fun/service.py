@@ -34,7 +34,7 @@ from .matcher import (
     remove_a_duanzi,
     today_waifu,
 )
-from .waifu import get_random_waifu, query_lolicon_waifus
+from .waifu import get_compressed_image, get_random_waifu, query_lolicon_waifus
 
 cfg = get_plugin_config(Config).fun
 
@@ -191,13 +191,17 @@ async def _(arg_msg: Message = CommandArg()):
 @today_waifu.handle()
 async def _(event: ConsoleMessageEvent):
     user_id = event.get_user_id()
-    cache = UserDailyWaifuCache.get(user_id)
-    if cache:
-        await today_waifu.finish(cache)
+    p = UserDailyWaifuCache.get_path(user_id)
+    if p:
+        await today_waifu.finish(str(p))
 
     url = await get_random_waifu()
-    UserDailyWaifuCache.set(user_id, url)
-    await today_waifu.finish(url)
+    image = await get_compressed_image(url)
+    if not image:
+        await today_waifu.finish("获取图片失败，请稍后再试")
+
+    p = UserDailyWaifuCache.set(user_id, image)
+    await today_waifu.finish(str(p))
 
 
 @today_waifu.handle()
@@ -208,8 +212,12 @@ async def _(event: OneBotMessageEvent):
         await today_waifu.finish(MessageSegment.image(cache))
 
     url = await get_random_waifu()
-    UserDailyWaifuCache.set(user_id, url)
-    await today_waifu.finish(MessageSegment.image(url))
+    image = await get_compressed_image(url)
+    if not image:
+        await today_waifu.finish("获取图片失败，请稍后再试")
+
+    UserDailyWaifuCache.set(user_id, image)
+    await today_waifu.finish(MessageSegment.image(image))
 
 
 @refresh_waifu.handle()
@@ -239,7 +247,10 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
         url = await get_random_waifu()
-        await random_waifu.finish(MessageSegment.image(url))
+        image = await get_compressed_image(url)
+        if not image:
+            await random_waifu.finish("获取图片失败，请稍后再试")
+        await random_waifu.finish(MessageSegment.image(image))
 
     # 隐藏功能
     urls = await query_lolicon_waifus(json_str)
