@@ -1,6 +1,6 @@
 # 宵崎奏Bot（Kanade Bot）
 
-<img src="https://lenovo.njdldkl666699.dpdns.org:1270/static/ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
+<img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
 
 ![Stone Badge](https://stone.professorlee.work/api/stone/njdldkl666699/kanade-bot)
 
