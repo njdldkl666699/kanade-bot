@@ -1,12 +1,12 @@
-from nonebot import get_driver, get_plugin_config
+from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventPlainText
@@ -241,7 +241,7 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
 
 
 @random_waifu.handle(
-    (Cooldown(7, prompt="别太压抑了。", isolate_level=CooldownIsolateLevel.GROUP),)
+    (Cooldown(10, prompt="别太压抑了。", isolate_level=CooldownIsolateLevel.GROUP),)
 )
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
@@ -250,7 +250,13 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
         image = await get_compressed_image(url)
         if not image:
             await random_waifu.finish("获取图片失败，请稍后再试")
-        await random_waifu.finish(MessageSegment.image(image))
+        try:
+            await random_waifu.finish(MessageSegment.image(image))
+        except ActionFailed as e:
+            logger.warning(
+                f"发送图片失败: {e}，图片大小：{len(image) / 1024 / 1024:.2f}MB，链接：{url}"
+            )
+            await random_waifu.finish(f"发送图片失败，链接：{url}")
 
     # 隐藏功能
     urls = await query_lolicon_waifus(json_str)
