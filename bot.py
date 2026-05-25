@@ -30,8 +30,15 @@ def init_nonebot():
     nonebot.load_plugins("kanade_bot/plugins")
 
 
-def patch_whateat_pic():
-    from nonebot_plugin_whateat_pic.matcher import drink_pic_matcher, eat_pic_matcher
+def patch_foreign_plugins():
+    ## nonebot_plugin_whateat_pic
+    from nonebot_plugin_whateat_pic.matcher import (
+        drink_pic_matcher,
+        eat_pic_matcher,
+        view_menu_matcher,
+        add_menu_matcher,
+        del_menu_matcher,
+    )
 
     # 删除原有的错误快捷方式
     eat_pic_matcher.command()._get_shortcuts().clear()
@@ -49,9 +56,22 @@ def patch_whateat_pic():
         prefix=True,
     )
 
+    # 阻止nonebot_plugin_whateat_pic的指令向后传播
+    eat_pic_matcher.block = True
+    drink_pic_matcher.block = True
+    view_menu_matcher.block = True
+    add_menu_matcher.block = True
+    del_menu_matcher.block = True
+
+    ## nonebot_plugin_picstatus_ng
+    from nonebot_plugin_picstatus_ng.__main__ import stat_matcher
+
+    # 阻止 PicStatus 的指令向后传播
+    stat_matcher.block = True
+
 
 if __name__ == "__main__":
     print(get_kanade())
     init_nonebot()
-    patch_whateat_pic()
+    patch_foreign_plugins()
     nonebot.run()

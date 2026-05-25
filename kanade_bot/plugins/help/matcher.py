@@ -18,6 +18,7 @@ offline_notice = on_notice(
 
 execute_command = on_command(
     "execute",
+    aliases={"exec"},
     priority=2,
     permission=superuser_onebot_private_permission,
     block=True,
