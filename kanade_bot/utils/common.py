@@ -23,7 +23,7 @@ def not_to_me(to_me: bool = EventToMe()):
 
 def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:
     """匹配OneBot私聊消息类型事件且发送者是超级用户"""
-    return event.user_id in get_driver().config.superusers
+    return event.get_user_id() in get_driver().config.superusers
 
 
 COPILOT_CLIENT = CopilotClient()
