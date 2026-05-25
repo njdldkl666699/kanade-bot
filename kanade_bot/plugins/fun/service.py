@@ -1,4 +1,4 @@
-from nonebot import get_plugin_config, logger
+from nonebot import get_driver, get_plugin_config
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventPlainText
 
@@ -252,10 +253,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
             await random_waifu.finish("获取图片失败，请稍后再试")
         try:
             await random_waifu.finish(MessageSegment.image(image))
-        except ActionFailed as e:
-            logger.warning(
-                f"发送图片失败: {e}，图片大小：{len(image) / 1024 / 1024:.2f}MB，链接：{url}"
-            )
+        except ActionFailed:
             await random_waifu.finish(f"发送图片失败，链接：{url}")
 
     # 隐藏功能
@@ -263,15 +261,25 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
 
+    # 私聊且是管理员，直接发链接
+    if (
+        isinstance(event, OneBotPrivateMessageEvent)
+        and event.get_user_id() in get_driver().config.superusers
+    ):
+        await random_waifu.finish("\n\n".join(urls))
+
+    # r18发送混淆图片链接，并在30秒后撤回消息
     if r18:
-        # r18发送混淆图片链接，并在30秒后撤回消息
         obscured_urls = [url.replace(".", "点") for url in urls]
         await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
         await random_waifu.finish()
 
+    # 较多，发链接
     if len(urls) >= 3:
-        # 较多，发链接
         await random_waifu.finish("\n\n".join(urls))
 
-    message = OneBotMessage(MessageSegment.image(url) for url in urls)
-    await random_waifu.finish(message)
+    try:
+        message = OneBotMessage(MessageSegment.image(url) for url in urls)
+        await random_waifu.finish(message)
+    except ActionFailed:
+        await random_waifu.finish(f"发送图片失败，链接：{', '.join(urls)}")
