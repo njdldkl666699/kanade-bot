@@ -119,10 +119,12 @@ async def random_loli_waifu() -> str:
     return url_resp.text
 
 
-async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
+async def query_lolicon_waifus(json_str: str = "{}") -> tuple[bool, list[str]]:
+    """查询 Lolicon API v2 获取图片URL列表，以及是否包含 R18 图"""
     request = LoliconRequest.model_validate_json(json_str)
     request.proxy = cfg.lolicon_proxy
     request.size = "regular"
+    r18 = request.r18
 
     resp = await client.post(
         LOLICON_API_URL,
@@ -133,7 +135,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
     urls: list[str] = []
     for setu in response.data:
         urls.extend(setu.urls.values())
-    return urls
+    return r18 != 0, urls
 
 
 async def get_random_waifu() -> str:
@@ -141,7 +143,7 @@ async def get_random_waifu() -> str:
     if i != 0:
         return await random_loli_waifu()
 
-    waifus = await query_lolicon_waifus()
+    _, waifus = await query_lolicon_waifus()
     return waifus[0]
 
 

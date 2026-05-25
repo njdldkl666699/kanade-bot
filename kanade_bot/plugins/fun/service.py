@@ -1,4 +1,4 @@
-from nonebot import get_driver, get_plugin_config, logger
+from nonebot import get_plugin_config, logger
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -6,8 +6,8 @@ from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMe
 from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventPlainText
 
@@ -234,7 +234,7 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
         await random_waifu.finish(url)
 
     # 隐藏功能
-    urls = await query_lolicon_waifus(json_str)
+    _, urls = await query_lolicon_waifus(json_str)
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
     await random_waifu.finish("\n\n".join(urls))
@@ -259,17 +259,19 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
             await random_waifu.finish(f"发送图片失败，链接：{url}")
 
     # 隐藏功能
-    urls = await query_lolicon_waifus(json_str)
+    r18, urls = await query_lolicon_waifus(json_str)
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
 
-    # 管理员私聊直接发送图片链接
-    if (
-        isinstance(event, OneBotPrivateMessageEvent)
-        and event.get_user_id() in get_driver().config.superusers
-    ):
+    if r18:
+        # r18发送混淆图片链接，并在30秒后撤回消息
+        obscured_urls = [url.replace(".", "点") for url in urls]
+        await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
+        await random_waifu.finish()
+
+    if len(urls) >= 3:
+        # 较多，发链接
         await random_waifu.finish("\n\n".join(urls))
 
-    # 其他情况发送混淆图片链接，并在30秒后撤回消息
-    obscured_urls = [url.replace(".", "点") for url in urls]
-    await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
+    message = OneBotMessage(MessageSegment.image(url) for url in urls)
+    await random_waifu.finish(message)
