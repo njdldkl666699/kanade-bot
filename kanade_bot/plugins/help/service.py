@@ -1,3 +1,5 @@
+from asyncio import subprocess
+
 from nonebot import get_driver, get_plugin_config
 from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
@@ -5,13 +7,14 @@ from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+
 from nonebot.params import CommandArg
 
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent, get_onebot_info
 
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
-from .matcher import help_command, offline_notice
+from .matcher import execute_command, help_command, offline_notice
 from .offline import send_offline_notice
 
 cfg = get_plugin_config(Config).help
@@ -68,6 +71,23 @@ async def _(event: BotOfflineNoticeEvent):
     message = event.message
 
     await send_offline_notice(bot_id, tag, message)
+
+
+@execute_command.handle()
+async def _(arg_msg: Message = CommandArg()):
+    command = arg_msg.extract_plain_text().strip()
+    if not command:
+        await execute_command.finish("请输入要执行的命令")
+
+    proc = await subprocess.create_subprocess_shell(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+
+    await execute_command.send(f"stdout: \n{stdout.decode()}")
+    await execute_command.finish(f"stderr: \n{stderr.decode()}")
 
 
 driver = get_driver()
