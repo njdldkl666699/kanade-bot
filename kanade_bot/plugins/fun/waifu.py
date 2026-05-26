@@ -1,4 +1,3 @@
-import random
 from io import BytesIO
 from typing import Literal
 
@@ -119,12 +118,11 @@ async def random_loli_waifu() -> str:
     return url_resp.text
 
 
-async def query_lolicon_waifus(json_str: str = "{}") -> tuple[bool, list[str]]:
-    """查询 Lolicon API v2 获取图片URL列表，以及是否包含 R18 图"""
+async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
+    """查询 Lolicon API v2 获取图片URL列表"""
     request = LoliconRequest.model_validate_json(json_str)
     request.proxy = cfg.lolicon_proxy
     request.size = "regular"
-    r18 = request.r18
 
     resp = await client.post(
         LOLICON_API_URL,
@@ -135,16 +133,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> tuple[bool, list[str]]:
     urls: list[str] = []
     for setu in response.data:
         urls.extend(setu.urls.values())
-    return r18 != 0, urls
-
-
-async def get_random_waifu() -> str:
-    i = random.randint(0, 9)
-    if i != 0:
-        return await random_loli_waifu()
-
-    _, waifus = await query_lolicon_waifus()
-    return waifus[0]
+    return urls
 
 
 async def get_compressed_image(

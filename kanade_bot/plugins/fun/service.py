@@ -6,7 +6,6 @@ from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMe
 from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
@@ -35,7 +34,7 @@ from .matcher import (
     remove_a_duanzi,
     today_waifu,
 )
-from .waifu import get_compressed_image, get_random_waifu, query_lolicon_waifus
+from .waifu import get_compressed_image, query_lolicon_waifus, random_loli_waifu
 
 cfg = get_plugin_config(Config).fun
 
@@ -196,7 +195,7 @@ async def _(event: ConsoleMessageEvent):
     if p:
         await today_waifu.finish(str(p))
 
-    url = await get_random_waifu()
+    url = await random_loli_waifu()
     image = await get_compressed_image(url)
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
@@ -212,7 +211,7 @@ async def _(event: OneBotMessageEvent):
     if cache:
         await today_waifu.finish(MessageSegment.image(cache))
 
-    url = await get_random_waifu()
+    url = await random_loli_waifu()
     image = await get_compressed_image(url)
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
@@ -231,7 +230,7 @@ async def _(event: Event):
 async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
-        url = await get_random_waifu()
+        url = await random_loli_waifu()
         await random_waifu.finish(url)
 
     # 隐藏功能
@@ -247,17 +246,17 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
-        url = await get_random_waifu()
+        url = await random_loli_waifu()
         image = await get_compressed_image(url)
         if not image:
-            await random_waifu.finish("获取图片失败，请稍后再试")
+            await random_waifu.finish(f"获取图片失败，链接：{url}")
         try:
             await random_waifu.finish(MessageSegment.image(image))
         except ActionFailed:
             await random_waifu.finish(f"发送图片失败，链接：{url}")
 
     # 隐藏功能
-    r18, urls = await query_lolicon_waifus(json_str)
+    urls = await query_lolicon_waifus(json_str)
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
 
@@ -268,18 +267,6 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     ):
         await random_waifu.finish("\n\n".join(urls))
 
-    # r18发送混淆图片链接，并在30秒后撤回消息
-    if r18:
-        obscured_urls = [url.replace(".", "点") for url in urls]
-        await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
-        await random_waifu.finish()
-
-    # 较多，发链接
-    if len(urls) >= 3:
-        await random_waifu.finish("\n\n".join(urls))
-
-    try:
-        message = OneBotMessage(MessageSegment.image(url) for url in urls)
-        await random_waifu.finish(message)
-    except ActionFailed:
-        await random_waifu.finish(f"发送图片失败，链接：{', '.join(urls)}")
+    # 发送混淆图片链接，并在30秒后撤回消息
+    obscured_urls = [url.replace(".", "点") for url in urls]
+    await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
