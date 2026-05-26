@@ -15,10 +15,13 @@ from nonebot_plugin_localstore import (
 class ScopedConfig(BaseModel):
     haruki_image_file: str = "Haruki_help.png"
     """Haruki的帮助图片名，不存在则不发送"""
-    server_chan_turbo_key: str = ""
-    """Server酱Turbo的Key，配置后会在Bot掉线时推送通知到微信"""
     online_notice_group_ids: list[int] = []
     """Bot上线通知的群聊ID列表，配置后会在Bot上线时发送通知到这些群聊"""
+
+    ntfy_topic_url: str | None = None
+    """ntfy的topic的完整URL，配置后会在Bot掉线时发送通知到这个topic，不配置则禁用掉线通知"""
+    login_qrcode_file_path: Path | None = None
+    """登录二维码的文件路径，配置后会在掉线推送中附带"""
 
     @property
     def docs_dir_path(self) -> Path:

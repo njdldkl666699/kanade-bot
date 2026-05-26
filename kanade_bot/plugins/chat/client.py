@@ -1,5 +1,4 @@
 from httpx import AsyncClient
-from nonebot import get_driver, logger
 
 from .config import cfg
 
@@ -13,22 +12,3 @@ tavily_client = AsyncClient(
         "Authorization": f"Bearer {cfg.tavily_api_key}",
     },
 )
-
-driver = get_driver()
-
-
-@driver.on_startup
-async def startup():
-    logger.info("聊天文件读取 HTTP客户端已启动")
-    logger.info("Tavily Search HTTP客户端已启动")
-
-
-@driver.on_shutdown
-async def shutdown():
-    await file_client.aclose()
-    logger.info("聊天文件读取 HTTP客户端已关闭")
-    await tavily_client.aclose()
-    logger.info("Tavily Search HTTP客户端已关闭")
-
-
-__all__ = ["file_client", "tavily_client"]

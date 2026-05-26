@@ -268,5 +268,5 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
         await random_waifu.finish("\n\n".join(urls))
 
     # 发送混淆图片链接，并在30秒后撤回消息
-    obscured_urls = [url.replace(".", "点") for url in urls]
+    obscured_urls = [url.replace(".", "。").replace(":", "：") for url in urls]
     await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
