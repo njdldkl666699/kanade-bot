@@ -33,11 +33,11 @@ def init_nonebot():
 def patch_foreign_plugins():
     ## nonebot_plugin_whateat_pic
     from nonebot_plugin_whateat_pic.matcher import (
+        add_menu_matcher,
+        del_menu_matcher,
         drink_pic_matcher,
         eat_pic_matcher,
         view_menu_matcher,
-        add_menu_matcher,
-        del_menu_matcher,
     )
 
     # 删除原有的错误快捷方式
@@ -62,12 +62,19 @@ def patch_foreign_plugins():
     view_menu_matcher.block = True
     add_menu_matcher.block = True
     del_menu_matcher.block = True
+    # 降低优先级
+    eat_pic_matcher.priority = 2
+    drink_pic_matcher.priority = 2
+    view_menu_matcher.priority = 2
+    add_menu_matcher.priority = 2
+    del_menu_matcher.priority = 2
 
     ## nonebot_plugin_picstatus_ng
     from nonebot_plugin_picstatus_ng.__main__ import stat_matcher
 
     # 阻止 PicStatus 的指令向后传播
     stat_matcher.block = True
+    stat_matcher.priority = 2
 
 
 if __name__ == "__main__":
