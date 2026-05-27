@@ -1,9 +1,15 @@
+import asyncio
 import random
 import re
 from pathlib import Path
-from typing import cast
+from typing import Callable, cast
 
-from copilot.generated.session_events import AssistantMessageData
+from copilot.generated.session_events import (
+    AssistantMessageData,
+    SessionErrorData,
+    SessionEvent,
+    SessionIdleData,
+)
 from nonebot import logger
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -18,7 +24,7 @@ from nonebot.matcher import Matcher
 from kanade_bot.utils.common import PlatformType
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
-from kanade_bot.utils.session import extract_session_info
+from kanade_bot.utils.session import SessionInfo, extract_session_info
 
 from .agent.copilot import copilot
 from .ban import is_banned
@@ -145,31 +151,24 @@ async def send_message_in_chunks(
     rag_docs = query(query_str) if query_str else None
 
     session_info = await extract_session_info(event, bot)
-    session_id = session_info.session_id
 
-    response, new_session = await copilot.send_and_wait(
-        session_info,
-        prompt,
-        rag_docs=rag_docs,
-        reply_text=reply_text,
-        attachments=attachments,
-        timeout=300,
-    )
-    if new_session:
-        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
-
-    if not response:
-        logger.warning(f"会话{session_id}没有收到回复，可能是生成失败或超时")
-        await _send_fail_message(matcher)
-        return
-    if not isinstance(response.data, AssistantMessageData):
-        logger.warning(
-            f"会话{session_id}回复的数据不是AssistantMessageData，可能是生成失败，数据：{response.data}"
+    try:
+        content = await copilot.send_and_wait(
+            session_info,
+            prompt,
+            rag_docs=rag_docs,
+            reply_text=reply_text,
+            attachments=attachments,
+            timeout=300,
         )
+    except Exception as e:
+        logger.error("发送消息时发生错误: {}", e)
         await _send_fail_message(matcher)
         return
 
-    content = response.data.content
+    if not content:
+        logger.warning(f"会话{session_info.session_id}没有收到任何回复")
+        return
 
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):

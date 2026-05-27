@@ -1,9 +1,16 @@
 from asyncio import Lock
+import asyncio
 from collections import deque
+from typing import Callable
 
 from copilot import CopilotSession
 from copilot.generated.rpc import ModelSwitchToRequest
-from copilot.generated.session_events import AssistantMessageData, SessionEvent, SessionEventType
+from copilot.generated.session_events import (
+    AssistantMessageData,
+    SessionErrorData,
+    SessionEvent,
+    SessionIdleData,
+)
 from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
 from nonebot import logger
@@ -74,16 +81,16 @@ class CopilotSessionManager:
     }
 
     def __init__(self):
-        self.__sessions: dict[str, CopilotSession] = {}
+        self._sessions: dict[str, CopilotSession] = {}
         """会话对象缓存，键为会话ID，值为CopilotSession对象"""
 
-        self.__sessions_prompt_buffer: dict[str, deque[str]] = {}
+        self._sessions_prompt_buffer: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
 
-        self.__session_locks: dict[str, Lock] = {}
+        self._session_locks: dict[str, Lock] = {}
         """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
 
-        self.__global_lock = Lock()
+        self._global_lock = Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
 
     async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
@@ -111,50 +118,57 @@ class CopilotSessionManager:
 
         return session, new_session
 
-    async def send_and_wait(
+    async def send(
         self,
         session_info: SessionInfo,
         prompt: str,
+        handler: Callable[[SessionEvent], None],
         *,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
-        timeout: float = 60,
-    ) -> tuple[SessionEvent | None, bool]:
-        """发送消息并等待响应，返回响应事件和是否是新会话
+    ) -> tuple[str, Callable[[], None]] | None:
+        """发送消息到会话，自动处理会话恢复、消息缓冲区、提示词构建、事件监听等逻辑
 
-        prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
+        是对`CopilotSession.send`的封装
+
+        :param prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
         仅使用缓冲区中的消息和引用消息
+
+        :returns message_id: The message ID assigned by the server,
+        which can be used to correlate events.
+        :returns unsubscribe: A function that, when called, unsubscribes the handler.
         """
         session_id = session_info.session_id
         async with await self._ensure_session_lock(session_id):
-            async with self.__global_lock:
-                session = self.__sessions.get(session_id)
+            async with self._global_lock:
+                session = self._sessions.get(session_id)
 
             new_session = False
             if not session:
                 session, new_session = await self._resume_or_create_session(session_id)
-                async with self.__global_lock:
-                    self.__sessions[session_id] = session
+                async with self._global_lock:
+                    self._sessions[session_id] = session
 
             if new_session:
+                logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
                 delete_session_memory(session_id)
 
-            async with self.__global_lock:
+            async with self._global_lock:
                 if new_session:
-                    self.__sessions_prompt_buffer[session_id] = deque(
+                    self._sessions_prompt_buffer[session_id] = deque(
                         maxlen=cfg.session_prompt_buffer_max_size
                     )
 
                 # 将消息缓冲区中的消息添加到选项中
-                buffered_messages = self.__sessions_prompt_buffer.get(session_id)
+                buffered_messages = self._sessions_prompt_buffer.get(session_id)
                 if not prompt and not buffered_messages and not reply_text:
                     # 没有任何新的消息可发送，直接返回
-                    return None, new_session
+                    return None
 
                 # 清空消息缓冲区
-                if session_id in self.__sessions_prompt_buffer:
-                    self.__sessions_prompt_buffer[session_id].clear()
+                if session_id in self._sessions_prompt_buffer:
+                    self._sessions_prompt_buffer[session_id].clear()
 
             send_prompt = self._build_send_prompt(
                 session_info,
@@ -165,26 +179,70 @@ class CopilotSessionManager:
             )
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
-            session_event: SessionEvent | None = None
-            try:
-                set_memory_context(session_info)
-                # session_event = await self._send_with_compaction_retry(
-                #     session,
-                #     session_id,
-                #     prompt=send_prompt,
-                #     attachments=attachments,
-                #     timeout=timeout,
-                # )
-                # 需要校验测试，在新版SDK下会不会把压缩的结果也返回
-                session_event = await session.send_and_wait(
-                    send_prompt,
-                    attachments=attachments,
-                    timeout=timeout,
-                )
-            except Exception as e:
-                logger.warning(f"发送消息或等待响应时发生错误: {e}")
+            set_memory_context(session_info)
 
-        return session_event, new_session
+            unsubscribe = session.on(handler)
+            message_id = await session.send(
+                send_prompt,
+                attachments=attachments,
+            )
+            return message_id, unsubscribe
+
+    async def send_and_wait(
+        self,
+        session_info: SessionInfo,
+        prompt: str,
+        *,
+        rag_docs: list[str] | None = None,
+        reply_text: str | None = None,
+        attachments: list[Attachment] | None = None,
+        timeout: float = 60,
+    ) -> str | None:
+
+        idle_event = asyncio.Event()
+        error_event: Exception | None = None
+        last_assistant_message: str | None = None
+
+        def handler(event: SessionEvent) -> None:
+            nonlocal last_assistant_message, error_event
+            match event.data:
+                case AssistantMessageData() as data:
+                    last_assistant_message = data.content
+                case SessionIdleData():
+                    idle_event.set()
+                case SessionErrorData() as data:
+                    error_event = Exception(f"Session error: {data.message or str(data)}")
+                    idle_event.set()
+
+        unsubscribe: Callable[[], None] | None = None
+        try:
+            t = await copilot.send(
+                session_info,
+                prompt,
+                handler,
+                rag_docs=rag_docs,
+                reply_text=reply_text,
+                attachments=attachments,
+            )
+
+            if not t:
+                # 发送的消息为空
+                logger.info("发送给模型的消息为空，未触发生成")
+                return
+
+            _, unsubscribe = t
+
+            await asyncio.wait_for(idle_event.wait(), timeout=timeout)
+
+            if error_event:
+                raise error_event
+
+            return last_assistant_message
+        except TimeoutError:
+            raise
+        finally:
+            if unsubscribe:
+                unsubscribe()
 
     @staticmethod
     def _build_send_prompt(
@@ -219,80 +277,30 @@ class CopilotSessionManager:
 
         return "\n".join(prompt_parts).strip()
 
-    @classmethod
-    async def _send_with_compaction_retry(
-        cls,
-        session: CopilotSession,
-        session_id: str,
-        *,
-        prompt: str,
-        attachments: list[Attachment] | None = None,
-        timeout: float = 60,
-    ) -> SessionEvent | None:
-        """发送消息并在压缩发生时拒收本次响应，自动重发当前消息。"""
-        for attempt in range(cls.SESSION_COMPACTION_RETRY_MAX + 1):
-            compaction_started = False
-
-            def on_session_compaction_start(event: SessionEvent):
-                nonlocal compaction_started
-                if event.type == SessionEventType.SESSION_COMPACTION_START:
-                    compaction_started = True
-                    logger.warning(f"会话{session_id}开始压缩，本轮响应将被丢弃")
-
-            unsubscribe = session.on(on_session_compaction_start)
-            try:
-                session_event = await session.send_and_wait(
-                    prompt,
-                    attachments=attachments,
-                    timeout=timeout,
-                )
-            finally:
-                unsubscribe()
-
-            if not compaction_started:
-                return session_event
-            else:
-                #### DEBUG ####
-                logger.warning(f"会话{session_id}发生压缩，已丢弃本次响应")
-                if session_event:
-                    match session_event.data:
-                        case AssistantMessageData() as data:
-                            logger.info(f"会话{session_id}压缩后的响应内容: {data.content}")
-
-            if attempt >= cls.SESSION_COMPACTION_RETRY_MAX:
-                logger.warning(
-                    f"会话{session_id}在压缩后重试超过上限{cls.SESSION_COMPACTION_RETRY_MAX}次，返回最后一次响应"
-                )
-                return session_event
-
-            logger.info(f"会话{session_id}压缩后将重发当前消息，正在进行第{attempt + 1}次重试")
-
-        return None
-
     async def _ensure_session_lock(self, session_id: str) -> Lock:
         """确保会话锁存在并返回"""
         # 不要在持有全局锁的情况下调用此函数，以避免死锁
-        if session_id not in self.__session_locks:
+        if session_id not in self._session_locks:
             # 略微提高性能，避免不必要的锁竞争
-            async with self.__global_lock:
-                if session_id not in self.__session_locks:
-                    self.__session_locks[session_id] = Lock()
-        return self.__session_locks[session_id]
+            async with self._global_lock:
+                if session_id not in self._session_locks:
+                    self._session_locks[session_id] = Lock()
+        return self._session_locks[session_id]
 
     def get_session_prompt_buffer_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""
-        return len(self.__sessions_prompt_buffer.get(session_id, []))
+        return len(self._sessions_prompt_buffer.get(session_id, []))
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
         async with await self._ensure_session_lock(session_id):
-            async with self.__global_lock:
-                if session_id not in self.__sessions_prompt_buffer:
-                    self.__sessions_prompt_buffer[session_id] = deque(
+            async with self._global_lock:
+                if session_id not in self._sessions_prompt_buffer:
+                    self._sessions_prompt_buffer[session_id] = deque(
                         maxlen=cfg.session_prompt_buffer_max_size
                     )
                 # deque(maxlen)会在溢出时自动丢弃最早的消息
-                self.__sessions_prompt_buffer[session_id].append(prompt)
+                self._sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """删除会话，清空缓冲区。**此操作不可逆**"""
@@ -300,10 +308,10 @@ class CopilotSessionManager:
         # 全局锁只保护字典访问，不包住耗时的客户端 RPC。
         session_lock = await self._ensure_session_lock(session_id)
         async with session_lock:
-            async with self.__global_lock:
-                session = self.__sessions.pop(session_id, None)
-                if session_id in self.__sessions_prompt_buffer:
-                    del self.__sessions_prompt_buffer[session_id]
+            async with self._global_lock:
+                session = self._sessions.pop(session_id, None)
+                if session_id in self._sessions_prompt_buffer:
+                    del self._sessions_prompt_buffer[session_id]
 
             # 断开并删除现有会话
             try:
@@ -316,6 +324,3 @@ class CopilotSessionManager:
 
 
 copilot = CopilotSessionManager()
-
-
-__all__ = ["copilot"]
