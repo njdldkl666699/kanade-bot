@@ -3,6 +3,7 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
+from kanade_bot.utils.common import PlatformType
 from kanade_bot.utils.config import ensure_json_config, write_json_config
 
 require("nonebot_plugin_localstore")
@@ -113,6 +114,12 @@ class ChatConfigs(BaseModel):
 
     每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。
     """
+
+    def get_by_platform(self, platform: PlatformType):
+        if platform == "console":
+            return self.console
+        elif platform == "onebot":
+            return self.onebot
 
 
 chat_configs = ensure_json_config(cfg.configs_file_path, ChatConfigs)

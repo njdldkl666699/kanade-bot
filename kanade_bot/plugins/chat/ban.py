@@ -46,10 +46,7 @@ def parse_ban_args(arg_msg: Message) -> tuple[str, BanType] | None:
 def _get_ban_list(ban_type: BanType, platform: PlatformType):
     ban_list: set[str] = set()
 
-    if platform == "console":
-        config = chat_configs.console
-    elif platform == "onebot":
-        config = chat_configs.onebot
+    config = chat_configs.get_by_platform(platform)
 
     if ban_type == "user":
         ban_list = config.banned_users

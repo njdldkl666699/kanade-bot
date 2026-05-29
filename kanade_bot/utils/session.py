@@ -6,7 +6,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from pydantic import BaseModel
 
-from .common import PlatformType
+from .common import PlatformType, get_platform_type
 
 
 class SessionInfo(BaseModel):
@@ -27,6 +27,7 @@ class SessionInfo(BaseModel):
 async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionInfo:
     """解析事件以提取会话信息"""
     info = SessionInfo(session_id=event.get_session_id())
+    info.platform = get_platform_type(event)
 
     # 处理OneBot消息事件
     if isinstance(event, OneBotMessageEvent):
@@ -34,7 +35,6 @@ async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionI
         info.session_id = f"qq-private-{uid}"
         info.nickname = event.sender.nickname
         info.user_id = str(uid)
-        info.platform = "onebot"
     if isinstance(event, OneBotGroupMessageEvent):
         gid = event.group_id
         info.session_id = f"qq-group-{gid}"
@@ -50,7 +50,6 @@ async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionI
         info.session_id = f"console-private-{uid}"
         info.nickname = event.user.nickname
         info.user_id = uid
-        info.platform = "console"
     if isinstance(event, ConsolePublicMessageEvent):
         gid = event.channel.id
         info.session_id = f"console-group-{gid}"

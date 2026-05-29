@@ -190,8 +190,9 @@ async def _(arg_msg: Message = CommandArg()):
 
 @today_waifu.handle()
 async def _(event: ConsoleMessageEvent):
+    platform = "console"
     user_id = event.get_user_id()
-    p = UserDailyWaifuCache.get_path(user_id)
+    p = UserDailyWaifuCache.get(platform, user_id)
     if p:
         await today_waifu.finish(str(p))
 
@@ -200,14 +201,15 @@ async def _(event: ConsoleMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    p = UserDailyWaifuCache.set(user_id, image)
+    p = UserDailyWaifuCache.set_bytes(platform, user_id, image)
     await today_waifu.finish(str(p))
 
 
 @today_waifu.handle()
 async def _(event: OneBotMessageEvent):
+    platform = "onebot"
     user_id = event.get_user_id()
-    cache = UserDailyWaifuCache.get(user_id)
+    cache = UserDailyWaifuCache.get_bytes(platform, user_id)
     if cache:
         await today_waifu.finish(MessageSegment.image(cache))
 
@@ -216,7 +218,7 @@ async def _(event: OneBotMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    UserDailyWaifuCache.set(user_id, image)
+    UserDailyWaifuCache.set_bytes(platform, user_id, image)
     await today_waifu.finish(MessageSegment.image(image))
 
 

@@ -9,6 +9,7 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage
 
+from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -47,13 +48,12 @@ async def handle_chat_monitor(
 ):
     session_info = await extract_session_info(event, bot)
     session_id = session_info.session_id
+    platform = get_platform_type(event)
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
-        platform = "console"
     elif isinstance(event, OneBotGroupMessageEvent):
         group_id = str(event.group_id)
-        platform = "onebot"
     else:
         return
 
@@ -74,12 +74,8 @@ async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
         await chat_ban.finish()
     id, ban_type = args
 
-    if isinstance(event, ConsoleMessageEvent):
-        add_to_ban_list(id, ban_type, "console")
-    elif isinstance(event, OneBotMessageEvent):
-        add_to_ban_list(id, ban_type, "onebot")
-    else:
-        await chat_ban.finish()
+    platform = get_platform_type(event)
+    add_to_ban_list(id, ban_type, platform)
 
     type_text = "用户" if ban_type == "user" else "群聊"
     await chat_ban.finish(f"已将{type_text} {id} 添加到聊天黑名单")
@@ -92,12 +88,8 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
         await chat_unban.finish()
     id, ban_type = args
 
-    if isinstance(event, ConsoleMessageEvent):
-        remove_from_ban_list(id, ban_type, "console")
-    elif isinstance(event, OneBotMessageEvent):
-        remove_from_ban_list(id, ban_type, "onebot")
-    else:
-        await chat_unban.finish()
+    platform = get_platform_type(event)
+    remove_from_ban_list(id, ban_type, platform)
 
     type_text = "用户" if ban_type == "user" else "群聊"
     await chat_unban.finish(f"已将{type_text} {id} 从聊天黑名单中移除")

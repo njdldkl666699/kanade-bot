@@ -1,4 +1,3 @@
-from asyncio import Lock
 import asyncio
 from collections import deque
 from typing import Callable
@@ -7,6 +6,7 @@ from copilot import CopilotSession
 from copilot.generated.rpc import ModelSwitchToRequest
 from copilot.generated.session_events import (
     AssistantMessageData,
+    AssistantMessageDeltaData,
     SessionErrorData,
     SessionEvent,
     SessionIdleData,
@@ -29,6 +29,16 @@ from .tool import (
     view_image,
     write_memory,
 )
+
+
+class StreamError:
+    """生成过程中发生的错误，包含错误信息
+
+    用于在异步生成过程中通过引用传递错误信息，供函数调用方获得异常信息
+    """
+
+    def __init__(self, exception: Exception | None):
+        self.exception = exception
 
 
 class CopilotSessionManager:
@@ -87,10 +97,10 @@ class CopilotSessionManager:
         self._sessions_prompt_buffer: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
 
-        self._session_locks: dict[str, Lock] = {}
+        self._session_locks: dict[str, asyncio.Lock] = {}
         """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
 
-        self._global_lock = Lock()
+        self._global_lock = asyncio.Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
 
     async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
@@ -224,7 +234,6 @@ class CopilotSessionManager:
                 reply_text=reply_text,
                 attachments=attachments,
             )
-
             if not t:
                 # 发送的消息为空
                 logger.info("发送给模型的消息为空，未触发生成")
@@ -243,6 +252,57 @@ class CopilotSessionManager:
         finally:
             if unsubscribe:
                 unsubscribe()
+
+    async def send_and_stream(
+        self,
+        session_info: SessionInfo,
+        prompt: str,
+        stream_queue: asyncio.Queue[str | None],
+        stream_error: StreamError,
+        *,
+        rag_docs: list[str] | None = None,
+        reply_text: str | None = None,
+        attachments: list[Attachment] | None = None,
+    ) -> Callable[[], None] | None:
+        """发送消息并通过stream_queue实时返回生成内容，直到生成完成或发生错误
+
+        :param stream_queue: 用于接收生成内容的异步队列，生成的每个文本块都会通过
+        `stream_queue.put_nowait`发送到队列中。当生成完成时，发送一个None表示结束。
+        :param stream_error: 用于接收生成过程中发生的错误的变量，如果发生错误，
+        设置为Exception对象，并通过`stream_queue.put_nowait(None)`发送一个None表示结束。
+
+        :returns unsubscribe: A function that, when called, unsubscribes the handler.
+        """
+
+        def handler(event: SessionEvent) -> None:
+            nonlocal stream_error
+            match event.data:
+                case AssistantMessageDeltaData() as delta:
+                    stream_queue.put_nowait(delta.delta_content)
+                case SessionIdleData():
+                    stream_queue.put_nowait(None)
+                case SessionErrorData() as data:
+                    stream_error.exception = Exception(
+                        f"Session error: {data.message or str(data)}"
+                    )
+                    stream_queue.put_nowait(None)
+
+        t = await copilot.send(
+            session_info,
+            prompt,
+            handler,
+            rag_docs=rag_docs,
+            reply_text=reply_text,
+            attachments=attachments,
+        )
+
+        if not t:
+            # 发送的消息为空
+            logger.info("发送给模型的消息为空，未触发生成")
+            return
+
+        _, unsubscribe = t
+        return unsubscribe
 
     @staticmethod
     def _build_send_prompt(
@@ -277,14 +337,14 @@ class CopilotSessionManager:
 
         return "\n".join(prompt_parts).strip()
 
-    async def _ensure_session_lock(self, session_id: str) -> Lock:
+    async def _ensure_session_lock(self, session_id: str) -> asyncio.Lock:
         """确保会话锁存在并返回"""
         # 不要在持有全局锁的情况下调用此函数，以避免死锁
         if session_id not in self._session_locks:
             # 略微提高性能，避免不必要的锁竞争
             async with self._global_lock:
                 if session_id not in self._session_locks:
-                    self._session_locks[session_id] = Lock()
+                    self._session_locks[session_id] = asyncio.Lock()
         return self._session_locks[session_id]
 
     def get_session_prompt_buffer_size(self, session_id: str) -> int:

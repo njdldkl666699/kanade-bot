@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from ...client import client
+from kanade_bot.plugins.api60s.client import client
 
 
 class TranslateLang(BaseModel):
@@ -14,21 +14,21 @@ class TranslateLang(BaseModel):
 class TranslateLangCache:
     """翻译语言缓存"""
 
-    __langs: list[TranslateLang] = []
-    __code_index: dict[str, TranslateLang] = {}
+    _langs: list[TranslateLang] = []
+    _code_index: dict[str, TranslateLang] = {}
 
     @classmethod
     async def _load_cache(cls):
         response = await client.get("/v2/fanyi/langs")
         data = response.json().get("data", [])
-        cls.__langs = [TranslateLang.model_validate(item) for item in data]
-        cls.__code_index = {lang.code.lower(): lang for lang in cls.__langs}
+        cls._langs = [TranslateLang.model_validate(item) for item in data]
+        cls._code_index = {lang.code.lower(): lang for lang in cls._langs}
 
     @classmethod
     async def get_langs(cls) -> list[TranslateLang]:
-        if not cls.__langs:
+        if not cls._langs:
             await cls._load_cache()
-        return cls.__langs
+        return cls._langs
 
     @classmethod
     async def query_langs(cls, query: str | None) -> list[TranslateLang]:
@@ -42,7 +42,7 @@ class TranslateLangCache:
             return []
 
         # 优先尝试代码的精确匹配
-        exact = cls.__code_index.get(normalized.lower())
+        exact = cls._code_index.get(normalized.lower())
         if exact:
             return [exact]
 

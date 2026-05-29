@@ -3,12 +3,25 @@ from typing import Literal
 from copilot import CopilotClient
 from copilot.client import StopError
 from nonebot import get_driver, logger
+from nonebot.adapters import Event
+from nonebot.adapters.console import Event as ConsoleEvent
+from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.console.event import PrivateMessageEvent as ConsolePrivateMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
+
+
+def get_platform_type(event: Event) -> PlatformType:
+    """根据事件类型确定消息平台"""
+    if isinstance(event, ConsoleEvent):
+        return "console"
+    elif isinstance(event, OneBotEvent):
+        return "onebot"
+    else:
+        raise ValueError(f"Unsupported event type: {type(event)}")
 
 
 def console_private_permission(event: ConsolePrivateMessageEvent) -> bool:

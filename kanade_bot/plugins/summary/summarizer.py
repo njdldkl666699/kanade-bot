@@ -126,6 +126,3 @@ class Summarizer:
 
 
 summarizer = Summarizer()
-
-
-__all__ = ["summarizer"]

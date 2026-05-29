@@ -21,7 +21,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import SessionInfo, extract_session_info
@@ -182,14 +182,7 @@ async def send_message_in_chunks(
 def should_reply_event(event: Event):
     """检查用户或群聊是否在聊天黑名单中，并确定是否应该回复事件"""
     # 确定平台类型
-    platform: PlatformType | None = None
-    if isinstance(event, ConsoleMessageEvent):
-        platform = "console"
-    elif isinstance(event, OneBotMessageEvent):
-        platform = "onebot"
-    else:
-        # 其他平台暂不处理，默认回复
-        return True
+    platform = get_platform_type(event)
 
     # 检查群聊是否在聊天黑名单中
     ban_type = "group"
@@ -213,10 +206,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     if is_banned(group_id, "group", platform):
         return False
 
-    if platform == "console":
-        group_config = chat_configs.console.auto_reply_group_config
-    elif platform == "onebot":
-        group_config = chat_configs.onebot.auto_reply_group_config
+    group_config = chat_configs.get_by_platform(platform).auto_reply_group_config
 
     # 无配置项，默认不自动回复
     if group_id not in group_config:
