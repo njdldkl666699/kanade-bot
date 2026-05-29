@@ -1,7 +1,7 @@
 import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
-
+import re
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
@@ -45,16 +45,32 @@ def patch_foreign_plugins():
     drink_pic_matcher.command()._get_shortcuts().clear()
 
     # 添加新的快捷方式
-    eat_pic_matcher.shortcut(
-        r"[今明后]?[天日]?(?:早|中|晚)?(?:上|午|餐|饭|夜宵|宵夜|早|晚)?吃(?:什么|啥|点啥)",
-        fuzzy=False,
-        prefix=True,
-    )
-    drink_pic_matcher.shortcut(
-        r"[今明后]?[天日]?(?:早|中|晚)?(?:上|午|餐|饭|夜宵|宵夜|早|晚)?喝(?:什么|啥|点啥)",
-        fuzzy=False,
-        prefix=True,
-    )
+    command_start = nonebot.get_driver().config.command_start
+    start_regex = "|".join(map(re.escape, command_start))
+
+    pattern = r"""
+        ({start_regex})                 # 命令前缀（必须）
+        (?:                             # 时间词（可选）
+            [今明后]                     # 今/明/后
+            [天日]?                      # 天/日（可选）
+        )?
+        (?:                             # 餐段词（可选）
+            (?:早|中|晚)(?:餐|饭)?       # 早餐、中餐、晚餐、早饭等
+            |早上|中午|晚上              # 完整时间词
+            |宵夜|夜宵                   # 宵夜相关
+            |(?<=[今明])晚               # 今晚、明晚
+        )?
+        {action}(?:什么|啥|点啥)         # 核心动词（必须）
+    """
+
+    eat_pattern = pattern.format(start_regex=start_regex, action="吃")
+    drink_pattern = pattern.format(start_regex=start_regex, action="喝")
+
+    eat_regex = re.compile(eat_pattern, re.VERBOSE)
+    drink_regex = re.compile(drink_pattern, re.VERBOSE)
+
+    eat_pic_matcher.shortcut(eat_regex, fuzzy=False)
+    drink_pic_matcher.shortcut(drink_regex, fuzzy=False)
 
     # 阻止nonebot_plugin_whateat_pic的指令向后传播
     eat_pic_matcher.block = True
