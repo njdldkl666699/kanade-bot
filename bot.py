@@ -41,15 +41,17 @@ def patch_foreign_plugins():
     )
 
     # 删除原有的错误快捷方式
-    eat_pic_matcher.command()._get_shortcuts().clear()
-    drink_pic_matcher.command()._get_shortcuts().clear()
+    eat_pic_matcher.shortcut(
+        r"[今|明|后]?[天|日]?(早|中|晚)?(上|午|餐|饭|夜宵|宵夜|早|晚)吃(什么|啥|点啥)",
+        delete=True,
+    )  # pyright: ignore[reportCallIssue]
+    drink_pic_matcher.shortcut(
+        r"[今|明|后]?[天|日]?(早|中|晚)?(上|午|餐|饭|夜宵|宵夜|早|晚)喝(什么|啥|点啥)",
+        delete=True,
+    )  # pyright: ignore[reportCallIssue]
 
     # 添加新的快捷方式
-    command_start = nonebot.get_driver().config.command_start
-    start_regex = "|".join(map(re.escape, command_start))
-
     pattern = r"""
-        ({start_regex})                 # 命令前缀（必须）
         (?:                             # 时间词（可选）
             [今明后]                     # 今/明/后
             [天日]?                      # 天/日（可选）
@@ -63,14 +65,14 @@ def patch_foreign_plugins():
         {action}(?:什么|啥|点啥)         # 核心动词（必须）
     """
 
-    eat_pattern = pattern.format(start_regex=start_regex, action="吃")
-    drink_pattern = pattern.format(start_regex=start_regex, action="喝")
+    eat_pattern = pattern.format(action="吃")
+    drink_pattern = pattern.format(action="喝")
 
     eat_regex = re.compile(eat_pattern, re.VERBOSE)
     drink_regex = re.compile(drink_pattern, re.VERBOSE)
 
-    eat_pic_matcher.shortcut(eat_regex, fuzzy=False)
-    drink_pic_matcher.shortcut(drink_regex, fuzzy=False)
+    eat_pic_matcher.shortcut(eat_regex, fuzzy=False, prefix=True)
+    drink_pic_matcher.shortcut(drink_regex, fuzzy=False, prefix=True)
 
     # 阻止nonebot_plugin_whateat_pic的指令向后传播
     eat_pic_matcher.block = True

@@ -1,10 +1,10 @@
 import re
 
-start_regex = "|".join(map(re.escape, {"/", "#", "$"}))
+start_regex = "|".join(map(re.escape, {"/"}))
 
 # 清晰、易维护的版本
 pattern = r"""
-    ({start_regex})                     # 命令前缀（必须）
+    [{start_regex}]                     # 命令前缀（必须）
     (?:                                 # 时间词（可选）
         [今明后]                         # 今/明/后
         [天日]?                          # 天/日（可选）
@@ -21,6 +21,8 @@ pattern = r"""
 eat_pattern = pattern.format(start_regex=start_regex, action="吃")
 
 regex = re.compile(eat_pattern, re.VERBOSE)
+
+print(f"正则表达式: {regex.pattern}")
 
 
 # 使用
