@@ -23,3 +23,11 @@ list_handler_consumes = on_command(
     priority=2,
     block=True,
 )
+
+
+crystal_ranking = on_command(
+    "水晶排行榜",
+    aliases={"水晶排名", "crystal_ranking"},
+    priority=2,
+    block=True,
+)
