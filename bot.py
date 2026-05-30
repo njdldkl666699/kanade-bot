@@ -1,7 +1,9 @@
+import re
+
 import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
-import re
+
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
