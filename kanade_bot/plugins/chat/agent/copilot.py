@@ -146,15 +146,11 @@ class CopilotSessionManager:
                         maxlen=cfg.session_prompt_buffer_max_size
                     )
 
-                # 将消息缓冲区中的消息添加到选项中
-                buffered_messages = self.__sessions_prompt_buffer.get(session_id)
-                if not prompt and not buffered_messages and not reply_text:
-                    # 没有任何新的消息可发送，直接返回
-                    return None, new_session
-
-                # 清空消息缓冲区
-                if session_id in self.__sessions_prompt_buffer:
-                    self.__sessions_prompt_buffer[session_id].clear()
+            # 将消息缓冲区中的消息添加到选项中
+            buffered_messages = self.__sessions_prompt_buffer.get(session_id)
+            if not prompt and not buffered_messages and not reply_text:
+                # 没有任何新的消息可发送，直接返回
+                return None, new_session
 
             send_prompt = self._build_send_prompt(
                 session_info,
@@ -183,6 +179,11 @@ class CopilotSessionManager:
                 )
             except Exception as e:
                 logger.warning(f"发送消息或等待响应时发生错误: {e}")
+
+            async with self.__global_lock:
+                # 清空消息缓冲区
+                if session_id in self.__sessions_prompt_buffer:
+                    self.__sessions_prompt_buffer[session_id].clear()
 
         return session_event, new_session
 
