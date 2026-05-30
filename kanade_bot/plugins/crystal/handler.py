@@ -7,7 +7,7 @@ from kanade_bot.plugins.crystal.crystal import get_crystal, increment_crystal
 from kanade_bot.utils.common import get_platform_type
 
 from .config import crystal_config as cfg
-from .matcher import check_in, my_crystal
+from .matcher import check_in, my_crystal, list_handler_consumes
 
 
 @check_in.handle()
@@ -17,13 +17,17 @@ async def _(event: Event):
 
     if UserDailyCheckInCache.get(platform, user_id):
         total_crystal = get_crystal(platform, user_id)
-        template = random.choice(cfg.check_in_failure_templates)
+        template = random.choice(cfg.check_in_failed_templates)
         check_in_failure_message = template.format(total_crystal=total_crystal)
         await check_in.finish(check_in_failure_message)
 
     crystal_earned = random.randint(cfg.check_in_crystal_min, cfg.check_in_crystal_max)
     increment_crystal(platform, user_id, crystal_earned)
     UserDailyCheckInCache.set(platform, user_id, True)
+
+    template = random.choice(cfg.check_in_succeed_templates)
+    message = template.format(crystal=crystal_earned)
+    await check_in.finish(message)
 
 
 @my_crystal.handle()
@@ -33,3 +37,16 @@ async def _(event: Event):
 
     total_crystal = get_crystal(platform, user_id)
     await my_crystal.finish(f"你现在有 {total_crystal} 水晶。")
+
+
+@list_handler_consumes.handle()
+async def _():
+    handler_consumes = cfg.handler_consumes
+    if not handler_consumes:
+        await list_handler_consumes.finish("当前没有命令水晶消耗设置。")
+
+    message_lines = ["当前命令水晶消耗设置："]
+    for handler_key, consume in handler_consumes.items():
+        message_lines.append(f"- {handler_key.value}: {consume}")
+    message = "\n".join(message_lines)
+    await list_handler_consumes.finish(message)

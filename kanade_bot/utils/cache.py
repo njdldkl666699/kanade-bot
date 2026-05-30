@@ -1,8 +1,9 @@
+from datetime import datetime
 import json
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from nonebot import get_driver, require
+from nonebot import get_driver, logger, require
 
 from kanade_bot.utils.common import PlatformType
 
@@ -31,12 +32,17 @@ class UserDailyCache(Generic[C]):
         elif platform == "onebot":
             cls._onebot_cache[user_id] = value
 
-    @scheduler.scheduled_job("cron", hour=0, minute=0)
     @classmethod
     def _auto_clear_cache(cls):
         """每天凌晨自动清除缓存"""
         cls._console_cache.clear()
         cls._onebot_cache.clear()
+
+    @classmethod
+    def enable_auto_clear(cls):
+        """启用每天自动清除缓存的功能"""
+        scheduler.add_job(cls._auto_clear_cache, "cron", hour=0, minute=0)
+        logger.info(f"已启用 {cls} 的每天自动清除功能")
 
     @classmethod
     def enable_persistence(cls, p: Path):
@@ -51,14 +57,24 @@ class UserDailyCache(Generic[C]):
                 return
 
             data = json.load(p.open("r", encoding="utf-8"))
+
+            cache_datetime = datetime.fromisoformat(data.get("datetime", "1970-01-01T00:00:00"))
+            if cache_datetime.date() != datetime.now().date():
+                logger.info(f"缓存数据已过期，日期为 {cache_datetime.date()}，已忽略")
+                return
+
             cls._console_cache = data.get("console", {})
             cls._onebot_cache = data.get("onebot", {})
+            logger.info(
+                f"从 {p} 加载缓存数据，console: {len(cls._console_cache)} 条，onebot: {len(cls._onebot_cache)} 条"
+            )
 
         @driver.on_shutdown
         def _():
             data = {
                 "console": cls._console_cache,
                 "onebot": cls._onebot_cache,
+                "datetime": datetime.now().isoformat(),
             }
             p.parent.mkdir(parents=True, exist_ok=True)
             json.dump(
@@ -66,4 +82,7 @@ class UserDailyCache(Generic[C]):
                 p.open("w", encoding="utf-8"),
                 ensure_ascii=False,
                 indent=2,
+            )
+            logger.info(
+                f"已将缓存数据保存到 {p}，console: {len(cls._console_cache)} 条，onebot: {len(cls._onebot_cache)} 条"
             )

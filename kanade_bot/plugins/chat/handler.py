@@ -1,5 +1,6 @@
 import uuid
 
+from nonebot import require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -20,6 +21,10 @@ from .client import file_client as client
 from .config import cfg, chat_configs, write_chat_config
 from .matcher import add_meme, chat, chat_ban, chat_monitor, chat_reset, chat_unban, list_memes
 
+require("crystal")
+
+from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
+
 
 @chat.handle()
 async def handle_chat(
@@ -29,6 +34,12 @@ async def handle_chat(
     # 检查用户或群聊是否在聊天黑名单中
     if should_reply_event(event):
         return
+
+    key = HandlerKeyEnum.CHAT
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(chat, key, platform, user_id)
 
     await send_message_in_chunks(chat, bot, event)
 

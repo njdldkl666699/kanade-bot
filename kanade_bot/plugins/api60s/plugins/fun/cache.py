@@ -27,5 +27,5 @@ class Luck(BaseModel):
 
 
 UserDailyLuckCache = UserDailyCache[Luck]
-
+UserDailyLuckCache.enable_auto_clear()
 UserDailyLuckCache.enable_persistence(cfg.api60s_fun_cache_file_path)

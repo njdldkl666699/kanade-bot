@@ -15,6 +15,7 @@ from nonebot.params import CommandArg, EventMessage
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
+from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -23,8 +24,16 @@ from .matcher import summarize
 from .summarizer import summarizer
 
 require("nonebot_plugin_htmlrender")
+require("crystal")
 
 from nonebot_plugin_htmlrender import md_to_pic
+
+from kanade_bot.plugins.crystal import (
+    HandlerKeyEnum,
+    check_user_crystal,
+    finish_fail_consume,
+    succeed_consume,
+)
 
 cfg = get_plugin_config(Config).summary
 
@@ -99,6 +108,13 @@ async def _(
     event: OneBotMessageEvent | ConsoleMessageEvent,
     arg_msg: Message = CommandArg(),
 ):
+    key = HandlerKeyEnum.SUMMARIZE
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(summarize, key, platform, user_id)
+
     size = arg_msg.extract_plain_text().strip()
     min = cfg.min_size
     max = cfg.max_size
@@ -117,7 +133,7 @@ async def _(
     group_or_user_name = group_name or session_info.nickname
 
     response = await summarize.send("正在总结中，请稍候...")
-    # 准备总结消息但不等待
+    # 准备总结消息的任务
     summary_future = summarizer.summarize(
         session_info.session_id,
         size,
@@ -141,6 +157,7 @@ async def _(
 
         image = await md_to_pic(summary)
         await try_delete_msg()
+        succeed_consume(key, platform, user_id)
         await summarize.finish(OneBotMessageSegment.image(image))
 
     elif isinstance(bot, ConsoleBot):
@@ -152,4 +169,6 @@ async def _(
 
         if not summary:
             await summarize.finish("总结失败")
+
+        succeed_consume(key, platform, user_id)
         await summarize.finish(summary)

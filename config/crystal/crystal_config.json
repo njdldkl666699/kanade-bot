@@ -1,0 +1,32 @@
+{
+  "check_in_crystal_min": 100,
+  "check_in_crystal_max": 200,
+  "check_in_succeed_templates": [
+    "嗯，签到了。获得 {crystal} 水晶…一点点积攒起来呢。",
+    "签好了。今天有{crystal} 水晶入账…不多，但也算个小进展。",
+    "啊…签到成功。+{crystal} 水晶。希望没弄错。",
+    "嗯…轻轻按一下。签到成功，+{crystal} 水晶。",
+    "签到了。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
+    "啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
+    "好，签好了。今天也加 {crystal} 水晶…慢慢来。"
+  ],
+  "check_in_failed_templates": [
+    "…看了一下，今天已经签过了。现在水晶是 {total_crystal}。",
+    "嗯…好像之前就签到了。当前水晶：{total_crystal}。",
+    "…签过了。现在水晶是 {total_crystal}。明天再继续吧。"
+  ],
+  "handler_consumes": {
+    "聊天": 10,
+    "刷新老婆": 5,
+    "随机图": 5,
+    "总结": 50
+  },
+  "handler_consume_failed_templates": [
+    "嗯…水晶好像不够。需要 {consume} 水晶…还差一些。",
+    "啊…不行。当前水晶有{crystal}，需要 {consume} 水晶…有点可惜。",
+    "系统提示说水晶不够…需要 {consume} 水晶。我这边也没办法跳过呢。",
+    "啊…这个需要 {consume} 水晶。现在还不够，只有{crystal}…再攒几天吧。",
+    "…看来用不了。需要 {consume} 水晶，现在有 {crystal}…慢慢来吧。",
+    "嗯…水晶还差一点呢。需要{consume}水晶，现在只有{crystal}。抱歉，暂时用不了这个功能。"
+  ]
+}

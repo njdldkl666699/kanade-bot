@@ -41,4 +41,5 @@ class UserDailyWaifuCache(UserDailyCache[Path]):
             del cls._cache[user_id]
 
 
+UserDailyWaifuCache.enable_auto_clear()
 UserDailyWaifuCache.enable_persistence(cfg.cache_file_path)

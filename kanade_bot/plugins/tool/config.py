@@ -43,7 +43,7 @@ class ScopedConfig(BaseModel):
 
 
 class Config(BaseModel):
-    tool: ScopedConfig
+    tool: ScopedConfig = ScopedConfig()
 
 
 cfg = get_plugin_config(Config).tool

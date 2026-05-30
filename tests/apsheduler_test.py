@@ -2,22 +2,27 @@ import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+scheduler = AsyncIOScheduler()
+
+
+class TestScheduler:
+    @classmethod
+    def task(cls):
+        print("Task executed!")
+
+    @classmethod
+    def start(cls):
+        scheduler.add_job(cls.task, "interval", seconds=1)
+        scheduler.start()
+
 
 async def test():
     print("Hello, World!")
 
 
-def main():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    scheduler = AsyncIOScheduler(event_loop=loop)
-    scheduler.add_job(test, "interval", seconds=1)
-    scheduler.start()
-    try:
-        loop.run_forever()
-    except (KeyboardInterrupt, SystemExit):
-        pass
+async def main():
+    TestScheduler.start()
+    await asyncio.sleep(5)  # 让调度器有时间执行任务
 
 
-if __name__ == "__main__":
-    main()
+asyncio.run(main())

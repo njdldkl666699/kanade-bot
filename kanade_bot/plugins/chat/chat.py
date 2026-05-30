@@ -1,18 +1,10 @@
-import asyncio
 import random
 import re
 from pathlib import Path
-from typing import Callable, cast
+from typing import cast
 
-from copilot.generated.session_events import (
-    AssistantMessageData,
-    SessionErrorData,
-    SessionEvent,
-    SessionIdleData,
-)
-from nonebot import logger
+from nonebot import logger, require
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
@@ -24,13 +16,17 @@ from nonebot.matcher import Matcher
 from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
-from kanade_bot.utils.session import SessionInfo, extract_session_info
+from kanade_bot.utils.session import extract_session_info
 
 from .agent.copilot import copilot
 from .ban import is_banned
 from .client import file_client as client
 from .config import cfg, chat_configs
 from .rag import query
+
+require("crystal")
+
+from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
 
 
 def _send_fail_message(matcher: type[Matcher]):
@@ -169,6 +165,13 @@ async def send_message_in_chunks(
     if not content:
         logger.warning(f"会话{session_info.session_id}没有收到任何回复")
         return
+
+    # 扣减水晶
+    succeed_consume(
+        HandlerKeyEnum.CHAT,
+        get_platform_type(event),
+        event.get_user_id(),
+    )
 
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):
