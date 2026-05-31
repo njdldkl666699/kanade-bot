@@ -27,9 +27,7 @@ async def handle_chat(
 ):
     # 检查用户或群聊是否在聊天黑名单中
     if should_reply_event(event):
-        return
-
-    await send_message_in_chunks(chat, bot, event)
+        await send_message_in_chunks(chat, bot, event)
 
 
 @chat_reset.handle()
