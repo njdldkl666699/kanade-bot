@@ -8,8 +8,7 @@ from kanade_bot.plugins.crystal.cache import UserDailyCheckInCache
 from kanade_bot.plugins.crystal.crystal import get_crystal, increment_crystal
 from kanade_bot.utils.common import get_platform_type
 
-from .config import crystal_config as cfg
-from .config import crystal_data
+from .config import crystal_config_ptr, crystal_data_ptr
 from .matcher import check_in, crystal_ranking, list_handler_consumes, my_crystal
 
 
@@ -17,14 +16,15 @@ from .matcher import check_in, crystal_ranking, list_handler_consumes, my_crysta
 async def _(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
+    cfg = crystal_config_ptr.v
 
     if UserDailyCheckInCache.get(platform, user_id):
         total_crystal = get_crystal(platform, user_id)
         template = random.choice(cfg.check_in_failed_templates)
-        check_in_failure_message = template.format(total_crystal=total_crystal)
-        await check_in.finish(check_in_failure_message)
+        failed_message = template.format(total_crystal=total_crystal)
+        await check_in.finish(failed_message)
 
-    crystal_earned = random.randint(cfg.check_in_crystal_min, cfg.check_in_crystal_max)
+    crystal_earned = random.randint(cfg.check_in_min, cfg.check_in_max)
     increment_crystal(platform, user_id, crystal_earned)
     UserDailyCheckInCache.set(platform, user_id, True)
 
@@ -44,7 +44,7 @@ async def _(event: Event):
 
 @list_handler_consumes.handle()
 async def _():
-    handler_consumes = cfg.handler_consumes
+    handler_consumes = crystal_config_ptr.v.handler_consumes
     if not handler_consumes:
         await list_handler_consumes.finish("当前没有命令水晶消耗设置。")
 
@@ -62,7 +62,7 @@ RANK_EMOJIS = {1: "🥇", 2: "🥈", 3: "🥉"}
 async def _(bot: Bot, event: Event):
     platform = get_platform_type(event)
 
-    user_crystals = crystal_data.get_by_platform(platform)
+    user_crystals = crystal_data_ptr.v.get_by_platform(platform)
     if not user_crystals:
         await crystal_ranking.finish("当前没有用户水晶数据。")
 

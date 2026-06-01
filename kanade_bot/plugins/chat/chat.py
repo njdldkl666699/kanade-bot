@@ -21,7 +21,7 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.copilot import copilot
 from .ban import is_banned
 from .client import file_client as client
-from .config import cfg, chat_configs
+from .config import cfg, chat_configs_ptr
 from .rag import query
 
 require("crystal")
@@ -47,7 +47,7 @@ async def _finish_onebot_message(
 
     def replace_meme(match: re.Match[str]) -> str:
         meme_name = match.group(1)
-        if meme_name not in chat_configs.memes:
+        if meme_name not in chat_configs_ptr.v.memes:
             return ""
 
         meme_path = cfg.memes_dir_path / meme_name
@@ -209,7 +209,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     if is_banned(group_id, "group", platform):
         return False
 
-    group_config = chat_configs.get_by_platform(platform).auto_reply_group_config
+    group_config = chat_configs_ptr.v.get_by_platform(platform).auto_reply_group_config
 
     # 无配置项，默认不自动回复
     if group_id not in group_config:

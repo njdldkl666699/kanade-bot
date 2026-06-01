@@ -4,8 +4,8 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType
-from kanade_bot.utils.config import ensure_json_config, write_json_config
+from kanade_bot.utils.common import PlatformType, Ptr
+from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
 
 require("nonebot_plugin_localstore")
 
@@ -53,12 +53,12 @@ class HandlerKeyEnum(Enum):
     SUMMARIZE = "总结"
 
 
-class CrystalConfig(BaseModel):
+class CrystalConfig(FileSyncedModel):
     """水晶配置"""
 
-    check_in_crystal_min: int = 100
+    check_in_min: int = 100
     """签到获得的最少水晶"""
-    check_in_crystal_max: int = 200
+    check_in_max: int = 200
     """签到获得的最多水晶"""
 
     check_in_succeed_templates: list[str] = [
@@ -90,15 +90,11 @@ class CrystalConfig(BaseModel):
     ]
 
 
-crystal_config = ensure_json_config(cfg.config_file_path, CrystalConfig)
+crystal_config_ptr = Ptr(CrystalConfig.from_file(cfg.config_file_path))
+watch_file(cfg.config_file_path, ModelReloadHandler(crystal_config_ptr))
 
 
-def write_crystal_config():
-    """将水晶配置写入文件"""
-    write_json_config(cfg.config_file_path, crystal_config)
-
-
-class CrystalData(BaseModel):
+class CrystalData(FileSyncedModel):
     console: dict[str, int] = {}
     """Console适配器用户水晶数据，键为用户ID，值为水晶数"""
     onebot: dict[str, int] = {}
@@ -111,9 +107,5 @@ class CrystalData(BaseModel):
             return self.onebot
 
 
-crystal_data = ensure_json_config(cfg.data_file_path, CrystalData)
-
-
-def write_crystal_data():
-    """将水晶数据写入文件"""
-    write_json_config(cfg.data_file_path, crystal_data)
+crystal_data_ptr = Ptr(CrystalData.from_file(cfg.data_file_path))
+watch_file(cfg.data_file_path, ModelReloadHandler(crystal_data_ptr))

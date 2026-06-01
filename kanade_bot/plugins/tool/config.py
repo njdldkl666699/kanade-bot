@@ -4,7 +4,8 @@ from nonebot import get_plugin_config, require
 from nonebot.adapters.onebot.v11 import Message
 from pydantic import BaseModel, RootModel
 
-from kanade_bot.utils.config import ensure_json_config, write_json_config
+from kanade_bot.utils.common import Ptr
+from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
 
 require("nonebot_plugin_localstore")
 
@@ -58,7 +59,7 @@ class ScheduleConfig(BaseModel):
     """定时任务发送的消息内容"""
 
 
-class ScheduleConfigs(RootModel[dict[int, dict[str, ScheduleConfig]]]):
+class ScheduleConfigs(FileSyncedModel, RootModel[dict[int, dict[str, ScheduleConfig]]]):
     """定时任务配置列表
 
     键为群号，值为该群的定时任务列表：
@@ -67,15 +68,11 @@ class ScheduleConfigs(RootModel[dict[int, dict[str, ScheduleConfig]]]):
     """
 
 
-schedules = ensure_json_config(cfg.schedule_configs_file_path, ScheduleConfigs)
+schedules_ptr = Ptr(ScheduleConfigs.from_file(cfg.schedule_configs_file_path))
+watch_file(cfg.schedule_configs_file_path, ModelReloadHandler(schedules_ptr))
 
 
-def write_schedules():
-    """将定时任务配置写入配置文件"""
-    write_json_config(cfg.schedule_configs_file_path, schedules)
-
-
-class PresetReactionConfig(BaseModel):
+class PresetReactionConfig(FileSyncedModel):
     """预设反应配置"""
 
     receive_poke_messages: list[str] = [
@@ -113,7 +110,5 @@ class PresetReactionConfig(BaseModel):
     """触发点赞上限的回复内容"""
 
 
-preset_reaction_cfg = ensure_json_config(
-    path=cfg.preset_reaction_config_file_path,
-    config_cls=PresetReactionConfig,
-)
+preset_reaction_cfg_ptr = Ptr(PresetReactionConfig.from_file(cfg.preset_reaction_config_file_path))
+watch_file(cfg.preset_reaction_config_file_path, ModelReloadHandler(preset_reaction_cfg_ptr))

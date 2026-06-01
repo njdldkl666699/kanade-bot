@@ -17,6 +17,7 @@ from nonebot import logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
 from kanade_bot.utils.parse import build_sender_info
+from kanade_bot.utils.common import Ptr
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
@@ -29,16 +30,6 @@ from .tool import (
     view_image,
     write_memory,
 )
-
-
-class StreamError:
-    """生成过程中发生的错误，包含错误信息
-
-    用于在异步生成过程中通过引用传递错误信息，供函数调用方获得异常信息
-    """
-
-    def __init__(self, exception: Exception | None):
-        self.exception = exception
 
 
 class CopilotSessionManager:
@@ -258,7 +249,7 @@ class CopilotSessionManager:
         session_info: SessionInfo,
         prompt: str,
         stream_queue: asyncio.Queue[str | None],
-        stream_error: StreamError,
+        stream_error_ptr: Ptr[Exception | None],
         *,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
@@ -268,23 +259,21 @@ class CopilotSessionManager:
 
         :param stream_queue: 用于接收生成内容的异步队列，生成的每个文本块都会通过
         `stream_queue.put_nowait`发送到队列中。当生成完成时，发送一个None表示结束。
-        :param stream_error: 用于接收生成过程中发生的错误的变量，如果发生错误，
+        :param stream_error_ptr: 用于接收生成过程中发生的错误的变量，如果发生错误，
         设置为Exception对象，并通过`stream_queue.put_nowait(None)`发送一个None表示结束。
 
         :returns unsubscribe: A function that, when called, unsubscribes the handler.
         """
 
         def handler(event: SessionEvent) -> None:
-            nonlocal stream_error
+            nonlocal stream_error_ptr
             match event.data:
                 case AssistantMessageDeltaData() as delta:
                     stream_queue.put_nowait(delta.delta_content)
                 case SessionIdleData():
                     stream_queue.put_nowait(None)
                 case SessionErrorData() as data:
-                    stream_error.exception = Exception(
-                        f"Session error: {data.message or str(data)}"
-                    )
+                    stream_error_ptr.v = Exception(f"Session error: {data.message or str(data)}")
                     stream_queue.put_nowait(None)
 
         t = await copilot.send(

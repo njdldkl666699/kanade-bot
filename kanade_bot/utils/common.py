@@ -39,6 +39,13 @@ def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> boo
     return event.get_user_id() in get_driver().config.superusers
 
 
+class Ptr[T]:
+    """一个指针类，包含一个 value 属性，可以用来指向一个值"""
+
+    def __init__(self, v: T):
+        self.v = v
+
+
 COPILOT_CLIENT = CopilotClient()
 """全局Copilot客户端单例
 

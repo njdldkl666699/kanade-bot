@@ -2,7 +2,7 @@ from apscheduler.triggers.cron import CronTrigger
 from nonebot import get_driver, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message
 
-from .config import ScheduleConfig, schedules, write_schedules
+from .config import ScheduleConfig, schedules_ptr
 
 require("nonebot_plugin_apscheduler")
 
@@ -17,7 +17,7 @@ def _schedule_id(group_id: int, schedule_name: str) -> str:
 
 def print_schedules_pretty(group_id: int) -> str | None:
     """列出指定群的定时任务列表"""
-    group_schedules = schedules.root.get(group_id, {})
+    group_schedules = schedules_ptr.v.root.get(group_id, {})
     if not group_schedules:
         return None
 
@@ -43,9 +43,9 @@ def add_schedule(group_id: int, name: str, cron: str, message: Message):
     )
 
     # 添加到配置
-    group_schedules = schedules.root.setdefault(group_id, {})
+    group_schedules = schedules_ptr.v.root.setdefault(group_id, {})
     group_schedules[name] = ScheduleConfig(cron=cron, message=message)
-    write_schedules()
+    schedules_ptr.v.save()
     logger.info(f"已添加群 {group_id} 的定时任务 {name}: {cron} -> {message.to_rich_text()}")
 
 
@@ -59,10 +59,10 @@ def remove_schedule(group_id: int, name: str):
     scheduler.remove_job(job_id)
 
     # 从配置移除
-    group_schedules = schedules.root.get(group_id, {})
+    group_schedules = schedules_ptr.v.root.get(group_id, {})
     if name in group_schedules:
         del group_schedules[name]
-        write_schedules()
+        schedules_ptr.v.save()
         logger.info(f"已移除群 {group_id} 的定时任务 {name}")
 
 
@@ -78,7 +78,7 @@ driver = get_driver()
 
 @driver.on_bot_connect
 def on_bot_connect(bot: Bot):
-    for group_id, schedule_list in schedules.root.items():
+    for group_id, schedule_list in schedules_ptr.v.root.items():
         for name, schedule in schedule_list.items():
             job_id = _schedule_id(group_id, name)
             scheduler.add_job(

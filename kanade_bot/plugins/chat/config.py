@@ -3,8 +3,8 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType
-from kanade_bot.utils.config import ensure_json_config, write_json_config
+from kanade_bot.utils.common import PlatformType, Ptr
+from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
 
 require("nonebot_plugin_localstore")
 
@@ -101,7 +101,7 @@ class ChatConfig(BaseModel):
     """主动回复配置，键为群ID，值为AutoReplyConfig对象"""
 
 
-class ChatConfigs(BaseModel):
+class ChatConfigs(FileSyncedModel):
     """聊天配置文件"""
 
     console: ChatConfig = ChatConfig()
@@ -122,9 +122,5 @@ class ChatConfigs(BaseModel):
             return self.onebot
 
 
-chat_configs = ensure_json_config(cfg.configs_file_path, ChatConfigs)
-
-
-def write_chat_config():
-    """将聊天配置对象写入配置文件"""
-    write_json_config(cfg.configs_file_path, chat_configs)
+chat_configs_ptr = Ptr(ChatConfigs.from_file(cfg.configs_file_path))
+watch_file(cfg.configs_file_path, ModelReloadHandler(chat_configs_ptr))
