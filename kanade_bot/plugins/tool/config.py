@@ -59,12 +59,13 @@ class ScheduleConfig(BaseModel):
     """定时任务发送的消息内容"""
 
 
-class ScheduleConfigs(FileSyncedModel, RootModel[dict[int, dict[str, ScheduleConfig]]]):
-    """定时任务配置列表
+class ScheduleConfigs(FileSyncedModel):
+    """定时任务配置字典"""
 
-    键为群号，值为该群的定时任务列表：
-        键为定时任务名称，每个群内不可重复
-        值为定时任务配置
+    configs: dict[int, dict[str, ScheduleConfig]] = {}
+    """定时任务配置字典，键为群号，值为该群的定时任务列表
+    
+    定时任务列表的键为定时任务名称，每个群内不可重复，值为定时任务配置
     """
 
 

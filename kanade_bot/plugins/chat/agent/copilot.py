@@ -15,9 +15,8 @@ from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
 from nonebot import logger
 
-from kanade_bot.utils.common import COPILOT_CLIENT
+from kanade_bot.utils.common import COPILOT_CLIENT, Ptr
 from kanade_bot.utils.parse import build_sender_info
-from kanade_bot.utils.common import Ptr
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
@@ -79,6 +78,7 @@ class CopilotSessionManager:
         "tools": tools,
         "available_tools": available_tools,
         "system_message": system_message,
+        "provider": cfg.provider,
     }
 
     def __init__(self):
