@@ -4,7 +4,7 @@ from nonebot.params import CommandArg
 from kanade_bot.plugins.api60s.client import client
 from kanade_bot.utils.common import get_platform_type
 
-from .cache import Luck, UserDailyLuckCache
+from .cache import Luck, luckCache
 from .matcher import answer, dad_joke, fabing, hitokoto, kfc, luck
 
 
@@ -21,7 +21,7 @@ async def handle_hitokoto():
 async def handle_luck(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
-    cache_luck = UserDailyLuckCache.get(platform, user_id)
+    cache_luck = luckCache.get(platform, user_id)
     if cache_luck:
         await luck.finish(str(cache_luck))
         return
@@ -29,7 +29,7 @@ async def handle_luck(event: Event):
     response = await client.get("/v2/luck")
     user_luck = Luck.model_validate(response.json()["data"])
 
-    UserDailyLuckCache.set(platform, user_id, user_luck)
+    luckCache.set(platform, user_id, user_luck)
     await luck.finish(str(user_luck))
 
 

@@ -130,6 +130,7 @@ async def send_message_in_chunks(
     matcher: type[Matcher],
     bot: Bot,
     event: Event,
+    auto_reply: bool = False,
 ):
     message = event.get_message()
     onebot = bot if isinstance(bot, OneBot) else None
@@ -167,11 +168,12 @@ async def send_message_in_chunks(
         return
 
     # 扣减水晶
-    succeed_consume(
-        HandlerKeyEnum.CHAT,
-        get_platform_type(event),
-        event.get_user_id(),
-    )
+    if not auto_reply:
+        succeed_consume(
+            HandlerKeyEnum.CHAT,
+            get_platform_type(event),
+            event.get_user_id(),
+        )
 
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):

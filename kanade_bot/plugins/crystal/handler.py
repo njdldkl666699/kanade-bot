@@ -4,7 +4,7 @@ from nonebot.adapters import Bot, Event
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 
-from kanade_bot.plugins.crystal.cache import UserDailyCheckInCache
+from kanade_bot.plugins.crystal.cache import checkInCache
 from kanade_bot.plugins.crystal.crystal import get_crystal, increment_crystal
 from kanade_bot.utils.common import get_platform_type
 
@@ -18,7 +18,7 @@ async def _(event: Event):
     user_id = event.get_user_id()
     cfg = crystal_config_ptr.v
 
-    if UserDailyCheckInCache.get(platform, user_id):
+    if checkInCache.get(platform, user_id):
         total_crystal = get_crystal(platform, user_id)
         template = random.choice(cfg.check_in_failed_templates)
         failed_message = template.format(total_crystal=total_crystal)
@@ -26,7 +26,7 @@ async def _(event: Event):
 
     crystal_earned = random.randint(cfg.check_in_min, cfg.check_in_max)
     increment_crystal(platform, user_id, crystal_earned)
-    UserDailyCheckInCache.set(platform, user_id, True)
+    checkInCache.set(platform, user_id, True)
 
     template = random.choice(cfg.check_in_succeed_templates)
     message = template.format(crystal=crystal_earned)

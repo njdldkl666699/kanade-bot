@@ -15,31 +15,32 @@ cfg = get_plugin_config(Config).fun
 
 
 class UserDailyWaifuCache(UserDailyCache[Path]):
-    _cache: dict[str, Path] = {}
-    """用户每日老婆缓存，键为用户ID，值为图片缓存路径"""
+    """用户每日老婆图片缓存，存储用户的老婆图片文件路径"""
 
-    @classmethod
-    def get_bytes(cls, platform: PlatformType, user_id: str) -> bytes | None:
+    def get_bytes(self, platform: PlatformType, user_id: str) -> bytes | None:
         """获取用户的老婆图片数据"""
-        p = super().get(platform, user_id)
+        p = self.get(platform, user_id)
         if p and p.exists():
             return p.read_bytes()
 
-    @classmethod
-    def set_bytes(cls, platform: PlatformType, user_id: str, image: bytes) -> Path:
+    def set_bytes(self, platform: PlatformType, user_id: str, image: bytes) -> Path:
         """设置用户的老婆图片数据"""
         p = get_plugin_cache_file(f"{platform}-{user_id}.png")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(image)
-        cls._cache[user_id] = p
+        self.set(platform, user_id, p)
         return p
 
-    @classmethod
-    def delete(cls, user_id: str):
-        """删除用户的老婆图片URL"""
-        if user_id in cls._cache:
-            del cls._cache[user_id]
+    def delete(self, user_id: str):
+        """删除用户的老婆图片路径，并删除文件缓存"""
+        if user_id in self._data.console_cache:
+            p = self._data.console_cache.pop(user_id)
+            if p and p.exists():
+                p.unlink()
+        if user_id in self._data.onebot_cache:
+            p = self._data.onebot_cache.pop(user_id)
+            if p and p.exists():
+                p.unlink()
 
 
-UserDailyWaifuCache.enable_auto_clear()
-UserDailyWaifuCache.enable_persistence(cfg.cache_file_path)
+waifuCache = UserDailyWaifuCache(cfg.cache_file_path)

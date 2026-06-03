@@ -83,7 +83,7 @@ class ModelReloadHandler[M: FileSyncedModel](FileSystemEventHandler):
 
         model = self._model_ptr.v
         file_path = model.file_path
-        if file_path is None or not file_path.samefile(src_path):
+        if file_path is None or file_path.resolve() != Path(src_path).resolve():
             return
 
         new_hash = md5(file_path)

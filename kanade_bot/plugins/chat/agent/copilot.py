@@ -169,10 +169,6 @@ class CopilotSessionManager:
                     # 没有任何新的消息可发送，直接返回
                     return None
 
-                # 清空消息缓冲区
-                if session_id in self._sessions_prompt_buffer:
-                    self._sessions_prompt_buffer[session_id].clear()
-
             send_prompt = self._build_send_prompt(
                 session_info,
                 prompt,
@@ -189,6 +185,12 @@ class CopilotSessionManager:
                 send_prompt,
                 attachments=attachments,
             )
+
+            async with self._global_lock:
+                # 清空消息缓冲区
+                if session_id in self._sessions_prompt_buffer:
+                    self._sessions_prompt_buffer[session_id].clear()
+
             return message_id, unsubscribe
 
     async def send_and_wait(
@@ -219,7 +221,7 @@ class CopilotSessionManager:
 
         unsubscribe: Callable[[], None] | None = None
         try:
-            t = await copilot.send(
+            t = await self.send(
                 session_info,
                 prompt,
                 handler,
@@ -278,7 +280,7 @@ class CopilotSessionManager:
                     stream_error_ptr.v = Exception(f"Session error: {data.message or str(data)}")
                     stream_queue.put_nowait(None)
 
-        t = await copilot.send(
+        t = await self.send(
             session_info,
             prompt,
             handler,

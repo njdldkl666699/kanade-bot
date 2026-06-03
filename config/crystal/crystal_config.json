@@ -1,6 +1,6 @@
 {
-  "check_in_crystal_min": 100,
-  "check_in_crystal_max": 200,
+  "check_in_min": 100,
+  "check_in_max": 200,
   "check_in_succeed_templates": [
     "嗯，签到了。获得 {crystal} 水晶…一点点积攒起来呢。",
     "签好了。今天有{crystal} 水晶入账…不多，但也算个小进展。",

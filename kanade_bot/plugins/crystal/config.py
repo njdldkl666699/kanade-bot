@@ -38,10 +38,10 @@ class ScopedConfig(BaseModel):
 
 
 class Config(BaseModel):
-    credit: ScopedConfig = ScopedConfig()
+    crystal: ScopedConfig = ScopedConfig()
 
 
-cfg = get_plugin_config(Config).credit
+cfg = get_plugin_config(Config).crystal
 
 
 class HandlerKeyEnum(Enum):
