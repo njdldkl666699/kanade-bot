@@ -9,31 +9,41 @@ from .config import chat_configs_ptr
 type BanType = Literal["user", "group"]
 
 
-def _parse_ban_arg_id(arg: MessageSegment) -> str | None:
-    """从消息段中解析出ID，支持文本和@消息"""
-    if arg.type == "text":
-        return arg.data.get("text", "").strip()
-    if arg.type == "at":
-        return arg.data.get("qq", "").strip()
-    return None
-
-
 def parse_ban_args(arg_msg: Message) -> tuple[str, BanType] | None:
     """解析聊天黑名单命令的参数，返回ID和类型"""
+    ban_type: BanType = "user"
     if len(arg_msg) == 1:
         arg: MessageSegment = arg_msg[0]
-        id = _parse_ban_arg_id(arg)
-        if id:
+
+        if arg.type == "text":
+            args: list[str] = arg.data["text"].strip().split(maxsplit=1)
+            if len(args) == 0:
+                return None
+
+            id = args[0]
+
+            type_str = args[1] if len(args) > 1 else "user"
+            if type_str.lower() == "group":
+                return id, "group"
             return id, "user"
+
+        if arg.type == "at":
+            id = arg.data["qq"].strip()
+            return id, "user"
+
     if len(arg_msg) >= 2:
         # 取前两个参数，解析ID和类型
         id_arg: MessageSegment = arg_msg[0]
-        id = _parse_ban_arg_id(id_arg)
+        id: str = ""
+        if id_arg.type == "text":
+            id = id_arg.data["text"].strip()
+        elif id_arg.type == "at":
+            id = id_arg.data["qq"].strip()
 
         type_arg: MessageSegment = arg_msg[1]
         ban_type: BanType = "user"
         if type_arg.type == "text":
-            type_str = type_arg.data.get("text", "").strip().lower()
+            type_str = type_arg.data["text"].strip().lower()
             if type_str == "group":
                 ban_type = "group"
 

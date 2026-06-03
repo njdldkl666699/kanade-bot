@@ -204,6 +204,8 @@ def should_reply_event(event: Event):
     if user_id and is_banned(user_id, ban_type, platform):
         return False
 
+    return True
+
 
 def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     if is_banned(group_id, "group", platform):
