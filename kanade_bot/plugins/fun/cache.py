@@ -33,14 +33,14 @@ class UserDailyWaifuCache(UserDailyCache[Path]):
 
     def delete(self, user_id: str):
         """删除用户的老婆图片路径，并删除文件缓存"""
-        if user_id in self._data.console_cache:
-            p = self._data.console_cache.pop(user_id)
+        if user_id in self._data.console:
+            p = self._data.console.pop(user_id)
             if p and p.exists():
                 p.unlink()
-        if user_id in self._data.onebot_cache:
-            p = self._data.onebot_cache.pop(user_id)
+        if user_id in self._data.onebot:
+            p = self._data.onebot.pop(user_id)
             if p and p.exists():
                 p.unlink()
 
 
-waifuCache = UserDailyWaifuCache(cfg.cache_file_path)
+waifuCache = UserDailyWaifuCache(Path, cfg.cache_file_path)
