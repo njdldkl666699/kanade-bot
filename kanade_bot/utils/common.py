@@ -3,12 +3,25 @@ from typing import Literal
 from copilot import CopilotClient
 from copilot.client import StopError
 from nonebot import get_driver, logger
+from nonebot.adapters import Event
+from nonebot.adapters.console import Event as ConsoleEvent
+from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.console.event import PrivateMessageEvent as ConsolePrivateMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
+
+
+def get_platform_type(event: Event) -> PlatformType:
+    """根据事件类型确定消息平台"""
+    if isinstance(event, ConsoleEvent):
+        return "console"
+    elif isinstance(event, OneBotEvent):
+        return "onebot"
+    else:
+        raise ValueError(f"Unsupported event type: {type(event)}")
 
 
 def console_private_permission(event: ConsolePrivateMessageEvent) -> bool:
@@ -24,6 +37,13 @@ def not_to_me(to_me: bool = EventToMe()):
 def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:
     """匹配OneBot私聊消息类型事件且发送者是超级用户"""
     return event.get_user_id() in get_driver().config.superusers
+
+
+class Ptr[T]:
+    """一个指针类，包含一个 value 属性，可以用来指向一个值"""
+
+    def __init__(self, v: T):
+        self.v = v
 
 
 COPILOT_CLIENT = CopilotClient()

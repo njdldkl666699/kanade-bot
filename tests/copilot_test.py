@@ -1,9 +1,16 @@
 import asyncio
 from base64 import b64encode
-from encodings.base64_codec import base64_decode, base64_encode
-import json
+import os
 from pathlib import Path
-from copilot import BlobAttachment, CopilotClient, PermissionHandler
+from copilot import CopilotClient
+from copilot.session import PermissionHandler
+from copilot.generated.session_events import AssistantMessageData
+from dotenv import load_dotenv
+
+load_dotenv(Path(".env.prod"))
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+if not OPENROUTER_API_KEY:
+    raise ValueError("未找到环境变量 OPENROUTER_API_KEY .env.prod 文件")
 
 
 async def main():
@@ -12,21 +19,33 @@ async def main():
 
     session = await client.create_session(
         on_permission_request=PermissionHandler.approve_all,
-        model="gpt-5-mini",
+        model="moonshotai/kimi-k2.6:free",
+        provider={
+            "type": "openai",
+            "api_key": OPENROUTER_API_KEY,
+            "base_url": "https://openrouter.ai/api/v1",
+        },
     )
     response = await session.send_and_wait(
-        prompt="描述一下图片",
-        attachments=[
-            {
-                "type": "blob",
-                "data": b64encode(Path("宵崎奏Ciallo.webp").read_bytes()).decode(),
-                "mimeType": "image/png",  # webp类型不支持，但是可以用image/png代替
-                "displayName": "宵崎奏Ciallo.webp",
-            }
-        ],
+        prompt="你好，请介绍一下你自己。",
+        # attachments=[
+        #     {
+        #         "type": "blob",
+        #         "data": b64encode(Path("Ciallo.webp").read_bytes()).decode(),
+        #         "mimeType": "image/png",  # webp类型不支持，但是可以用image/png代替
+        #         "displayName": "Ciallo.webp",
+        #     }
+        # ],
     )
 
-    print(response.data.content)
+    if response is None:
+        print("未收到响应")
+        return
+
+    match response.data:
+        case AssistantMessageData() as msg:
+            print("助手回复了消息：", msg.content)
+
     # models = await client.list_models()
     # # 94.2
     # for model in models:

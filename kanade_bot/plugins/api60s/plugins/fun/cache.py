@@ -1,9 +1,11 @@
-from nonebot import require
+from nonebot import get_plugin_config
 from pydantic import BaseModel
 
-require("nonebot_plugin_apscheduler")
+from kanade_bot.utils.cache import UserDailyCache
 
-from nonebot_plugin_apscheduler import scheduler
+from .config import Config
+
+cfg = get_plugin_config(Config)
 
 
 class Luck(BaseModel):
@@ -24,21 +26,4 @@ class Luck(BaseModel):
         )
 
 
-class UserDailyLuckCache:
-    _cache: dict[str, Luck] = {}
-
-    @classmethod
-    def get(cls, user_id: str) -> Luck | None:
-        """获取用户的运势数据"""
-        return cls._cache.get(user_id)
-
-    @classmethod
-    def set(cls, user_id: str, luck: Luck):
-        """设置用户的运势数据"""
-        cls._cache[user_id] = luck
-
-    @staticmethod
-    @scheduler.scheduled_job("cron", hour=0, minute=0)
-    def _auto_clear_cache():
-        """每天凌晨自动清除运势缓存"""
-        UserDailyLuckCache._cache.clear()
+luckCache = UserDailyCache[Luck](cfg.api60s_fun_cache_file_path)

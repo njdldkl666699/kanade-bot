@@ -15,9 +15,7 @@ class Config(BaseSettings):
         model_config = SettingsConfig(env_file=(".env", ".env.prod"))  # pyright: ignore[reportCallIssue]
     else:  # pragma: pydantic-v1
 
-        class Config(  # pyright: ignore[reportIncompatibleVariableOverride]
-            SettingsConfig
-        ):
+        class Config(SettingsConfig):  # pyright: ignore[reportIncompatibleVariableOverride]
             env_file = ".env", ".env.prod"
 
 

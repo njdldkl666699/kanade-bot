@@ -1,5 +1,6 @@
 import uuid
 
+from nonebot import require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -9,6 +10,7 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage
 
+from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -16,8 +18,12 @@ from .agent.copilot import copilot
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
 from .client import file_client as client
-from .config import cfg, chat_configs, write_chat_config
+from .config import cfg, chat_configs_ptr
 from .matcher import add_meme, chat, chat_ban, chat_monitor, chat_reset, chat_unban, list_memes
+
+require("crystal")
+
+from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
 
 
 @chat.handle()
@@ -26,8 +32,16 @@ async def handle_chat(
     event: OneBotMessageEvent | ConsoleMessageEvent,
 ):
     # 检查用户或群聊是否在聊天黑名单中
-    if should_reply_event(event):
-        await send_message_in_chunks(chat, bot, event)
+    if not should_reply_event(event):
+        return
+
+    key = HandlerKeyEnum.CHAT
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(chat, key, platform, user_id)
+
+    await send_message_in_chunks(chat, bot, event)
 
 
 @chat_reset.handle()
@@ -45,18 +59,17 @@ async def handle_chat_monitor(
 ):
     session_info = await extract_session_info(event, bot)
     session_id = session_info.session_id
+    platform = get_platform_type(event)
 
     if isinstance(event, ConsolePublicMessageEvent):
         group_id = event.channel.id
-        platform = "console"
     elif isinstance(event, OneBotGroupMessageEvent):
         group_id = str(event.group_id)
-        platform = "onebot"
     else:
         return
 
     if session_info.group_name and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, bot, event)
+        await send_message_in_chunks(chat, bot, event, auto_reply=True)
 
     # 添加消息到会话缓冲区，不需要图片
     message_str, _ = await parse_message_for_ai(message)
@@ -72,12 +85,8 @@ async def handle_chat_ban(event: Event, arg_msg: Message = CommandArg()):
         await chat_ban.finish()
     id, ban_type = args
 
-    if isinstance(event, ConsoleMessageEvent):
-        add_to_ban_list(id, ban_type, "console")
-    elif isinstance(event, OneBotMessageEvent):
-        add_to_ban_list(id, ban_type, "onebot")
-    else:
-        await chat_ban.finish()
+    platform = get_platform_type(event)
+    add_to_ban_list(id, ban_type, platform)
 
     type_text = "用户" if ban_type == "user" else "群聊"
     await chat_ban.finish(f"已将{type_text} {id} 添加到聊天黑名单")
@@ -90,12 +99,8 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
         await chat_unban.finish()
     id, ban_type = args
 
-    if isinstance(event, ConsoleMessageEvent):
-        remove_from_ban_list(id, ban_type, "console")
-    elif isinstance(event, OneBotMessageEvent):
-        remove_from_ban_list(id, ban_type, "onebot")
-    else:
-        await chat_unban.finish()
+    platform = get_platform_type(event)
+    remove_from_ban_list(id, ban_type, platform)
 
     type_text = "用户" if ban_type == "user" else "群聊"
     await chat_unban.finish(f"已将{type_text} {id} 从聊天黑名单中移除")
@@ -103,11 +108,11 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
 
 @list_memes.handle()
 async def handle_list_memes():
-    if not chat_configs.memes:
+    if not chat_configs_ptr.v.memes:
         await list_memes.finish("当前没有表情包")
 
     meme_list = "\n".join(
-        f"{name}: {description}" for name, description in chat_configs.memes.items()
+        f"{name}: {description}" for name, description in chat_configs_ptr.v.memes.items()
     )
     await list_memes.finish(f"当前表情包列表：\n{meme_list}")
 
@@ -144,9 +149,8 @@ async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandA
     image_path.write_bytes(image)
 
     # 将表情包信息添加（或更新）到配置中
-    memes = chat_configs.memes
+    memes = chat_configs_ptr.v.memes
     # 如果表情包名称不存在，或新描述不为空，则更新配置文件
     if name not in memes or description:
         memes[name] = description
-        write_chat_config()
     await add_meme.finish(f"已添加表情包 {name}")

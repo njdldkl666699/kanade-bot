@@ -1,4 +1,4 @@
-from nonebot import get_driver, get_plugin_config
+from nonebot import get_driver, get_plugin_config, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -11,9 +11,10 @@ from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMess
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventPlainText
 
+from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 
-from .cache import UserDailyWaifuCache
+from .cache import waifuCache
 from .config import Config
 from .duanzi import (
     add_duanzi,
@@ -35,6 +36,15 @@ from .matcher import (
     today_waifu,
 )
 from .waifu import get_compressed_image, query_lolicon_waifus, random_loli_waifu
+
+require("crystal")
+
+from kanade_bot.plugins.crystal import (
+    HandlerKeyEnum,
+    check_user_crystal,
+    finish_fail_consume,
+    succeed_consume,
+)
 
 cfg = get_plugin_config(Config).fun
 
@@ -190,8 +200,9 @@ async def _(arg_msg: Message = CommandArg()):
 
 @today_waifu.handle()
 async def _(event: ConsoleMessageEvent):
+    platform = "console"
     user_id = event.get_user_id()
-    p = UserDailyWaifuCache.get_path(user_id)
+    p = waifuCache.get(platform, user_id)
     if p:
         await today_waifu.finish(str(p))
 
@@ -200,14 +211,15 @@ async def _(event: ConsoleMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    p = UserDailyWaifuCache.set(user_id, image)
+    p = waifuCache.set_bytes(platform, user_id, image)
     await today_waifu.finish(str(p))
 
 
 @today_waifu.handle()
 async def _(event: OneBotMessageEvent):
+    platform = "onebot"
     user_id = event.get_user_id()
-    cache = UserDailyWaifuCache.get(user_id)
+    cache = waifuCache.get_bytes(platform, user_id)
     if cache:
         await today_waifu.finish(MessageSegment.image(cache))
 
@@ -216,27 +228,45 @@ async def _(event: OneBotMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    UserDailyWaifuCache.set(user_id, image)
+    waifuCache.set_bytes(platform, user_id, image)
     await today_waifu.finish(MessageSegment.image(image))
 
 
 @refresh_waifu.handle()
 async def _(event: Event):
-    UserDailyWaifuCache.delete(event.get_user_id())
+    key = HandlerKeyEnum.REFRESH_WAIFU
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(refresh_waifu, key, platform, user_id)
+
+    succeed_consume(key, platform, user_id)
+    waifuCache.delete(event.get_user_id())
     await refresh_waifu.finish("今日老婆已刷新")
 
 
 @random_waifu.handle()
 async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
+    key = HandlerKeyEnum.RANDOM_WAIFU
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(random_waifu, key, platform, user_id)
+
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
         url = await random_loli_waifu()
+        succeed_consume(key, platform, user_id)
         await random_waifu.finish(url)
 
     # 隐藏功能
     _, urls = await query_lolicon_waifus(json_str)
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
+
+    succeed_consume(key, platform, user_id)
     await random_waifu.finish("\n\n".join(urls))
 
 
@@ -244,10 +274,19 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
     (Cooldown(10, prompt="别太压抑了。", isolate_level=CooldownIsolateLevel.GROUP),)
 )
 async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
+    key = HandlerKeyEnum.RANDOM_WAIFU
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(random_waifu, key, platform, user_id)
+
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
         url = await random_loli_waifu()
         image = await get_compressed_image(url)
+        succeed_consume(key, platform, user_id)
+
         if not image:
             await random_waifu.finish(f"获取图片失败，链接：{url}")
         try:
@@ -259,6 +298,8 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     urls = await query_lolicon_waifus(json_str)
     if not urls:
         await random_waifu.finish("查询失败，请检查参数是否正确")
+
+    succeed_consume(key, platform, user_id)
 
     # 私聊且是管理员，直接发链接
     if (

@@ -41,4 +41,4 @@ class ScopedConfig(BaseModel):
 
 
 class Config(BaseModel):
-    music: ScopedConfig
+    music: ScopedConfig = ScopedConfig()

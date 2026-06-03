@@ -40,4 +40,4 @@ class ScopedConfig(BaseModel):
 
 
 class Config(BaseModel):
-    help: ScopedConfig
+    help: ScopedConfig = ScopedConfig()

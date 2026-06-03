@@ -5,7 +5,11 @@ from pydantic import BaseModel
 
 require("nonebot_plugin_localstore")
 
-from nonebot_plugin_localstore import get_plugin_config_file, get_plugin_data_file
+from nonebot_plugin_localstore import (
+    get_plugin_config_file,
+    get_plugin_data_file,
+    get_plugin_cache_file,
+)
 
 
 class ScopedConfig(BaseModel):
@@ -17,6 +21,8 @@ class ScopedConfig(BaseModel):
     """段子(史)JSON列表文件名"""
     lolicon_proxy: str = "i.yuki.sh"
     """Lolicon API 图片代理"""
+    cache_file: str = "cache.json"
+    """缓存数据文件路径"""
 
     @property
     def ciallo_image_file_path(self) -> Path:
@@ -28,6 +34,11 @@ class ScopedConfig(BaseModel):
         """段子(史)JSON列表文件路径"""
         return get_plugin_data_file(self.duanzi_list_file)
 
+    @property
+    def cache_file_path(self) -> Path:
+        """缓存数据文件路径"""
+        return get_plugin_cache_file(self.cache_file)
+
 
 class Config(BaseModel):
-    fun: ScopedConfig
+    fun: ScopedConfig = ScopedConfig()

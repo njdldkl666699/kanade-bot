@@ -1,9 +1,11 @@
 from pathlib import Path
 
+from copilot import ProviderConfig
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.config import ensure_json_config, write_json_config
+from kanade_bot.utils.common import PlatformType, Ptr
+from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
 
 require("nonebot_plugin_localstore")
 
@@ -13,6 +15,8 @@ from nonebot_plugin_localstore import get_plugin_config_file, get_plugin_data_fi
 class ScopedConfig(BaseModel):
     model: str = "gpt-5-mini"
     """模型ID，需要支持图片输入"""
+    provider: ProviderConfig | None = None
+    """模型提供商配置，如果为None则使用Copilot内置模型"""
     system_prompt_file: str = "Kanade-v3.md"
     """系统提示词文件名"""
     tavily_api_key: str
@@ -100,7 +104,7 @@ class ChatConfig(BaseModel):
     """主动回复配置，键为群ID，值为AutoReplyConfig对象"""
 
 
-class ChatConfigs(BaseModel):
+class ChatConfigs(FileSyncedModel):
     """聊天配置文件"""
 
     console: ChatConfig = ChatConfig()
@@ -114,10 +118,12 @@ class ChatConfigs(BaseModel):
     每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。
     """
 
+    def get_by_platform(self, platform: PlatformType):
+        if platform == "console":
+            return self.console
+        elif platform == "onebot":
+            return self.onebot
 
-chat_configs = ensure_json_config(cfg.configs_file_path, ChatConfigs)
 
-
-def write_chat_config():
-    """将聊天配置对象写入配置文件"""
-    write_json_config(cfg.configs_file_path, chat_configs)
+chat_configs_ptr = Ptr(ChatConfigs.from_file(cfg.configs_file_path))
+watch_file(cfg.configs_file_path, ModelReloadHandler(chat_configs_ptr))

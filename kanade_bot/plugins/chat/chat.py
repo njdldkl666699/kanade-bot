@@ -3,10 +3,8 @@ import re
 from pathlib import Path
 from typing import cast
 
-from copilot.generated.session_events import AssistantMessageData
-from nonebot import logger
+from nonebot import logger, require
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
@@ -15,7 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
@@ -23,8 +21,12 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.copilot import copilot
 from .ban import is_banned
 from .client import file_client as client
-from .config import cfg, chat_configs
+from .config import cfg, chat_configs_ptr
 from .rag import query
+
+require("crystal")
+
+from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
 
 
 def _send_fail_message(matcher: type[Matcher]):
@@ -45,7 +47,7 @@ async def _finish_onebot_message(
 
     def replace_meme(match: re.Match[str]) -> str:
         meme_name = match.group(1)
-        if meme_name not in chat_configs.memes:
+        if meme_name not in chat_configs_ptr.v.memes:
             return ""
 
         meme_path = cfg.memes_dir_path / meme_name
@@ -128,6 +130,7 @@ async def send_message_in_chunks(
     matcher: type[Matcher],
     bot: Bot,
     event: Event,
+    auto_reply: bool = False,
 ):
     message = event.get_message()
     onebot = bot if isinstance(bot, OneBot) else None
@@ -145,31 +148,32 @@ async def send_message_in_chunks(
     rag_docs = query(query_str) if query_str else None
 
     session_info = await extract_session_info(event, bot)
-    session_id = session_info.session_id
 
-    response, new_session = await copilot.send_and_wait(
-        session_info,
-        prompt,
-        rag_docs=rag_docs,
-        reply_text=reply_text,
-        attachments=attachments,
-        timeout=300,
-    )
-    if new_session:
-        logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
-
-    if not response:
-        logger.warning(f"会话{session_id}没有收到回复，可能是生成失败或超时")
-        await _send_fail_message(matcher)
-        return
-    if not isinstance(response.data, AssistantMessageData):
-        logger.warning(
-            f"会话{session_id}回复的数据不是AssistantMessageData，可能是生成失败，数据：{response.data}"
+    try:
+        content = await copilot.send_and_wait(
+            session_info,
+            prompt,
+            rag_docs=rag_docs,
+            reply_text=reply_text,
+            attachments=attachments,
+            timeout=300,
         )
+    except Exception as e:
+        logger.error("发送消息时发生错误: {}", e)
         await _send_fail_message(matcher)
         return
 
-    content = response.data.content
+    if not content:
+        logger.warning(f"会话{session_info.session_id}没有收到任何回复")
+        return
+
+    # 扣减水晶
+    if not auto_reply:
+        succeed_consume(
+            HandlerKeyEnum.CHAT,
+            get_platform_type(event),
+            event.get_user_id(),
+        )
 
     # OneBot消息特殊处理
     if isinstance(event, OneBotMessageEvent):
@@ -183,14 +187,7 @@ async def send_message_in_chunks(
 def should_reply_event(event: Event):
     """检查用户或群聊是否在聊天黑名单中，并确定是否应该回复事件"""
     # 确定平台类型
-    platform: PlatformType | None = None
-    if isinstance(event, ConsoleMessageEvent):
-        platform = "console"
-    elif isinstance(event, OneBotMessageEvent):
-        platform = "onebot"
-    else:
-        # 其他平台暂不处理，默认回复
-        return True
+    platform = get_platform_type(event)
 
     # 检查群聊是否在聊天黑名单中
     ban_type = "group"
@@ -216,10 +213,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
     if is_banned(group_id, "group", platform):
         return False
 
-    if platform == "console":
-        group_config = chat_configs.console.auto_reply_group_config
-    elif platform == "onebot":
-        group_config = chat_configs.onebot.auto_reply_group_config
+    group_config = chat_configs_ptr.v.get_by_platform(platform).auto_reply_group_config
 
     # 无配置项，默认不自动回复
     if group_id not in group_config:

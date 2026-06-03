@@ -6,7 +6,7 @@ from nonebot import logger
 from pydantic import BaseModel, Field
 
 from ..client import file_client, tavily_client
-from ..config import chat_configs
+from ..config import chat_configs_ptr
 from .memory import MemoryType, WriteMode, read_memory_content, write_memory_content
 
 
@@ -83,7 +83,7 @@ To use a meme in a reply, reference it as {{meme_name}}, for example {{happy}};
 it will be automatically replaced with the corresponding meme image when sent.""",
 )
 def list_memes():
-    return chat_configs.memes
+    return chat_configs_ptr.v.memes
 
 
 @define_tool(
@@ -145,7 +145,7 @@ async def view_image(urls: list[str]) -> ToolResult:
             image = ToolBinaryResult(
                 data=base64.b64encode(response.content).decode("utf-8"),
                 mime_type=response.headers.get("Content-Type", "application/octet-stream"),
-                type="blob",
+                type="image",
                 description=url,
             )
             binary_results_for_llm.append(image)

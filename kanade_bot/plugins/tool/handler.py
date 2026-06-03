@@ -18,7 +18,7 @@ from nonebot.typing import T_State
 from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
-from .config import preset_reaction_cfg
+from .config import preset_reaction_cfg_ptr
 from .matcher import (
     add_a_schedule,
     list_schedules,
@@ -191,17 +191,19 @@ async def _(bot: OneBot, event: OneBotMessageEvent, message: OneBotMessage = Com
 @receive_poke.handle()
 async def _(bot: OneBot, event: PokeNotifyEvent):
     i = random.randint(1, 100)
-    if i < preset_reaction_cfg.send_poke_probability:
+    cfg = preset_reaction_cfg_ptr.v
+    if i < cfg.send_poke_probability:
         # 戳回去
         await send_poke(bot, event.user_id, event.group_id)
-    await receive_poke.finish(random.choice(preset_reaction_cfg.receive_poke_messages))
+    await receive_poke.finish(random.choice(cfg.receive_poke_messages))
 
 
 @send_like.handle()
 async def _(bot: OneBot, event: OneBotMessageEvent):
+    cfg = preset_reaction_cfg_ptr.v
     try:
         await bot.send_like(user_id=event.user_id, times=10)
     except ActionFailed:
-        await send_like.finish(preset_reaction_cfg.send_like_limited_message)
+        await send_like.finish(cfg.send_like_limited_message)
 
-    await send_like.finish(random.choice(preset_reaction_cfg.send_like_messages))
+    await send_like.finish(random.choice(cfg.send_like_messages))
