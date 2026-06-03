@@ -100,7 +100,7 @@ observer = Observer()
 
 def watch_file(file_path: Path, handler: ModelReloadHandler):
     """监控指定的文件，当文件被修改时触发事件处理器"""
-    logger.info(f"开始监控模型文件 {file_path}")
+    logger.debug(f"开始监控模型文件 {file_path}")
     observer.schedule(handler, str(file_path.parent))
 
 

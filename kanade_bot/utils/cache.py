@@ -42,7 +42,7 @@ class UserDailyCache(Generic[C]):
     def enable_auto_clear(cls):
         """启用每天自动清除缓存的功能"""
         scheduler.add_job(cls._auto_clear_cache, "cron", hour=0, minute=0)
-        logger.info(f"已启用 {cls} 的每天自动清除功能")
+        logger.debug(f"已启用 {cls} 的每天自动清除功能")
 
     @classmethod
     def enable_persistence(cls, p: Path):
@@ -60,7 +60,7 @@ class UserDailyCache(Generic[C]):
 
             cache_datetime = datetime.fromisoformat(data.get("datetime", "1970-01-01T00:00:00"))
             if cache_datetime.date() != datetime.now().date():
-                logger.info(f"缓存数据已过期，日期为 {cache_datetime.date()}，已忽略")
+                logger.debug(f"缓存数据已过期，日期为 {cache_datetime.date()}，已忽略")
                 return
 
             cls._console_cache = data.get("console", {})

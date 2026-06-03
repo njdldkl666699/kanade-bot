@@ -3,15 +3,15 @@ from collections import deque
 from typing import Callable
 
 from copilot import CopilotSession
-from copilot.generated.rpc import ModelSwitchToRequest
-from copilot.generated.session_events import (
+from copilot.rpc import ModelSwitchToRequest
+from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
+from copilot.session_events import (
     AssistantMessageData,
     AssistantMessageDeltaData,
     SessionErrorData,
     SessionEvent,
     SessionIdleData,
 )
-from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
 from copilot.tools import Tool
 from nonebot import logger
 
@@ -49,11 +49,13 @@ class CopilotSessionManager:
     available_tools: list[str] = [
         "view",
         "read",
+        "search",
         "grep",
         "glob",
         "sql",
         "skill",
         "web_fetch",
+        "web_search",
         *(tool.name for tool in tools),
     ]
     """工具列表，包含所有可用工具的名称"""

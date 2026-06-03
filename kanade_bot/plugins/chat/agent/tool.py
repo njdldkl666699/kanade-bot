@@ -145,7 +145,7 @@ async def view_image(urls: list[str]) -> ToolResult:
             image = ToolBinaryResult(
                 data=base64.b64encode(response.content).decode("utf-8"),
                 mime_type=response.headers.get("Content-Type", "application/octet-stream"),
-                type="blob",
+                type="image",
                 description=url,
             )
             binary_results_for_llm.append(image)

@@ -3,8 +3,8 @@ from collections import deque
 from datetime import datetime
 
 from copilot import CopilotSession
-from copilot.generated.session_events import AssistantMessageData
 from copilot.session import PermissionHandler, SystemMessageConfig
+from copilot.session_events import AssistantMessageData
 from nonebot import get_plugin_config, logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
@@ -35,6 +35,7 @@ class Summarizer:
         "model": cfg.model,
         "reasoning_effort": "medium",
         "system_message": system_message,
+        "provider": cfg.provider,
     }
 
     def __init__(self):
