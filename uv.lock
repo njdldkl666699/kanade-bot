@@ -1144,7 +1144,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcstatus", specifier = ">=13.0.1" },
     { name = "nonebot-adapter-console", specifier = ">=0.9.0" },
-    { name = "nonebot-adapter-onebot", specifier = ">=2.4.6" },
+    { name = "nonebot-adapter-onebot", git = "https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git?rev=master" },
     { name = "nonebot-plugin-apscheduler", specifier = ">=0.5.0" },
     { name = "nonebot-plugin-htmlrender", specifier = ">=0.6.7" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
@@ -1561,16 +1561,12 @@ wheels = [
 [[package]]
 name = "nonebot-adapter-onebot"
 version = "2.4.6"
-source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
+source = { git = "https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git?rev=master#0b232a5edbf83fe530ced131b114a2417341436a" }
 dependencies = [
     { name = "msgpack" },
     { name = "nonebot2" },
     { name = "pydantic" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/11/97/504e898471c2ba18a5c0f8db99ed81e755f6b3cbf647ce804485d8b8f77e/nonebot_adapter_onebot-2.4.6.tar.gz", hash = "sha256:e33c93649ad11b320d8e9ff213635f29b23b4d0413c9158bd031c513c2f8f701", size = 40107, upload-time = "2024-10-24T07:34:57.623Z" }
-wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/60/a8/219fb6327b3395b9b05d2e46383795825d079d1c024660304037d3dc0448/nonebot_adapter_onebot-2.4.6-py3-none-any.whl", hash = "sha256:b1ec7023fd83d731f63b513217327a57d12893a261944934b9195f79173791ad", size = 49626, upload-time = "2024-10-24T07:34:56.115Z" },
 ]
 
 [[package]]
