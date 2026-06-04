@@ -209,18 +209,25 @@ def should_reply_event(bot: Bot, event: Event):
     if user_id and is_banned(user_id, ban_type, platform):
         return False
 
-    # 检查群聊中引用了自己的消息但是没有@或to_me的情况
+    # 检查群聊中引用了自己的消息
+    self_id = bot.self_id
     if (
         isinstance(event, OneBotGroupMessageEvent)
         and (reply := event.reply)
-        and str(reply.sender.user_id) == bot.self_id
-        and not event.message.has(MessageSegment.at(bot.self_id))
+        and str(reply.sender.user_id) == self_id
     ):
-        text = event.message.extract_plain_text()
+        # 有@ -> 回复
+        message = event.message
+        if message.has(MessageSegment.at(self_id)):
+            return True
+
+        text = message.extract_plain_text()
         for nickname in get_driver().config.nickname:
             if text.startswith(nickname):
+                # 开头是昵称 -> 回复
                 return True
 
+        # 没有@，开头也不是昵称 -> 不回复
         return False
 
     return True
