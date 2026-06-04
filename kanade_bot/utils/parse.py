@@ -4,12 +4,12 @@ from typing import Any, SupportsIndex
 from copilot.session import Attachment
 from httpx import AsyncClient
 from nonebot import logger
-from nonebot.adapters import Message
-from nonebot.adapters.console import Message as ConsoleMessage
-from nonebot.adapters.onebot.v11 import ActionFailed
+from nonebot.adapters import Event
+from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
+from nonebot.adapters.onebot.v11 import ActionFailed, GroupMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11.event import Reply
 
 from .session import extract_session_info
 
@@ -81,7 +81,7 @@ def build_sender_info(name: str | None, id: str | None) -> str:
 
 
 async def parse_onebot_message_for_ai(
-    message: OneBotMessage,
+    event_or_reply: OneBotMessageEvent | Reply,
     client: AsyncClient | None = None,
     bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
@@ -90,6 +90,7 @@ async def parse_onebot_message_for_ai(
     :param client: 用于请求图片的HTTP客户端，如果需要提取图片附件则必须提供
     :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息
     """
+    message = event_or_reply.message
     text_parts: list[str] = []
     attachments: list[Attachment] = []
 
@@ -117,7 +118,7 @@ async def parse_onebot_message_for_ai(
 
         for fwd_msg_event in fwd_msg_events:
             e = OneBotMessageEvent.model_validate(fwd_msg_event)
-            text, fwd_attachments = await parse_onebot_message_for_ai(e.message, client, bot)
+            text, fwd_attachments = await parse_onebot_message_for_ai(e, client, bot)
 
             # 附带发送者信息
             session_info = await extract_session_info(e, bot)
@@ -165,14 +166,41 @@ async def parse_onebot_message_for_ai(
     # == len(message) - 1 : 最后一个是图片消息段
     # 但这些边缘情况都可以通过切片自动处理，所以直接切最后一个图片消息段的下一个位置到末尾即可
     remaining_segments = message[last_image_index + 1 :]
-    if remaining_segments:
-        text_parts.append(remaining_segments.to_rich_text().strip())
+    if not remaining_segments:
+        return "\n".join(text_parts), attachments
+
+    for segment in remaining_segments:
+        # 在这里可以对非文本消息段进行各种格式化处理以保留更多信息
+        if segment.type == "at":
+            qq: str = segment.data["qq"]
+            if qq == "all":
+                text_parts.append("@全体成员 ")
+                continue
+            if not bot:
+                text_parts.append(f"@{qq} ")
+                continue
+            if not isinstance(event_or_reply, GroupMessageEvent):
+                text_parts.append(f"@{qq} ")
+                continue
+
+            name = qq
+            try:
+                member_info = await bot.get_group_member_info(
+                    group_id=event_or_reply.group_id, user_id=int(qq)
+                )
+                nickname = member_info["nickname"]
+                card = member_info["card"]
+                name = card or nickname or qq
+            finally:
+                text_parts.append(f"@{name} ")
+        else:
+            text_parts.append(segment.to_rich_text().strip())
 
     return "\n".join(text_parts), attachments
 
 
 async def parse_message_for_ai(
-    message: Message,
+    event: Event,
     client: AsyncClient | None = None,
     bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
@@ -184,12 +212,12 @@ async def parse_message_for_ai(
     prompt: str = ""
     attachments: list[Attachment] = []
     ## Console消息直接发送原始内容，无需解析附件
-    if isinstance(message, ConsoleMessage):
-        prompt = str(message)
+    if isinstance(event, ConsoleMessageEvent):
+        prompt = str(event.message)
 
     ## OneBot消息
     # 处理发送消息
-    if isinstance(message, OneBotMessage):
-        prompt, attachments = await parse_onebot_message_for_ai(message, client, bot)
+    if isinstance(event, OneBotMessageEvent):
+        prompt, attachments = await parse_onebot_message_for_ai(event, client, bot)
 
     return prompt, attachments

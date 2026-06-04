@@ -310,22 +310,22 @@ class CopilotSessionManager:
         prompt_parts: list[str] = []
 
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
-            prompt_parts.append(f"$现在的会话在群聊{group_info}中。")
+            prompt_parts.append(f"$ 现在的会话在群聊{group_info}中。")
 
         if rag_docs:
-            prompt_parts.append("$检索到可能相关的文档：")
+            prompt_parts.append("$ 检索到可能相关的文档：")
             prompt_parts.extend(rag_docs)
         if buffered_messages:
-            prompt_parts.append("$下面是之前的消息缓冲区中的消息：")
+            prompt_parts.append("$ 下面是之前的消息缓冲区中的消息：")
             prompt_parts.extend(buffered_messages)
         if reply_text:
-            prompt_parts.append("$用户引用了之前的消息：")
+            prompt_parts.append("$ 用户引用了之前的消息：")
             prompt_parts.append(reply_text)
 
         if user_info := build_sender_info(session_info.nickname, session_info.user_id):
             prompt = f"{user_info} : {prompt}"
         if prompt:
-            prompt_parts.append("$下面是这次的用户消息：")
+            prompt_parts.append("$ 下面是这次的用户消息：")
             prompt_parts.append(prompt)
 
         return "\n".join(prompt_parts).strip()

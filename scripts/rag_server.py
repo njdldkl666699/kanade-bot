@@ -1,7 +1,12 @@
+import os
 import time
+from typing import Literal
 
 from chromadb import Collection, PersistentClient
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from chromadb.utils.embedding_functions import (
+    OpenAIEmbeddingFunction,
+    SentenceTransformerEmbeddingFunction,
+)
 from loguru import logger
 from pydantic import BaseModel
 from rpyc import Service, ThreadedServer
@@ -15,12 +20,24 @@ class ScopedConfig(BaseModel):
 
     port: int = 39831
     """RAG服务器端口号，需要与RAG客户端的配置一致"""
-    model_name_or_path: str = "BAAI/bge-small-zh-v1.5"
-    """RAG使用的模型名称或路径，支持从Hugging Face下载"""
     db_dir_path: str = "rag/kanade_rag_db/"
     """向量数据库的存储目录路径"""
     collection_name: str = "kanade_wiki_collection"
     """向量数据库中集合的名称"""
+
+    embedding_type: Literal["sentence_transformer", "openai"] = "sentence_transformer"
+    """RAG使用的向量化方法
+    - `sentence_transformer`需要指定model_name_or_path参数
+    - `openai`需要指定openai开头的参数
+    """
+    model_name_or_path: str = "BAAI/bge-small-zh-v1.5"
+    """RAG使用的模型名称或路径，支持从Hugging Face下载"""
+    openai_api_key: str | None = None
+    """OpenAI API密钥"""
+    openai_base_url: str | None = None
+    """OpenAI API Base URL，可选，用于自定义端点"""
+    openai_model: str = "text-embedding-3-small"
+    """OpenAI嵌入模型名称"""
 
 
 class Config(BaseModel):
@@ -28,6 +45,30 @@ class Config(BaseModel):
 
 
 cfg = get_config(Config).rag
+
+
+def get_embedding_function():
+    """根据配置获取合适的嵌入函数"""
+    if cfg.embedding_type == "openai":
+        if not cfg.openai_api_key and not os.getenv("CHROMA_OPENAI_API_KEY"):
+            # 没有提供API密钥，也没有设置CHROMA_OPENAI_API_KEY
+            raise ValueError("使用OpenAI嵌入时，必须提供openai_api_key")
+
+        logger.info(
+            f"使用OpenAI嵌入函数: model={cfg.openai_model}, base_url={cfg.openai_base_url or '默认'}"
+        )
+        return OpenAIEmbeddingFunction(
+            api_key=cfg.openai_api_key,
+            model_name=cfg.openai_model,
+            api_base=cfg.openai_base_url,
+        )
+
+    # 默认使用 Sentence Transformer
+    logger.info(f"使用Sentence Transformer嵌入函数: model={cfg.model_name_or_path}")
+    return SentenceTransformerEmbeddingFunction(
+        model_name=cfg.model_name_or_path,
+        normalize_embeddings=True,  # 可选：是否归一化向量，通常推荐在使用余弦相似度时开启
+    )
 
 
 def ensure_data_and_db(collection: Collection):
@@ -87,14 +128,11 @@ class RAGService(Service):
 
 def main():
     start = time.time()
-    bge_ef = SentenceTransformerEmbeddingFunction(
-        model_name=cfg.model_name_or_path,
-        normalize_embeddings=True,  # 可选：是否归一化向量，通常推荐在使用余弦相似度时开启
-    )
+    embedding_function = get_embedding_function()
     client = PersistentClient(path=cfg.db_dir_path)
     collection = client.get_or_create_collection(
         name=cfg.collection_name,
-        embedding_function=bge_ef,  # pyright: ignore[reportArgumentType]
+        embedding_function=embedding_function,  # pyright: ignore[reportArgumentType]
     )
     # 确保数据库中的文档完整，如果不完整则添加文档
     ensure_data_and_db(collection)

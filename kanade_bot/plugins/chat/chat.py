@@ -134,12 +134,11 @@ async def send_message_in_chunks(
 ):
     message = event.get_message()
     onebot = bot if isinstance(bot, OneBot) else None
-    prompt, attachments = await parse_message_for_ai(message, client, onebot)
+    prompt, attachments = await parse_message_for_ai(event, client, onebot)
 
     # 处理引用（回复）消息
     reply_text: str | None = None
-    if isinstance(event, OneBotMessageEvent) and event.reply:
-        reply = event.reply.message
+    if isinstance(event, OneBotMessageEvent) and (reply := event.reply):
         reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, client, onebot)
         attachments.extend(reply_attachments)
 
