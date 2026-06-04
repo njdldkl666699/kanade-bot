@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.exception import ActionFailed
 from nonebot.message import event_postprocessor
-from nonebot.params import CommandArg, EventMessage
+from nonebot.params import CommandArg
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
 
@@ -39,11 +39,8 @@ cfg = get_plugin_config(Config).summary
 
 
 @event_postprocessor
-async def record_recv_msg(
-    event: OneBotMessageEvent | ConsoleMessageEvent,
-    message: OneBotMessage | ConsoleMessage = EventMessage(),
-):
-    message_str, _ = await parse_message_for_ai(message)
+async def record_recv_msg(event: OneBotMessageEvent | ConsoleMessageEvent):
+    message_str, _ = await parse_message_for_ai(event)
     session_info = await extract_session_info(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"$ {user_info} : {message_str}"

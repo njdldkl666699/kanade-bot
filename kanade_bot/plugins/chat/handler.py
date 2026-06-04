@@ -31,8 +31,7 @@ async def handle_chat(
     bot: Bot,
     event: OneBotMessageEvent | ConsoleMessageEvent,
 ):
-    # 检查用户或群聊是否在聊天黑名单中
-    if not should_reply_event(event):
+    if not should_reply_event(bot, event):
         return
 
     key = HandlerKeyEnum.CHAT
@@ -72,7 +71,7 @@ async def handle_chat_monitor(
         await send_message_in_chunks(chat, bot, event, auto_reply=True)
 
     # 添加消息到会话缓冲区，不需要图片
-    message_str, _ = await parse_message_for_ai(message)
+    message_str, _ = await parse_message_for_ai(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info} : {message_str}"
     await copilot.add_message(session_id, message_str)

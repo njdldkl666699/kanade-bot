@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import cast
 
-from nonebot import logger, require
+from nonebot import get_driver, logger, require
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
@@ -183,8 +183,12 @@ async def send_message_in_chunks(
     await matcher.finish(content)
 
 
-def should_reply_event(event: Event):
-    """检查用户或群聊是否在聊天黑名单中，并确定是否应该回复事件"""
+def should_reply_event(bot: Bot, event: Event):
+    """确定是否应该回复事件
+
+    用户或群聊在聊天黑名单中->不回复
+    群聊中引用了自己的消息，但是没有@ -> 不回复
+    """
     # 确定平台类型
     platform = get_platform_type(event)
 
@@ -203,6 +207,20 @@ def should_reply_event(event: Event):
     ban_type = "user"
     user_id: str = event.get_user_id()
     if user_id and is_banned(user_id, ban_type, platform):
+        return False
+
+    # 检查群聊中引用了自己的消息但是没有@或to_me的情况
+    if (
+        isinstance(event, OneBotGroupMessageEvent)
+        and (reply := event.reply)
+        and str(reply.sender.user_id) == bot.self_id
+        and not event.message.has(MessageSegment.at(bot.self_id))
+    ):
+        text = event.message.extract_plain_text()
+        for nickname in get_driver().config.nickname:
+            if text.startswith(nickname):
+                return True
+
         return False
 
     return True
