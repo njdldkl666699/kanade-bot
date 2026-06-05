@@ -128,9 +128,9 @@ async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = C
 
 
 @add_a_schedule.handle()
-async def _(state: T_State, message: OneBotMessage = EventMessage()):
+async def _(state: T_State, bot: OneBot, message: OneBotMessage = EventMessage()):
     try:
-        add_schedule(state["group_id"], state["name"], state["cron"], message)
+        add_schedule(bot, state["group_id"], state["name"], state["cron"], message)
     except ValueError as e:
         await add_a_schedule.finish(str(e))
     await add_a_schedule.finish(f"已添加定时任务 {state['name']}")

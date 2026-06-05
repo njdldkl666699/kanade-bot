@@ -28,7 +28,14 @@ def print_schedules_pretty(group_id: int) -> str | None:
     return "\n".join(lines)
 
 
-def add_schedule(group_id: int, name: str, cron: str, message: Message):
+async def _send_scheduled_message(bot: Bot, group_id: int, message: Message):
+    try:
+        await bot.send_group_msg(group_id=group_id, message=message)
+    except Exception as e:
+        logger.error(f"发送定时消息失败: {e}")
+
+
+def add_schedule(bot: Bot, group_id: int, name: str, cron: str, message: Message):
     """添加定时任务"""
     job_id = _schedule_id(group_id, name)
     if scheduler.get_job(job_id):
@@ -39,7 +46,7 @@ def add_schedule(group_id: int, name: str, cron: str, message: Message):
         _send_scheduled_message,
         trigger=CronTrigger.from_crontab(cron),
         id=job_id,
-        args=[group_id, message],
+        args=[bot, group_id, message],
     )
 
     # 添加到配置
@@ -64,13 +71,6 @@ def remove_schedule(group_id: int, name: str):
         del group_schedules[name]
         schedules_ptr.v.save()
         logger.info(f"已移除群 {group_id} 的定时任务 {name}")
-
-
-async def _send_scheduled_message(bot: Bot, group_id: int, message: Message):
-    try:
-        await bot.send_group_msg(group_id=group_id, message=message)
-    except Exception as e:
-        logger.error(f"发送定时消息失败: {e}")
 
 
 driver = get_driver()
