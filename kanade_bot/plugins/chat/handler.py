@@ -31,7 +31,7 @@ async def handle_chat(
     bot: Bot,
     event: OneBotMessageEvent | ConsoleMessageEvent,
 ):
-    if not should_reply_event(bot, event):
+    if not should_reply_event(event):
         return
 
     key = HandlerKeyEnum.CHAT

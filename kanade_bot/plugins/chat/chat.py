@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import cast
 
-from nonebot import get_driver, logger, require
+from nonebot import logger, require
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
@@ -158,7 +158,7 @@ async def send_message_in_chunks(
             timeout=300,
         )
     except Exception as e:
-        logger.error("发送消息时发生错误: {}", e)
+        logger.exception("发送消息时发生错误: {}", e)
         await _send_fail_message(matcher)
         return
 
@@ -183,7 +183,7 @@ async def send_message_in_chunks(
     await matcher.finish(content)
 
 
-def should_reply_event(bot: Bot, event: Event):
+def should_reply_event(event: Event):
     """确定是否应该回复事件
 
     用户或群聊在聊天黑名单中->不回复
