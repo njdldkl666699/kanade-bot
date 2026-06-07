@@ -2,3 +2,5 @@ chat/memories/
 crystal/userdata.json
 music/lyrics/
 music/audios/
+data.db
+nonebot_plugin_orm/
