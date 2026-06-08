@@ -1,21 +1,14 @@
 import asyncio
 from collections import deque
-from typing import Callable
 
 from copilot import CopilotSession
 from copilot.rpc import ModelSwitchToRequest
 from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
-from copilot.session_events import (
-    AssistantMessageData,
-    AssistantMessageDeltaData,
-    SessionErrorData,
-    SessionEvent,
-    SessionIdleData,
-)
+from copilot.session_events import AssistantMessageData
 from copilot.tools import Tool
 from nonebot import logger
 
-from kanade_bot.utils.common import COPILOT_CLIENT, Ptr
+from kanade_bot.utils.common import COPILOT_CLIENT
 from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
@@ -121,26 +114,19 @@ class CopilotSessionManager:
 
         return session, new_session
 
-    async def send(
+    async def send_and_wait(
         self,
         session_info: SessionInfo,
         prompt: str,
-        handler: Callable[[SessionEvent], None],
         *,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
-    ) -> tuple[str, Callable[[], None]] | None:
-        """发送消息到会话，自动处理会话恢复、消息缓冲区、提示词构建、事件监听等逻辑
+        timeout: float = 60,
+    ) -> str | None:
+        """发送消息到会话并等待响应。
 
-        是对`CopilotSession.send`的封装
-
-        :param prompt: 用户消息文本内容，如果为None，则表示没有新的用户消息，
-        仅使用缓冲区中的消息和引用消息
-
-        :returns message_id: The message ID assigned by the server,
-        which can be used to correlate events.
-        :returns unsubscribe: A function that, when called, unsubscribes the handler.
+        prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息。
         """
         session_id = session_info.session_id
         async with await self._ensure_session_lock(session_id):
@@ -167,6 +153,7 @@ class CopilotSessionManager:
                 buffered_messages = self._sessions_prompt_buffer.get(session_id)
                 if not prompt and not buffered_messages and not reply_text:
                     # 没有任何新的消息可发送，直接返回
+                    logger.info("发送给模型的消息为空，未触发生成")
                     return None
 
             send_prompt = self._build_send_prompt(
@@ -179,123 +166,27 @@ class CopilotSessionManager:
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
             set_memory_context(session_info)
+            try:
+                session_event = await session.send_and_wait(
+                    send_prompt,
+                    attachments=attachments,
+                    timeout=timeout,
+                )
+            finally:
+                async with self._global_lock:
+                    # 清空消息缓冲区
+                    if session_id in self._sessions_prompt_buffer:
+                        self._sessions_prompt_buffer[session_id].clear()
 
-            unsubscribe = session.on(handler)
-            message_id = await session.send(
-                send_prompt,
-                attachments=attachments,
-            )
+            if not session_event:
+                return None
 
-            async with self._global_lock:
-                # 清空消息缓冲区
-                if session_id in self._sessions_prompt_buffer:
-                    self._sessions_prompt_buffer[session_id].clear()
-
-            return message_id, unsubscribe
-
-    async def send_and_wait(
-        self,
-        session_info: SessionInfo,
-        prompt: str,
-        *,
-        rag_docs: list[str] | None = None,
-        reply_text: str | None = None,
-        attachments: list[Attachment] | None = None,
-        timeout: float = 60,
-    ) -> str | None:
-
-        idle_event = asyncio.Event()
-        error_event: Exception | None = None
-        last_assistant_message: str | None = None
-
-        def handler(event: SessionEvent) -> None:
-            nonlocal last_assistant_message, error_event
-            match event.data:
+            match session_event.data:
                 case AssistantMessageData() as data:
-                    last_assistant_message = data.content
-                case SessionIdleData():
-                    idle_event.set()
-                case SessionErrorData() as data:
-                    error_event = Exception(f"Session error: {data.message or str(data)}")
-                    idle_event.set()
-
-        unsubscribe: Callable[[], None] | None = None
-        try:
-            t = await self.send(
-                session_info,
-                prompt,
-                handler,
-                rag_docs=rag_docs,
-                reply_text=reply_text,
-                attachments=attachments,
-            )
-            if not t:
-                # 发送的消息为空
-                logger.info("发送给模型的消息为空，未触发生成")
-                return
-
-            _, unsubscribe = t
-
-            await asyncio.wait_for(idle_event.wait(), timeout=timeout)
-
-            if error_event:
-                raise error_event
-
-            return last_assistant_message
-        except TimeoutError:
-            raise
-        finally:
-            if unsubscribe:
-                unsubscribe()
-
-    async def send_and_stream(
-        self,
-        session_info: SessionInfo,
-        prompt: str,
-        stream_queue: asyncio.Queue[str | None],
-        stream_error_ptr: Ptr[Exception | None],
-        *,
-        rag_docs: list[str] | None = None,
-        reply_text: str | None = None,
-        attachments: list[Attachment] | None = None,
-    ) -> Callable[[], None] | None:
-        """发送消息并通过stream_queue实时返回生成内容，直到生成完成或发生错误
-
-        :param stream_queue: 用于接收生成内容的异步队列，生成的每个文本块都会通过
-        `stream_queue.put_nowait`发送到队列中。当生成完成时，发送一个None表示结束。
-        :param stream_error_ptr: 用于接收生成过程中发生的错误的变量，如果发生错误，
-        设置为Exception对象，并通过`stream_queue.put_nowait(None)`发送一个None表示结束。
-
-        :returns unsubscribe: A function that, when called, unsubscribes the handler.
-        """
-
-        def handler(event: SessionEvent) -> None:
-            nonlocal stream_error_ptr
-            match event.data:
-                case AssistantMessageDeltaData() as delta:
-                    stream_queue.put_nowait(delta.delta_content)
-                case SessionIdleData():
-                    stream_queue.put_nowait(None)
-                case SessionErrorData() as data:
-                    stream_error_ptr.v = Exception(f"Session error: {data.message or str(data)}")
-                    stream_queue.put_nowait(None)
-
-        t = await self.send(
-            session_info,
-            prompt,
-            handler,
-            rag_docs=rag_docs,
-            reply_text=reply_text,
-            attachments=attachments,
-        )
-
-        if not t:
-            # 发送的消息为空
-            logger.info("发送给模型的消息为空，未触发生成")
-            return
-
-        _, unsubscribe = t
-        return unsubscribe
+                    return data.content
+                case data:
+                    logger.warning(f"会话{session_id}的响应内容不是文本，数据: {data}")
+                    return None
 
     @staticmethod
     def _build_send_prompt(
