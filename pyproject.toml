@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v4.0.3"
+version = "v4.1.0"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13, <4.0"
@@ -24,7 +24,6 @@ dependencies = [
     "emoji>=2.15.0",
     "chromadb>=1.5.6",
     "sentence-transformers>=5.3.0",
-    "rpyc>=6.0.2",
     "watchdog>=6.0.0",
     "openai>=2.41.0",
 ]
@@ -50,6 +49,7 @@ nonebot-plugin-picstatus-ng = ["nonebot_plugin_picstatus_ng"]
 nonebot-plugin-localstore = ["nonebot_plugin_localstore"]
 nonebot-plugin-whateat-pic = ["nonebot_plugin_whateat_pic"]
 nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
+nonebot-plugin-permission = ["nonebot_plugin_permission"]
 
 [dependency-groups]
 dev = ["check-requirements-txt>=1.4.2"]

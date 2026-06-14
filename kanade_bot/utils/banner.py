@@ -114,6 +114,13 @@ def _rgb_semicolon_to_css(color: str) -> str:
     return f"rgb({color.replace(';', ',')})"
 
 
+def _hex_color(color: str) -> str:
+    if color == blank:
+        return ""
+    r, g, b = color.split(";")
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
 def _pixel2(upper: str, lower: str) -> str:
     if upper == blank and lower == blank:
         # 上下都为空白，直接返回空格
@@ -127,6 +134,19 @@ def _pixel2(upper: str, lower: str) -> str:
     else:
         # 上下都有颜色，使用上半块的前景色和下半块的背景色
         return _fg(upper) + _bg(lower) + "▀" + reset
+
+
+def _pixel_pjsk(row: list[str]) -> str:
+    # 按单行扫描文本像素，空白忽略；连续同色合并
+    spans: list[tuple[str, int]] = []
+    for color in row:
+        if color == blank:
+            continue
+        if spans and spans[-1][0] == color:
+            spans[-1] = (color, spans[-1][1] + 1)
+        else:
+            spans.append((color, 1))
+    return "".join(f"<{_hex_color(color)}><cspace=-10>{'■' * count}" for color, count in spans)
 
 
 def _pixel2_html(upper: str, lower: str) -> str:
@@ -204,10 +224,18 @@ def get_kanade_html(kanade: Image = KANADE_21) -> str:
 """
 
 
-__all__ = ["KANADE_15", "KANADE_21", "get_kanade", "get_kanade_html"]
+def get_kanade_pjsk(kanade: Image = KANADE_21) -> str:
+    if not _validate_kanade(kanade):
+        raise ValueError("KANADE 格式不正确")
+
+    return "\n".join(_pixel_pjsk(row) for row in kanade)
+
+
+__all__ = ["KANADE_15", "KANADE_21", "get_kanade", "get_kanade_html", "get_kanade_pjsk"]
 
 
 if __name__ == "__main__":
-    print(get_kanade(KANADE_15))
-    print(len(KANADE_15))
+    print(get_kanade(KANADE_21))
+    print(len(KANADE_21))
     Path("kanade_banner.html").write_text(get_kanade_html(KANADE_15), encoding="utf-8")
+    Path("kanade_banner_pjsk.txt").write_text(get_kanade_pjsk(KANADE_21), encoding="utf-8")

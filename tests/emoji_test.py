@@ -1,6 +1,7 @@
 import emoji
 
-e = "☺"
+# e = "👩🏻"
+e = "㊗"
 print(len(e))
 print(emoji.is_emoji(e))
 print(emoji.emoji_list(e))

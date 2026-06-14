@@ -160,16 +160,22 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = Com
             emoji_id = segment.data["id"]
         if segment.type == "text":
             text: str = segment.data["text"].strip()
-            if len(text) == 1 and emoji.is_emoji(text):
-                emoji_id = ord(text)
+            if text.isnumeric():
+                emoji_id = int(text)
+            if emoji.is_emoji(text):
+                # 部分emoji可能包含变体选择器（如 \ufe0f），需要去除后再转换为码点ID
+                emoji_stripped = text.replace("\ufe0f", "").replace("\ufe0e", "")
+                emoji_id = int.from_bytes(emoji_stripped.encode("utf-32-be"), "big")
 
     if emoji_id is None:
         await send_emoji_like.finish(
             "请提供一个表情或单个emoji字符（部分emoji可能为多个码位组成，无法使用）"
         )
 
-    await set_msg_emoji_like(bot, message_id, emoji_id)
-    await send_emoji_like.finish()
+    try:
+        await set_msg_emoji_like(bot, message_id, emoji_id)
+    except ActionFailed:
+        await send_emoji_like.finish("设置表情点赞失败，可能是表情ID无效")
 
 
 @send_a_poke.handle()

@@ -34,6 +34,15 @@ def init_nonebot():
 
 
 def patch_foreign_plugins():
+    ## echo
+    from nonebot.plugins.echo import echo
+    from nonebot.rule import to_me
+
+    # 阻止 echo 的指令向后传播
+    echo.block = True
+    # 移除to_me()规则
+    echo.rule.checkers -= to_me().checkers
+
     ## nonebot_plugin_whateat_pic
     from nonebot_plugin_whateat_pic.matcher import (
         add_menu_matcher,

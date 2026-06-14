@@ -114,7 +114,7 @@ class Summarizer:
             session_event = await session.send_and_wait(prompt, timeout=timeout)
             await session.disconnect()
         except Exception as e:
-            logger.error(f"总结会话{session_id}发生错误: {e}")
+            logger.exception(f"总结会话{session_id}发生错误: {e}")
             session_event = None
 
         if not session_event:

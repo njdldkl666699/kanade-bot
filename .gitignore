@@ -21,6 +21,7 @@ wheels/
 cache/
 
 # 杂项
+bge-small-zh-v1.5/
 copilot-sdk_docs/
-kanade_banner.html
+kanade_banner*
 mc_status.png
