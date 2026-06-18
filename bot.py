@@ -23,12 +23,12 @@ def init_nonebot():
     # 在这里加载插件
     nonebot.load_builtin_plugins("echo")
 
+    nonebot.load_plugin("nonebot_plugin_localstore")
     nonebot.load_plugin("nonebot_plugin_apscheduler")
     nonebot.load_plugin("nonebot_plugin_htmlrender")
-    nonebot.load_plugin("nonebot_plugin_localstore")
     nonebot.load_plugin("nonebot_plugin_picstatus_ng")
     nonebot.load_plugin("nonebot_plugin_whateat_pic")
-    nonebot.load_plugin("nonebot_plugin_wordcloud")
+    # nonebot.load_plugin("nonebot_plugin_wordcloud")
 
     nonebot.load_plugins("kanade_bot/plugins")
 
