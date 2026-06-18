@@ -28,6 +28,7 @@ from .matcher import (
     remove_a_schedule,
     send_a_poke,
     send_emoji_like,
+    send_face,
     send_like,
     thunder_link_parse,
 )
@@ -213,3 +214,13 @@ async def _(bot: OneBot, event: OneBotMessageEvent):
         await send_like.finish(cfg.send_like_limited_message)
 
     await send_like.finish(random.choice(cfg.send_like_messages))
+
+
+@send_face.handle()
+async def _(face_msg: OneBotMessage = CommandArg()):
+    try:
+        face_id = int(face_msg.extract_plain_text().strip())
+    except ValueError:
+        await send_face.finish("请提供一个有效的表情ID")
+
+    await send_face.finish(MessageSegment.face(face_id))

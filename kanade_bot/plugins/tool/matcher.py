@@ -66,7 +66,6 @@ send_a_poke = on_command(
     "戳一戳",
     aliases={"poke", "戳"},
     priority=2,
-    permission=GROUP,
     block=True,
 )
 
@@ -82,6 +81,13 @@ send_like = on_command(
     "点赞",
     aliases={"like", "赞", "赞我"},
     priority=2,
-    permission=GROUP,
+    block=True,
+)
+
+
+send_face = on_command(
+    "发送表情",
+    aliases={"send_face", "发表情"},
+    priority=2,
     block=True,
 )
