@@ -1,4 +1,6 @@
 import hashlib
+import threading
+import time
 from pathlib import Path
 from typing import override
 
@@ -74,25 +76,28 @@ class ModelReloadHandler[M: FileSyncedModel](FileSystemEventHandler):
 
     @override
     def on_modified(self, event):
-        if event.is_directory:
-            return
+        try:
+            if event.is_directory:
+                return
 
-        src_path = event.src_path
-        if not isinstance(src_path, str):
-            src_path = src_path.decode()  # pyright: ignore[reportAttributeAccessIssue]
+            src_path = event.src_path
+            if not isinstance(src_path, str):
+                src_path = src_path.decode()  # pyright: ignore[reportAttributeAccessIssue]
 
-        model = self._model_ptr.v
-        file_path = model.file_path
-        if file_path is None or file_path.resolve() != Path(src_path).resolve():
-            return
+            model = self._model_ptr.v
+            file_path = model.file_path
+            if file_path is None or file_path.resolve() != Path(src_path).resolve():
+                return
 
-        new_hash = md5(file_path)
-        if new_hash == model.file_hash:
-            return
+            new_hash = md5(file_path)
+            if new_hash == model.file_hash:
+                return
 
-        logger.info(f"模型文件 {file_path} 已修改，重新加载模型")
-        new_model = model.from_file(file_path)
-        self._model_ptr.v = new_model
+            logger.info(f"模型文件 {file_path} 已修改，重新加载模型")
+            new_model = model.from_file(file_path)
+            self._model_ptr.v = new_model
+        except Exception as e:
+            logger.exception(f"重新加载模型失败: {e}")
 
 
 observer = Observer()
@@ -104,12 +109,22 @@ def watch_file(file_path: Path, handler: ModelReloadHandler):
     observer.schedule(handler, str(file_path.parent))
 
 
+def watch_observer():
+    """测试代码，用于验证 watchdog 是否正常工作"""
+    while True:
+        if not observer.is_alive():
+            logger.error("文件监控线程已停止")
+            break
+        time.sleep(5)
+
+
 driver = get_driver()
 
 
 @driver.on_startup
 def start_watchdog():
     observer.start()
+    threading.Thread(target=watch_observer, daemon=True).start()
     logger.info("模型文件监控已启动")
 
 

@@ -1,11 +1,22 @@
 import re
 
 import nonebot
+from nonebot import logger
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+from nonebot.log import default_format
 
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
+
+
+def init_logger():
+    # 配置 NoneBot 的日志记录器
+    logger.add(
+        "cache/kanade_bot_error.log",
+        level="ERROR",
+        format=default_format,
+    )
 
 
 def init_nonebot():
@@ -111,6 +122,7 @@ def patch_foreign_plugins():
 
 if __name__ == "__main__":
     print(get_kanade())
+    init_logger()
     init_nonebot()
     patch_foreign_plugins()
     nonebot.run()
