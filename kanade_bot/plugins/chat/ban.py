@@ -4,7 +4,7 @@ from nonebot.adapters import Message, MessageSegment
 
 from kanade_bot.utils.common import PlatformType
 
-from .config import chat_configs_ptr
+from .config import chat_configs
 
 type BanType = Literal["user", "group"]
 
@@ -56,7 +56,7 @@ def parse_ban_args(arg_msg: Message) -> tuple[str, BanType] | None:
 def _get_ban_list(ban_type: BanType, platform: PlatformType):
     ban_list: set[str] = set()
 
-    config = chat_configs_ptr.v.get_by_platform(platform)
+    config = chat_configs.instance.get_by_platform(platform)
 
     if ban_type == "user":
         ban_list = config.banned_users
@@ -73,10 +73,10 @@ def is_banned(id: str, ban_type: BanType, platform: PlatformType) -> bool:
 def add_to_ban_list(id: str, ban_type: BanType, platform: PlatformType):
     ban_list = _get_ban_list(ban_type, platform)
     ban_list.add(id)
-    chat_configs_ptr.v.save()
+    chat_configs.save_to_file()
 
 
 def remove_from_ban_list(id: str, ban_type: BanType, platform: PlatformType):
     ban_list = _get_ban_list(ban_type, platform)
     ban_list.discard(id)
-    chat_configs_ptr.v.save()
+    chat_configs.save_to_file()

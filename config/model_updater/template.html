@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模型注册表管理 (JSON 编辑)</title>
+  <!-- Font Awesome 6 (免费) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- CodeMirror 样式 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <!-- 主题 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/default.min.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .model-card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .model-card h2 {
+      margin-top: 0;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+
+    /* CodeMirror 容器 */
+    .CodeMirror {
+      height: auto;
+      min-height: 200px;
+      font-size: 16px;
+      /* 增大编辑器字体 */
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fafafa;
+    }
+
+    /* 确保等宽字体优先 */
+    .CodeMirror pre {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Cascadia Code', 'Source Code Pro', 'Menlo', monospace !important;
+    }
+
+    .btn-save {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+
+    .btn-save:hover {
+      background: #0056b3;
+    }
+
+    .btn-save i {
+      margin-right: 6px;
+    }
+
+    .message {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .error-msg {
+      color: #d32f2f;
+    }
+
+    .success-msg {
+      color: #2e7d32;
+    }
+
+    .info-msg {
+      color: #0d47a1;
+    }
+
+    .hint {
+      font-size: 0.9em;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    .hint i {
+      margin-right: 4px;
+    }
+
+    /* 消息中的图标与文字对齐 */
+    .message i {
+      margin-right: 6px;
+    }
+
+    /* 标题图标 */
+    .page-title i {
+      margin-right: 10px;
+      color: #2c3e50;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1 class="page-title">
+      <i class="fa-solid fa-clipboard-list"></i> 注册表模型管理 (JSON 编辑)
+    </h1>
+    <p><i class="fa-regular fa-pen-to-square"></i> 直接编辑下方 JSON 文本，点击「保存」即可更新模型数据。</p>
+
+    {% for item in registry %}
+    <div class="model-card" data-model="{{ item.name }}">
+      <h2><i class="fa-regular fa-file-code"></i> {{ item.name }}</h2>
+      <!-- CodeMirror 的 textarea -->
+      <textarea id="json-{{ item.name }}" class="json-editor"
+        spellcheck="false">{{ item.data | tojson(indent=2) }}</textarea>
+      <div>
+        <button class="btn-save" onclick="saveModel('{{ item.name }}')">
+          <i class="fa-solid fa-save"></i> 保存
+        </button>
+        <span id="msg-{{ item.name }}" class="message"></span>
+      </div>
+      <div class="hint">
+        <i class="fa-regular fa-lightbulb"></i> 修改后点击保存，若格式错误会提示。
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- CodeMirror 及附加库 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+
+  <script>
+    // ---------- 1. 初始化 CodeMirror 编辑器 ----------
+    const editors = {};
+
+    document.querySelectorAll('.json-editor').forEach(textarea => {
+      const modelName = textarea.id.replace('json-', '');
+      const editor = CodeMirror.fromTextArea(textarea, {
+        mode: { name: 'javascript', json: true },
+        lineNumbers: true,
+        matchBrackets: true,
+        autoCloseBrackets: true,
+        foldGutter: true,
+        gutters: ['CodeMirror-foldgutter'],
+        theme: 'default',
+        tabSize: 2,
+        indentUnit: 2,
+        lineWrapping: false,
+        viewportMargin: Infinity
+      });
+      editors[modelName] = editor;
+    });
+
+    // ---------- 2. 轮询更新 ----------
+    const POLL_INTERVAL = 3000;
+    let pollTimer = null;
+
+    async function refreshRegistry() {
+      try {
+        const response = await fetch('/model_updater/registry');
+        if (!response.ok) throw new Error('获取数据失败');
+        const registry = await response.json();
+
+        registry.forEach(item => {
+          const editor = editors[item.name];
+          if (!editor) return;
+          if (!editor.hasFocus()) {
+            const jsonStr = JSON.stringify(item.data, null, 2);
+            const current = editor.getValue();
+            if (current !== jsonStr) {
+              editor.setValue(jsonStr);
+            }
+          }
+        });
+      } catch (error) {
+        console.warn('轮询更新失败:', error);
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(refreshRegistry, POLL_INTERVAL);
+    }
+
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', startPolling);
+    window.addEventListener('beforeunload', stopPolling);
+
+    // ---------- 3. 保存函数 ----------
+    function saveModel(modelName) {
+      const editor = editors[modelName];
+      const msgDiv = document.getElementById(`msg-${modelName}`);
+
+      msgDiv.innerHTML = '';   // 清空（含图标）
+      msgDiv.className = 'message';
+
+      const rawText = editor.getValue();
+      let jsonData;
+      try {
+        jsonData = JSON.parse(rawText);
+      } catch (e) {
+        msgDiv.innerHTML = `<i class="fa-solid fa-times-circle"></i> JSON 格式错误: ${e.message}`;
+        msgDiv.className = 'message error-msg';
+        return;
+      }
+
+      msgDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 保存中...`;
+      msgDiv.className = 'message info-msg';
+
+      fetch('/model_updater', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_name: modelName,
+          data: jsonData
+        })
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(err => {
+              throw new Error(err.detail || '请求失败');
+            });
+          }
+          return response.json();
+        })
+        .then(result => {
+          if (result.status === 'success') {
+            msgDiv.innerHTML = `<i class="fa-solid fa-check-circle"></i> ${result.message}`;
+            msgDiv.className = 'message success-msg';
+            refreshRegistry();
+          } else {
+            throw new Error(result.message || '未知错误');
+          }
+        })
+        .catch(error => {
+          msgDiv.innerHTML = `<i class="fa-solid fa-times-circle"></i> 错误: ${error.message}`;
+          msgDiv.className = 'message error-msg';
+        });
+    }
+
+    // 键盘快捷键 Ctrl+S
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        const activeEditor = document.querySelector('.CodeMirror-focused');
+        if (activeEditor) {
+          e.preventDefault();
+          const card = activeEditor.closest('.model-card');
+          if (card) {
+            const modelName = card.dataset.model;
+            saveModel(modelName);
+          }
+        }
+      }
+    });
+  </script>
+</body>
+
+</html>

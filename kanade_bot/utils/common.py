@@ -5,8 +5,8 @@ from copilot.client import StopError
 from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
-from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.console.event import PrivateMessageEvent as ConsolePrivateMessageEvent
+from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 
@@ -37,13 +37,6 @@ def not_to_me(to_me: bool = EventToMe()):
 def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:
     """匹配OneBot私聊消息类型事件且发送者是超级用户"""
     return event.get_user_id() in get_driver().config.superusers
-
-
-class Ptr[T]:
-    """一个指针类，包含一个 value 属性，可以用来指向一个值"""
-
-    def __init__(self, v: T):
-        self.v = v
 
 
 COPILOT_CLIENT = CopilotClient()

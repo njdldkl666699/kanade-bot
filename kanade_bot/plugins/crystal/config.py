@@ -4,16 +4,18 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType, Ptr
-from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
+from kanade_bot.utils.common import PlatformType
 
 require("nonebot_plugin_localstore")
+require("model_updater")
 
 from nonebot_plugin_localstore import (
     get_plugin_cache_file,
     get_plugin_config_file,
     get_plugin_data_file,
 )
+
+from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
 class ScopedConfig(BaseModel):
@@ -53,7 +55,7 @@ class HandlerKeyEnum(Enum):
     SUMMARIZE = "总结"
 
 
-class CrystalConfig(FileSyncedModel):
+class CrystalConfig(BaseModel):
     """水晶配置"""
 
     check_in_min: int = 100
@@ -90,11 +92,10 @@ class CrystalConfig(FileSyncedModel):
     ]
 
 
-crystal_config_ptr = Ptr(CrystalConfig.from_file(cfg.config_file_path))
-watch_file(cfg.config_file_path, ModelReloadHandler(crystal_config_ptr))
+crystal_config = load_register_model_from_file(CrystalConfig, cfg.config_file_path)
 
 
-class CrystalData(FileSyncedModel):
+class CrystalData(BaseModel):
     console: dict[str, int] = {}
     """Console适配器用户水晶数据，键为用户ID，值为水晶数"""
     onebot: dict[str, int] = {}
@@ -107,5 +108,4 @@ class CrystalData(FileSyncedModel):
             return self.onebot
 
 
-crystal_data_ptr = Ptr(CrystalData.from_file(cfg.data_file_path))
-watch_file(cfg.data_file_path, ModelReloadHandler(crystal_data_ptr))
+crystal_data = load_register_model_from_file(CrystalData, cfg.data_file_path)

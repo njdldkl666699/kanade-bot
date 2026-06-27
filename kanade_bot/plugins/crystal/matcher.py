@@ -1,6 +1,5 @@
 from nonebot import on_command
 
-
 check_in = on_command(
     "签到",
     aliases={"checkin", "check_in", "打卡", "打卡啦摩托"},

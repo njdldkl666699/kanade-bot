@@ -2,14 +2,14 @@ from pathlib import Path
 
 from nonebot import get_plugin_config, require
 from nonebot.adapters.onebot.v11 import Message
-from pydantic import BaseModel, RootModel
-
-from kanade_bot.utils.common import Ptr
-from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
+from pydantic import BaseModel
 
 require("nonebot_plugin_localstore")
+require("model_updater")
 
 from nonebot_plugin_localstore import get_plugin_config_file
+
+from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
 class ScopedConfig(BaseModel):
@@ -59,21 +59,20 @@ class ScheduleConfig(BaseModel):
     """定时任务发送的消息内容"""
 
 
-class ScheduleConfigs(FileSyncedModel):
+class ScheduleConfigs(BaseModel):
     """定时任务配置字典"""
 
     configs: dict[int, dict[str, ScheduleConfig]] = {}
     """定时任务配置字典，键为群号，值为该群的定时任务列表
-    
+
     定时任务列表的键为定时任务名称，每个群内不可重复，值为定时任务配置
     """
 
 
-schedules_ptr = Ptr(ScheduleConfigs.from_file(cfg.schedule_configs_file_path))
-watch_file(cfg.schedule_configs_file_path, ModelReloadHandler(schedules_ptr))
+schedules = load_register_model_from_file(ScheduleConfigs, cfg.schedule_configs_file_path)
 
 
-class PresetReactionConfig(FileSyncedModel):
+class PresetReactionConfig(BaseModel):
     """预设反应配置"""
 
     receive_poke_messages: list[str] = [
@@ -111,5 +110,6 @@ class PresetReactionConfig(FileSyncedModel):
     """触发点赞上限的回复内容"""
 
 
-preset_reaction_cfg_ptr = Ptr(PresetReactionConfig.from_file(cfg.preset_reaction_config_file_path))
-watch_file(cfg.preset_reaction_config_file_path, ModelReloadHandler(preset_reaction_cfg_ptr))
+preset_reaction_cfg = load_register_model_from_file(
+    PresetReactionConfig, cfg.preset_reaction_config_file_path
+)

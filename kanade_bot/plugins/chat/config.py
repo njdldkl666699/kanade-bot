@@ -5,12 +5,14 @@ from copilot import ProviderConfig
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType, Ptr
-from kanade_bot.utils.watchdog import FileSyncedModel, ModelReloadHandler, watch_file
+from kanade_bot.utils.common import PlatformType
 
 require("nonebot_plugin_localstore")
+require("model_updater")
 
 from nonebot_plugin_localstore import get_plugin_config_file, get_plugin_data_file
+
+from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
 class RAGConfig(BaseModel):
@@ -138,7 +140,7 @@ class ChatConfig(BaseModel):
     """主动回复配置，键为群ID，值为AutoReplyConfig对象"""
 
 
-class ChatConfigs(FileSyncedModel):
+class ChatConfigs(BaseModel):
     """聊天配置文件"""
 
     console: ChatConfig = ChatConfig()
@@ -159,5 +161,4 @@ class ChatConfigs(FileSyncedModel):
             return self.onebot
 
 
-chat_configs_ptr = Ptr(ChatConfigs.from_file(cfg.configs_file_path))
-watch_file(cfg.configs_file_path, ModelReloadHandler(chat_configs_ptr))
+chat_configs = load_register_model_from_file(ChatConfigs, cfg.configs_file_path)
