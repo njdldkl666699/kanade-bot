@@ -1,3 +1,4 @@
+import random
 from asyncio import subprocess
 
 from nonebot import get_driver, get_plugin_config
@@ -5,6 +6,8 @@ from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 
@@ -12,7 +15,7 @@ from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
-from .matcher import execute_command, help_command, offline_notice
+from .matcher import execute_command, help_command, offline_notice, welcome
 from .offline import send_offline_notice
 
 cfg = get_plugin_config(Config).help
@@ -67,6 +70,23 @@ async def _(arg_msg: Message = CommandArg()):
 
     await execute_command.send(f"stdout: \n{stdout.decode()}")
     await execute_command.finish(f"stderr: \n{stderr.decode()}")
+
+
+@welcome.handle()
+async def _(event: GroupIncreaseNoticeEvent):
+    template = random.choice(cfg.welcome_message_templates)
+    texts = template.split("{nickname}", maxsplit=2)
+
+    message = OneBotMessage()
+    for i, text in enumerate(texts):
+        message.append(text)
+        if i < len(texts) - 1:
+            message.append(OneBotMessageSegment.at(event.user_id))
+
+    if p := cfg.welcome_image_file_path:
+        message.append(OneBotMessageSegment.image(p))
+
+    await welcome.finish(message)
 
 
 driver = get_driver()

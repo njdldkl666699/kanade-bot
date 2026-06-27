@@ -23,3 +23,9 @@ execute_command = on_command(
     permission=superuser_onebot_private_permission,
     block=True,
 )
+
+
+welcome = on_notice(
+    priority=1,
+    block=False,
+)
