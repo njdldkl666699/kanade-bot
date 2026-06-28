@@ -14,7 +14,7 @@ from nonebot.params import CommandArg, EventPlainText
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 
-from .cache import waifuCache
+from .cache import waifu_cache
 from .config import Config
 from .duanzi import (
     add_duanzi,
@@ -202,7 +202,7 @@ async def _(arg_msg: Message = CommandArg()):
 async def _(event: ConsoleMessageEvent):
     platform = "console"
     user_id = event.get_user_id()
-    p = waifuCache.get(platform, user_id)
+    p = waifu_cache.get(platform, user_id)
     if p:
         await today_waifu.finish(str(p))
 
@@ -211,7 +211,7 @@ async def _(event: ConsoleMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    p = waifuCache.set_bytes(platform, user_id, image)
+    p = waifu_cache.set_bytes(platform, user_id, image)
     await today_waifu.finish(str(p))
 
 
@@ -219,7 +219,7 @@ async def _(event: ConsoleMessageEvent):
 async def _(event: OneBotMessageEvent):
     platform = "onebot"
     user_id = event.get_user_id()
-    cache = waifuCache.get_bytes(platform, user_id)
+    cache = waifu_cache.get_bytes(platform, user_id)
     if cache:
         await today_waifu.finish(MessageSegment.image(cache))
 
@@ -228,7 +228,7 @@ async def _(event: OneBotMessageEvent):
     if not image:
         await today_waifu.finish("获取图片失败，请稍后再试")
 
-    waifuCache.set_bytes(platform, user_id, image)
+    waifu_cache.set_bytes(platform, user_id, image)
     await today_waifu.finish(MessageSegment.image(image))
 
 
@@ -242,7 +242,7 @@ async def _(event: Event):
         await finish_fail_consume(refresh_waifu, key, platform, user_id)
 
     succeed_consume(key, platform, user_id)
-    waifuCache.delete(event.get_user_id())
+    waifu_cache.delete(event.get_user_id())
     await refresh_waifu.finish("今日老婆已刷新")
 
 

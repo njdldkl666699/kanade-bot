@@ -2,8 +2,9 @@ import random
 
 from nonebot.matcher import Matcher
 
-from kanade_bot.plugins.crystal.config import HandlerKeyEnum, crystal_config, crystal_data
 from kanade_bot.utils.common import PlatformType
+
+from .config import HandlerKeyEnum, crystal_config, crystal_data
 
 
 def increment_crystal(platform: PlatformType, user_id: str, crystal: int) -> None:

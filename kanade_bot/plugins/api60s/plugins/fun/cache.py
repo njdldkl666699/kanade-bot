@@ -26,4 +26,4 @@ class Luck(BaseModel):
         )
 
 
-luckCache = UserDailyCache(Luck, cfg.api60s_fun_cache_file_path)
+luck_cache = UserDailyCache(Luck, cfg.api60s_fun_cache_file_path)

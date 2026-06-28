@@ -1,5 +1,5 @@
 from kanade_bot.utils.cache import UserDailyCache
 
-from .config import cfg
+from .config import DaypartEnum, cfg
 
-checkInCache = UserDailyCache(bool, cfg.cache_file_path)
+check_in_cache = UserDailyCache(set[DaypartEnum], cfg.cache_file_path)

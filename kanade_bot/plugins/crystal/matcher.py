@@ -1,4 +1,7 @@
 from nonebot import on_command
+from nonebot.matcher import Matcher
+
+from .config import DaypartEnum
 
 check_in = on_command(
     "签到",
@@ -7,6 +10,14 @@ check_in = on_command(
     block=True,
 )
 
+check_ins: dict[DaypartEnum, type[Matcher]] = {}
+
+for daypart in DaypartEnum:
+    check_ins[daypart] = on_command(
+        daypart.value,
+        priority=2,
+        block=True,
+    )
 
 my_crystal = on_command(
     "我的水晶",
@@ -15,14 +26,12 @@ my_crystal = on_command(
     block=True,
 )
 
-
 list_handler_consumes = on_command(
     "查看命令水晶消耗",
     aliases={"查看命令消耗", "handler_consumes", "list_handler_consumes"},
     priority=2,
     block=True,
 )
-
 
 crystal_ranking = on_command(
     "水晶排行榜",

@@ -1,20 +1,34 @@
 {
-  "check_in_min": 100,
-  "check_in_max": 200,
-  "check_in_succeed_templates": [
-    "嗯，签到了。获得 {crystal} 水晶…一点点积攒起来呢。",
-    "签好了。今天有{crystal} 水晶入账…不多，但也算个小进展。",
-    "啊…签到成功。+{crystal} 水晶。希望没弄错。",
-    "嗯…轻轻按一下。签到成功，+{crystal} 水晶。",
-    "签到了。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
-    "啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
-    "好，签好了。今天也加 {crystal} 水晶…慢慢来。"
-  ],
-  "check_in_failed_templates": [
-    "…看了一下，今天已经签过了。现在水晶是 {total_crystal}。",
-    "嗯…好像之前就签到了。当前水晶：{total_crystal}。",
-    "…签过了。现在水晶是 {total_crystal}。明天再继续吧。"
-  ],
+  "check_in": {
+    "min_crystal": 10,
+    "max_crystal": 50,
+    "max_times": 3,
+    "succeed_templates": [
+      "嗯，{daypart}。获得 {crystal} 水晶…一点点积攒起来呢。",
+      "{daypart}。今天有{crystal} 水晶入账…不多，但也算个小进展。",
+      "啊…{daypart}。+{crystal} 水晶。希望没弄错。",
+      "嗯…{daypart}。轻轻按一下。签到成功，+{crystal} 水晶。",
+      "{daypart}，签到成功。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
+      "{daypart}。啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
+      "{daypart}。好，签好了。今天也加 {crystal} 水晶…慢慢来。"
+    ],
+    "already_templates": [
+      "…看了一下，{daypart}的时间已经签过了。现在水晶是 {total_crystal}。",
+      "嗯…{daypart}，好像之前就签到了。当前水晶：{total_crystal}。",
+      "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
+    ],
+    "wrong_daypart_templates": [
+      "嗯…现在是{daypart}的时间呢。"
+    ],
+    "max_times_templates": [
+      "{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"
+    ],
+    "first_use_bonus": 500,
+    "first_use_templates": [
+      "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
+    ],
+    "weekly_bonus": 300
+  },
   "handler_consumes": {
     "聊天": 10,
     "刷新老婆": 5,

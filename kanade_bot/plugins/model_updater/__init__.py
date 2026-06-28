@@ -58,7 +58,7 @@ def load_register_model_from_file(cls: type[T], file_path: Path) -> ModelRegistr
         logger.warning(f"模型文件 {file_path} 不存在，使用默认值并保存到文件")
         model = cls()
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(model.model_dump_json(indent=4, ensure_ascii=False), encoding="utf-8")
+        file_path.write_text(model.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8")
     else:
         model = cls.model_validate_json(file_path.read_text(encoding="utf-8"))
 

@@ -43,4 +43,4 @@ class UserDailyWaifuCache(UserDailyCache[Path]):
                 p.unlink()
 
 
-waifuCache = UserDailyWaifuCache(Path, cfg.cache_file_path)
+waifu_cache = UserDailyWaifuCache(Path, cfg.cache_file_path)

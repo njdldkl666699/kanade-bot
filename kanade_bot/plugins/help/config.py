@@ -30,7 +30,7 @@ class ScopedConfig(BaseModel):
     """登录二维码的文件路径，配置后会在掉线推送中附带"""
 
     welcome_message_templates: list[str] = [
-        m + "如果有什么不清楚的地方…输入 /help 可以看说明。"
+        m + "\n如果有什么不清楚的地方…输入 /help 可以看说明。"
         for m in DEFAULT_WELCOME_MESSAGE_TEMPLATES
     ]
     """欢迎新成员入群的消息模板列表，{nickname}会被替换为新成员的昵称"""
