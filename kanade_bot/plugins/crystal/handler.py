@@ -20,7 +20,7 @@ from .matcher import check_in, check_ins, crystal_ranking, list_handler_consumes
     category=DeprecationWarning,
 )
 async def _():
-    daypart_commands = [f"/{daypart}" for daypart in DaypartEnum]
+    daypart_commands = [f"/{daypart.value}" for daypart in DaypartEnum]
     await check_in.finish(
         f"请使用对应时间段的签到命令进行签到，例如：{'、'.join(daypart_commands)}"
     )
