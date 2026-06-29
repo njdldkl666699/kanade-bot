@@ -1,4 +1,3 @@
-from pathlib import Path
 import random
 from datetime import datetime
 from io import BytesIO
@@ -46,15 +45,16 @@ async def _():
     )
 
 
-def get_current_daypart() -> DaypartEnum:
-    """获取当前时间段"""
+def get_current_dayparts() -> list[DaypartEnum]:
+    """获取当前时间段列表"""
+    dayparts: list[DaypartEnum] = []
     now = datetime.now().time()
     for daypart, time_ranges in DAYPART_TIME_RANGES.items():
         for start_time, end_time in time_ranges:
             if start_time <= now < end_time:
-                return daypart
-
-    raise ValueError("当前时间不在任何时间段范围内。请检查 DAYPART_TIME_RANGES 配置。")
+                dayparts.append(daypart)
+                break  # 如果当前时间在某个时间段范围内，跳出内层循环
+    return dayparts
 
 
 for daypart, matcher in check_ins.items():
@@ -73,10 +73,10 @@ for daypart, matcher in check_ins.items():
             await matcher.send(message)
 
         # 检查当前时间段是否与命令对应的时间段匹配
-        current_daypart = get_current_daypart()
-        if daypart != current_daypart:
+        current_dayparts = get_current_dayparts()
+        if daypart not in current_dayparts:
             template = random.choice(cfg.wrong_daypart_templates)
-            message = template.format(daypart=current_daypart.value)
+            message = template.format(daypart=current_dayparts[0].value)
             await matcher.finish(message)
 
         check_in_dayparts = check_in_cache.get(platform, user_id)
