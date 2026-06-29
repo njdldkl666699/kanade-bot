@@ -27,7 +27,10 @@
     "first_use_templates": [
       "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
     ],
-    "weekly_bonus": 300
+    "weekly_bonus": 500,
+    "weekly_bonus_templates": [
+      "恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"
+    ]
   },
   "handler_consumes": {
     "聊天": 10,

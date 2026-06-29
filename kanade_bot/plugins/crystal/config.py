@@ -11,7 +11,6 @@ require("nonebot_plugin_localstore")
 require("model_updater")
 
 from nonebot_plugin_localstore import (
-    get_plugin_cache_dir,
     get_plugin_cache_file,
     get_plugin_config_dir,
     get_plugin_config_file,
@@ -72,6 +71,8 @@ class ScopedConfig(BaseModel):
     """用户数据文件路径"""
     cache_file: str = "cache.json"
     """缓存数据文件路径"""
+    weekly_check_in_file: str = "weekly_check_in.json"
+    """每周签到数据文件路径"""
 
     gacha: GachaScopedConfig = GachaScopedConfig()
 
@@ -86,6 +87,10 @@ class ScopedConfig(BaseModel):
     @property
     def cache_file_path(self) -> Path:
         return get_plugin_cache_file(self.cache_file)
+
+    @property
+    def weekly_check_in_file_path(self) -> Path:
+        return get_plugin_cache_file(self.weekly_check_in_file)
 
 
 class Config(BaseModel):
@@ -153,8 +158,10 @@ class CheckInConfig(BaseModel):
     
     - `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数
     """
-    weekly_bonus: int = 300
+
+    weekly_bonus: int = 500
     """每周签到满7天的额外奖励水晶数"""
+    weekly_bonus_templates: list[str] = ["恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"]
 
 
 class CrystalConfig(BaseModel):

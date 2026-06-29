@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 
 from kanade_bot.utils.common import get_platform_type
 
-from .cache import check_in_cache
+from .cache import check_in_cache, check_in_weekly_cache
 from .config import crystal_config, crystal_data
 from .crystal import (
     check_user_crystal,
@@ -100,9 +100,23 @@ for daypart, matcher in check_ins.items():
         # 进行签到
         crystal_earned = random.randint(cfg.min_crystal, cfg.max_crystal)
         increment_crystal(platform, user_id, crystal_earned)
+
         check_in_dayparts.add(daypart)
         # 改的是引用，但是可能原来为None，所以都重新设置缓存
         check_in_cache.set(platform, user_id, check_in_dayparts)
+
+        # 添加周缓存
+        check_in_weekly_cache.set(platform, user_id, True)
+        weekly_check_in_data = check_in_weekly_cache.get_week(platform, user_id)
+        if weekly_check_in_data is not None and datetime.now().isoweekday() == 7:
+            # 如果在周日，检查用户是否全勤
+            if len(weekly_check_in_data) == 7 and all(weekly_check_in_data.values()):
+                # 全勤，赠送额外水晶
+                increment_crystal(platform, user_id, cfg.weekly_bonus)
+                template = random.choice(cfg.weekly_bonus_templates)
+                message = template.format(weekly_bonus=cfg.weekly_bonus)
+                await matcher.send(message)
+
         # 返回签到成功消息
         template = random.choice(cfg.succeed_templates)
         message = template.format(daypart=daypart.value, crystal=crystal_earned)

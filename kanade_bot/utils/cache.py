@@ -49,7 +49,7 @@ class UserDailyCache[T]:
             data_json = p.read_text(encoding="utf-8")
             data = UserDailyCacheModel[T_type].model_validate_json(data_json)
             if data.updated_at.date() != datetime.now().date():
-                logger.debug(f"缓存数据已过期，日期为 {data.updated_at.date()}，已忽略")
+                logger.info(f"缓存数据已过期，日期为 {data.updated_at.date()}，已忽略")
                 return
 
             self._data = data
