@@ -172,13 +172,14 @@ def _card_message_console(card: Card, bonus: int) -> str:
     return "\n".join(messages)
 
 
-def _card_message_onebot(card: Card, bonus: int) -> OneBotMessage:
+def _card_message_onebot(card: Card, bonus: int, user_id: str) -> OneBotMessage:
     """生成 OneBot 消息"""
     card_image = render_composed_card(card)
     bytes_io = BytesIO()
     card_image.save(bytes_io, format="PNG")
 
     message = OneBotMessage()
+    message += OneBotMessageSegment.at(user_id)
     message += f"你抽到了 {card.prefix} {card.character_name}！\n"
     message += OneBotMessageSegment.image(bytes_io)
     message += f"\n返还的水晶数: {bonus}"
@@ -206,7 +207,7 @@ async def _(bot: Bot, event: Event):
     if isinstance(bot, ConsoleBot):
         await gacha.finish(_card_message_console(card, bonus))
     elif isinstance(bot, OneBot):
-        await gacha.finish(_card_message_onebot(card, bonus))
+        await gacha.finish(_card_message_onebot(card, bonus, user_id))
 
 
 def _card_message_console_10(cards: list[Card], total_bonus: int) -> str:
@@ -220,10 +221,14 @@ def _card_message_console_10(cards: list[Card], total_bonus: int) -> str:
     return "\n".join(messages)
 
 
-async def _card_message_onebot_10(cards: list[Card], total_bonus: int) -> OneBotMessage:
+async def _card_message_onebot_10(
+    cards: list[Card], total_bonus: int, user_id: str
+) -> OneBotMessage:
     """生成 OneBot 消息"""
-    message = OneBotMessage()
     cards_image = await render_gacha_10_cards(cards)
+
+    message = OneBotMessage()
+    message += OneBotMessageSegment.at(user_id)
     message += OneBotMessageSegment.image(cards_image)
     message += f"\n返还的水晶总数: {total_bonus}"
     return message
@@ -257,5 +262,5 @@ async def _(bot: Bot, event: Event):
     if isinstance(bot, ConsoleBot):
         await gacha_10.finish(_card_message_console_10(cards, total_bonus))
     elif isinstance(bot, OneBot):
-        message = await _card_message_onebot_10(cards, total_bonus)
+        message = await _card_message_onebot_10(cards, total_bonus, user_id)
         await gacha_10.finish(message)

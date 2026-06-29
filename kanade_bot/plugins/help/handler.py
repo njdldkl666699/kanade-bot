@@ -74,6 +74,11 @@ async def _(arg_msg: Message = CommandArg()):
 
 @welcome.handle()
 async def _(event: GroupIncreaseNoticeEvent):
+    user_id = event.user_id
+    if user_id == event.self_id:
+        # 不欢迎自己
+        return
+
     template = random.choice(cfg.welcome_message_templates)
     texts = template.split("{nickname}", maxsplit=2)
 
@@ -81,7 +86,7 @@ async def _(event: GroupIncreaseNoticeEvent):
     for i, text in enumerate(texts):
         message.append(text)
         if i < len(texts) - 1:
-            message.append(OneBotMessageSegment.at(event.user_id))
+            message.append(OneBotMessageSegment.at(user_id))
 
     if p := cfg.welcome_image_file_path:
         message.append(OneBotMessageSegment.image(p))
