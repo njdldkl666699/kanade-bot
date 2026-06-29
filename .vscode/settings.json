@@ -1,0 +1,43 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+  "cSpell.words": [
+    "ciallo",
+    "Daypart",
+    "dayparts",
+    "dblue",
+    "dotenv",
+    "duanzi",
+    "gacha",
+    "haruki",
+    "KANADE",
+    "lblue",
+    "LOLI",
+    "LOLICON",
+    "mcstatus",
+    "nonebot",
+    "ntfy",
+    "onebot",
+    "sakura",
+    "setu",
+    "tavily",
+    "unban",
+    "Waifu",
+    "waifus"
+  ],
+  "conventionalCommits.scopes": [
+    "summary",
+    "help",
+    "fun",
+    "tool",
+    "chat",
+    "crystal",
+    "model_updater"
+  ]
+}

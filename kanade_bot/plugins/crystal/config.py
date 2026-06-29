@@ -1,5 +1,3 @@
-from datetime import time
-from enum import Enum
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
@@ -7,16 +5,56 @@ from pydantic import BaseModel
 
 from kanade_bot.utils.common import PlatformType
 
+from .enum import HandlerKeyEnum, RarityEnum
+
 require("nonebot_plugin_localstore")
 require("model_updater")
 
 from nonebot_plugin_localstore import (
     get_plugin_cache_file,
+    get_plugin_config_dir,
     get_plugin_config_file,
     get_plugin_data_file,
 )
 
 from kanade_bot.plugins.model_updater import load_register_model_from_file
+
+
+class GachaScopedConfig(BaseModel):
+    """抽卡系统配置"""
+
+    member_small_dir: str = "member_small/"
+    """卡牌资源目录名
+    
+    一般路径为 `cn-assets/character/member_small/resxxx_noxxx/card_xxxxx.png`
+    
+    图片尺寸：940x530
+    """
+    cards_assets_dir: str = "cards_assets/"
+    """卡牌图标资源目录名"""
+    card_info_file: str = "cards.json"
+    """卡牌信息文件名"""
+    show_trained: bool = True
+    """显示特训后卡牌图片"""
+    template_file: str = "gacha_10_template.html"
+    """10连抽卡的HTML模板文件名"""
+
+    @property
+    def member_small_dir_path(self) -> Path:
+        return get_plugin_data_file(self.member_small_dir)
+
+    @property
+    def cards_assets_dir_path(self) -> Path:
+        return get_plugin_data_file(self.cards_assets_dir)
+
+    @property
+    def card_info_file_path(self) -> Path:
+        return get_plugin_data_file(self.card_info_file)
+
+    @property
+    def template_dir_path(self) -> Path:
+        """10连抽卡的HTML模板目录"""
+        return get_plugin_config_dir()
 
 
 class ScopedConfig(BaseModel):
@@ -26,6 +64,8 @@ class ScopedConfig(BaseModel):
     """用户数据文件路径"""
     cache_file: str = "cache.json"
     """缓存数据文件路径"""
+
+    gacha: GachaScopedConfig = GachaScopedConfig()
 
     @property
     def config_file_path(self) -> Path:
@@ -45,39 +85,6 @@ class Config(BaseModel):
 
 
 cfg = get_plugin_config(Config).crystal
-
-
-class HandlerKeyEnum(Enum):
-    """命令处理函数的唯一ID枚举"""
-
-    CHAT = "聊天"
-    REFRESH_WAIFU = "刷新老婆"
-    RANDOM_WAIFU = "随机图"
-    SUMMARIZE = "总结"
-
-
-class DaypartEnum(Enum):
-    """每日签到的时间段枚举"""
-
-    DAWN = "凌晨好"
-    MORNING = "早上好"
-    NOON = "中午好"
-    AFTERNOON = "下午好"
-    DUSK = "傍晚好"
-    EVENING = "晚上好"
-    NIGHT = "晚安"
-
-
-# [start, end) 的时间段范围，跨越午夜的时间段需要拆分为两个范围
-DAYPART_TIME_RANGES = {
-    DaypartEnum.DAWN: [(time(2), time(6))],
-    DaypartEnum.MORNING: [(time(6), time(9))],
-    DaypartEnum.NOON: [(time(9), time(12))],
-    DaypartEnum.AFTERNOON: [(time(12), time(16))],
-    DaypartEnum.DUSK: [(time(16), time(18))],
-    DaypartEnum.EVENING: [(time(18), time(21))],
-    DaypartEnum.NIGHT: [(time(21), time.max), (time(0), time(2))],  # 跨越午夜的时间段
-}
 
 
 class CheckInConfig(BaseModel):
@@ -138,7 +145,6 @@ class CheckInConfig(BaseModel):
     
     - `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数
     """
-
     weekly_bonus: int = 300
     """每周签到满7天的额外奖励水晶数"""
 
@@ -165,6 +171,35 @@ class CrystalConfig(BaseModel):
     - `consume`: `int` 该命令处理函数消耗的水晶数
     - `crystal`: `int` 当前水晶总数
     """
+
+    gacha_probabilities: dict[RarityEnum, float] = {}
+    """抽卡稀有度概率配置，键为稀有度枚举，值为对应的概率（0~1之间的浮点数）"""
+
+    gacha_pity_probabilities: dict[RarityEnum, float] = {}
+    """十连必出一张卡牌，此卡牌的稀有度概率配置"""
+
+    gacha_bonus_crystals: dict[RarityEnum, int] = {}
+    """抽卡稀有度转换为水晶的奖励配置，键为稀有度枚举，值为对应的水晶奖励数"""
+
+    @property
+    def gacha_cumulative_probabilities(self) -> dict[RarityEnum, float]:
+        """抽卡稀有度的累积概率"""
+        cumulative_p: dict[RarityEnum, float] = {}
+        cumulative_sum = 0.0
+        for r, p in self.gacha_probabilities.items():
+            cumulative_sum += p
+            cumulative_p[r] = cumulative_sum
+        return cumulative_p
+
+    @property
+    def gacha_pity_cumulative_probabilities(self) -> dict[RarityEnum, float]:
+        """十连必出一张卡牌的稀有度累积概率"""
+        cumulative_p: dict[RarityEnum, float] = {}
+        cumulative_sum = 0.0
+        for r, p in self.gacha_pity_probabilities.items():
+            cumulative_sum += p
+            cumulative_p[r] = cumulative_sum
+        return cumulative_p
 
 
 crystal_config = load_register_model_from_file(CrystalConfig, cfg.config_file_path)

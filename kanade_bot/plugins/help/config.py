@@ -35,7 +35,7 @@ class ScopedConfig(BaseModel):
     ]
     """欢迎新成员入群的消息模板列表，{nickname}会被替换为新成员的昵称"""
     welcome_image_file: str | None = None
-    """欢迎新成员入群的图片文件路径，未配置则不发送图片"""
+    """欢迎新成员入群的图片文件名，未配置则不发送图片"""
 
     @property
     def docs_dir_path(self) -> Path:

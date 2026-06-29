@@ -1,17 +1,37 @@
+from pathlib import Path
 import random
 from datetime import datetime
+from io import BytesIO
 from warnings import deprecated
 
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 
 from kanade_bot.utils.common import get_platform_type
 
 from .cache import check_in_cache
-from .config import DAYPART_TIME_RANGES, DaypartEnum, crystal_config, crystal_data
-from .crystal import get_crystal, increment_crystal
-from .matcher import check_in, check_ins, crystal_ranking, list_handler_consumes, my_crystal
+from .config import crystal_config, crystal_data
+from .crystal import (
+    check_user_crystal,
+    finish_fail_consume,
+    get_crystal,
+    increment_crystal,
+    succeed_consume,
+)
+from .enum import DAYPART_TIME_RANGES, DaypartEnum, HandlerKeyEnum
+from .gacha import Card, gacha_draw_card, render_composed_card, render_gacha_10_cards
+from .matcher import (
+    check_in,
+    check_ins,
+    crystal_ranking,
+    gacha,
+    gacha_10,
+    list_handler_consumes,
+    my_crystal,
+)
 
 
 @check_in.handle()
@@ -22,7 +42,7 @@ from .matcher import check_in, check_ins, crystal_ranking, list_handler_consumes
 async def _():
     daypart_commands = [f"/{daypart.value}" for daypart in DaypartEnum]
     await check_in.finish(
-        f"请使用对应时间段的签到命令进行签到，例如：{'、'.join(daypart_commands)}"
+        f"请使用对应时间段的签到命令进行签到，包括：{'、'.join(daypart_commands)}"
     )
 
 
@@ -139,3 +159,103 @@ async def _(bot: Bot, event: Event):
 
     message = "\n".join(message_lines)
     await crystal_ranking.finish(message)
+
+
+def _card_message_console(card: Card, bonus: int) -> str:
+    """生成控制台消息"""
+    messages = [
+        f"你抽到了 {card.prefix} {card.character_name}！",
+        f"稀有度: {card.card_rarity_type.value}",
+        f"属性: {card.attr.value}",
+        f"返还的水晶数: {bonus}",
+    ]
+    return "\n".join(messages)
+
+
+def _card_message_onebot(card: Card, bonus: int) -> OneBotMessage:
+    """生成 OneBot 消息"""
+    card_image = render_composed_card(card)
+    bytes_io = BytesIO()
+    card_image.save(bytes_io, format="PNG")
+
+    message = OneBotMessage()
+    message += f"你抽到了 {card.prefix} {card.character_name}！\n"
+    message += OneBotMessageSegment.image(bytes_io)
+    message += f"\n返还的水晶数: {bonus}"
+    return message
+
+
+@gacha.handle()
+async def _(bot: Bot, event: Event):
+    key = HandlerKeyEnum.GACHA
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(gacha, key, platform, user_id)
+
+    v = crystal_config.instance
+    # 抽一次卡
+    card = gacha_draw_card(v.gacha_cumulative_probabilities)
+    succeed_consume(key, platform, user_id)
+
+    # 返还水晶
+    bonus = v.gacha_bonus_crystals.get(card.card_rarity_type, 0)
+    increment_crystal(platform, user_id, bonus)
+
+    if isinstance(bot, ConsoleBot):
+        await gacha.finish(_card_message_console(card, bonus))
+    elif isinstance(bot, OneBot):
+        await gacha.finish(_card_message_onebot(card, bonus))
+
+
+def _card_message_console_10(cards: list[Card], total_bonus: int) -> str:
+    """生成控制台消息"""
+    messages = ["你进行了十连抽！"]
+    for i, card in enumerate(cards, start=1):
+        messages.append(
+            f"{i}. {card.prefix} {card.character_name} - 稀有度: {card.card_rarity_type.value}, 属性: {card.attr.value}"
+        )
+    messages.append(f"\n返还的水晶总数: {total_bonus}")
+    return "\n".join(messages)
+
+
+async def _card_message_onebot_10(cards: list[Card], total_bonus: int) -> OneBotMessage:
+    """生成 OneBot 消息"""
+    message = OneBotMessage()
+    cards_image = await render_gacha_10_cards(cards)
+    message += OneBotMessageSegment.image(cards_image)
+    message += f"\n返还的水晶总数: {total_bonus}"
+    return message
+
+
+@gacha_10.handle()
+async def _(bot: Bot, event: Event):
+    key = HandlerKeyEnum.GACHA_10
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    if not check_user_crystal(key, platform, user_id):
+        await finish_fail_consume(gacha_10, key, platform, user_id)
+
+    # 抽十次卡
+    cards: list[Card] = []
+    v = crystal_config.instance
+    pity = random.randint(0, 9)
+    for i in range(10):
+        if i == pity:
+            card = gacha_draw_card(v.gacha_pity_cumulative_probabilities)
+        else:
+            card = gacha_draw_card(v.gacha_cumulative_probabilities)
+        cards.append(card)
+    succeed_consume(key, platform, user_id)
+
+    # 返还水晶
+    total_bonus = sum(v.gacha_bonus_crystals.get(card.card_rarity_type, 0) for card in cards)
+    increment_crystal(platform, user_id, total_bonus)
+
+    if isinstance(bot, ConsoleBot):
+        await gacha_10.finish(_card_message_console_10(cards, total_bonus))
+    elif isinstance(bot, OneBot):
+        message = await _card_message_onebot_10(cards, total_bonus)
+        await gacha_10.finish(message)

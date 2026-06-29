@@ -4,7 +4,8 @@ from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType
 
-from .config import HandlerKeyEnum, crystal_config, crystal_data
+from .config import crystal_config, crystal_data
+from .enum import HandlerKeyEnum
 
 
 def increment_crystal(platform: PlatformType, user_id: str, crystal: int) -> None:
