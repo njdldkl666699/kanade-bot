@@ -1,7 +1,6 @@
 from nonebot import on_command, on_notice
-from nonebot.adapters.onebot.v11 import PRIVATE
-from nonebot.permission import SUPERUSER
-from nonebot.rule import to_me
+
+from kanade_bot.utils.common import superuser_onebot_private_permission
 
 help_command = on_command(
     "帮助",
@@ -21,7 +20,7 @@ execute_command = on_command(
     "execute",
     aliases={"exec"},
     priority=2,
-    permission=SUPERUSER & PRIVATE & to_me(),
+    permission=superuser_onebot_private_permission,
     block=True,
 )
 

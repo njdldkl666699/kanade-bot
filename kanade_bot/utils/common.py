@@ -8,6 +8,7 @@ from nonebot.adapters.console import Event as ConsoleEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
+from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 
 type PlatformType = Literal["console", "onebot"]
@@ -27,6 +28,11 @@ def get_platform_type(event: Event) -> PlatformType:
 def group_permission(event: OneBotGroupMessageEvent | ConsolePublicMessageEvent) -> bool:
     """匹配群聊消息类型事件"""
     return True
+
+
+def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:
+    """匹配OneBot私聊消息类型事件且发送者是超级用户"""
+    return event.get_user_id() in get_driver().config.superusers
 
 
 def not_to_me(to_me: bool = EventToMe()):
