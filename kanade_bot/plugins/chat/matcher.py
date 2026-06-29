@@ -1,12 +1,11 @@
 from nonebot import on_command, on_message
-from nonebot.adapters.onebot.v11 import PRIVATE
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
-from kanade_bot.utils.common import console_private_permission, not_to_me
+from kanade_bot.utils.common import group_permission, not_to_me
 
 chat = on_message(
-    rule=to_me(),
+    rule=to_me() & group_permission,
     priority=100000,
     block=True,
 )
@@ -22,7 +21,7 @@ chat_reset = on_command(
     "重置会话",
     aliases={"chat_reset", "chatreset", "重置对话"},
     priority=2,
-    permission=SUPERUSER | PRIVATE | console_private_permission,
+    permission=SUPERUSER,
     block=True,
 )
 

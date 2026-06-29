@@ -5,9 +5,9 @@ from copilot.client import StopError
 from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
-from nonebot.adapters.console.event import PrivateMessageEvent as ConsolePrivateMessageEvent
+from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Event as OneBotEvent
-from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.params import EventToMe
 
 type PlatformType = Literal["console", "onebot"]
@@ -24,19 +24,14 @@ def get_platform_type(event: Event) -> PlatformType:
         raise ValueError(f"Unsupported event type: {type(event)}")
 
 
-def console_private_permission(event: ConsolePrivateMessageEvent) -> bool:
-    """匹配任意Console私聊消息类型事件"""
+def group_permission(event: OneBotGroupMessageEvent | ConsolePublicMessageEvent) -> bool:
+    """匹配群聊消息类型事件"""
     return True
 
 
 def not_to_me(to_me: bool = EventToMe()):
     """匹配与机器人无关的消息"""
     return not to_me
-
-
-def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:
-    """匹配OneBot私聊消息类型事件且发送者是超级用户"""
-    return event.get_user_id() in get_driver().config.superusers
 
 
 COPILOT_CLIENT = CopilotClient()
