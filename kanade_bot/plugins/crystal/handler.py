@@ -180,9 +180,9 @@ def _card_message_onebot(card: Card, bonus: int, user_id: str) -> OneBotMessage:
 
     message = OneBotMessage()
     message += OneBotMessageSegment.at(user_id)
-    message += f"你抽到了 {card.prefix} {card.character_name}！\n"
+    message += f"\n你抽到了 {card.prefix} {card.character_name}！\n"
     message += OneBotMessageSegment.image(bytes_io)
-    message += f"\n返还的水晶数: {bonus}"
+    message += f"返还的水晶数: {bonus}"
     return message
 
 
@@ -217,7 +217,7 @@ def _card_message_console_10(cards: list[Card], total_bonus: int) -> str:
         messages.append(
             f"{i}. {card.prefix} {card.character_name} - 稀有度: {card.card_rarity_type.value}, 属性: {card.attr.value}"
         )
-    messages.append(f"\n返还的水晶总数: {total_bonus}")
+    messages.append(f"返还的水晶总数: {total_bonus}")
     return "\n".join(messages)
 
 
@@ -230,7 +230,7 @@ async def _card_message_onebot_10(
     message = OneBotMessage()
     message += OneBotMessageSegment.at(user_id)
     message += OneBotMessageSegment.image(cards_image)
-    message += f"\n返还的水晶总数: {total_bonus}"
+    message += f"返还的水晶总数: {total_bonus}"
     return message
 
 

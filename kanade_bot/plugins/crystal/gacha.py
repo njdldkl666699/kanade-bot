@@ -86,8 +86,16 @@ def card_file_name(trained: bool = False) -> str:
 def render_composed_card(card: Card) -> Image.Image:
     """渲染一张卡牌，返回PIL Image对象"""
     show_trained = card.card_rarity_type.can_train and cfg.show_trained
+    render_file_name = card_file_name(show_trained)
+
+    # 检查缓存
+    cache_rendered_file = f"{card.assetbundle_name}_{render_file_name}"
+    cache_file_path = cfg.rendered_cards_dir_path / cache_rendered_file
+    if cache_file_path.is_file():
+        return _open_rgba(cache_file_path)
+
     # 卡牌图片路径
-    card_path = cfg.member_small_dir_path / card.assetbundle_name / card_file_name(show_trained)
+    card_path = cfg.member_small_dir_path / card.assetbundle_name / render_file_name
     # 稀有度边框图片路径
     card_frame_L_path = cfg.cards_assets_dir_path / card.card_rarity_type.card_frame_L
     # 稀有度图标路径和数量
@@ -116,6 +124,11 @@ def render_composed_card(card: Card) -> Image.Image:
         )
 
     image.alpha_composite(attribute_icon, ATTRIBUTE_ICON_POSITION)
+
+    # 保存到缓存
+    cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(cache_file_path, format="PNG")
+
     return image
 
 

@@ -11,6 +11,7 @@ require("nonebot_plugin_localstore")
 require("model_updater")
 
 from nonebot_plugin_localstore import (
+    get_plugin_cache_dir,
     get_plugin_cache_file,
     get_plugin_config_dir,
     get_plugin_config_file,
@@ -38,6 +39,8 @@ class GachaScopedConfig(BaseModel):
     """显示特训后卡牌图片"""
     template_file: str = "gacha_10_template.html"
     """10连抽卡的HTML模板文件名"""
+    rendered_cards_dir: str = "rendered_cards/"
+    """渲染后的卡牌图片缓存目录名"""
 
     @property
     def member_small_dir_path(self) -> Path:
@@ -55,6 +58,11 @@ class GachaScopedConfig(BaseModel):
     def template_dir_path(self) -> Path:
         """10连抽卡的HTML模板目录"""
         return get_plugin_config_dir()
+
+    @property
+    def rendered_cards_dir_path(self) -> Path:
+        """渲染后的卡牌图片缓存目录"""
+        return get_plugin_cache_file(self.rendered_cards_dir)
 
 
 class ScopedConfig(BaseModel):
