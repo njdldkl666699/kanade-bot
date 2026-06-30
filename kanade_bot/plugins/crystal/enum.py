@@ -27,7 +27,7 @@ class DaypartEnum(Enum):
 
 # [start, end) 的时间段范围，跨越午夜的时间段需要拆分为两个范围
 DAYPART_TIME_RANGES = {
-    DaypartEnum.DAWN: [(time(2), time(6))],
+    DaypartEnum.DAWN: [(time(0), time(6))],
     DaypartEnum.MORNING: [(time(5), time(11))],
     DaypartEnum.NOON: [(time(11), time(13))],
     DaypartEnum.AFTERNOON: [(time(13), time(15))],
