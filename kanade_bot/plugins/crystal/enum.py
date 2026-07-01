@@ -30,7 +30,7 @@ DAYPART_TIME_RANGES = {
     DaypartEnum.DAWN: [(time(0), time(6))],
     DaypartEnum.MORNING: [(time(5), time(11))],
     DaypartEnum.NOON: [(time(11), time(13))],
-    DaypartEnum.AFTERNOON: [(time(13), time(15))],
+    DaypartEnum.AFTERNOON: [(time(13), time(17))],
     DaypartEnum.DUSK: [(time(16), time(19))],
     DaypartEnum.EVENING: [(time(18), time.max)],
     DaypartEnum.NIGHT: [(time(21), time.max), (time(0), time(2))],  # 跨越午夜的时间段

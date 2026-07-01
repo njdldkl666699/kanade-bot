@@ -1,7 +1,6 @@
 import random
 from datetime import datetime
 from io import BytesIO
-from pathlib import Path
 from warnings import deprecated
 
 from nonebot.adapters import Bot, Event, Message
@@ -96,7 +95,7 @@ for daypart, matcher in check_ins.items():
         current_dayparts = get_current_dayparts()
         if daypart not in current_dayparts:
             template = random.choice(cfg.wrong_daypart_templates)
-            message = template.format(daypart=current_dayparts[0].value)
+            message = template.format(daypart=current_dayparts[0].value)  # TODO
             await matcher.finish(message)
 
         check_in_dayparts = check_in_cache.get(platform, user_id)
