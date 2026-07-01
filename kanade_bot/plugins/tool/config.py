@@ -4,6 +4,8 @@ from nonebot import get_plugin_config, require
 from nonebot.adapters.onebot.v11 import Message
 from pydantic import BaseModel
 
+from kanade_bot.utils.common import AttrDocModel, generate_schema
+
 require("nonebot_plugin_localstore")
 require("model_updater")
 
@@ -50,7 +52,7 @@ class Config(BaseModel):
 cfg = get_plugin_config(Config).tool
 
 
-class ScheduleConfig(BaseModel):
+class ScheduleConfig(AttrDocModel):
     """定时任务配置"""
 
     cron: str
@@ -59,7 +61,7 @@ class ScheduleConfig(BaseModel):
     """定时任务发送的消息内容"""
 
 
-class ScheduleConfigs(BaseModel):
+class ScheduleConfigs(AttrDocModel):
     """定时任务配置字典"""
 
     configs: dict[int, dict[str, ScheduleConfig]] = {}
@@ -69,10 +71,11 @@ class ScheduleConfigs(BaseModel):
     """
 
 
+generate_schema(ScheduleConfigs)
 schedules = load_register_model_from_file(ScheduleConfigs, cfg.schedule_configs_file_path)
 
 
-class PresetReactionConfig(BaseModel):
+class PresetReactionConfig(AttrDocModel):
     """预设反应配置"""
 
     receive_poke_messages: list[str] = [
@@ -110,6 +113,7 @@ class PresetReactionConfig(BaseModel):
     """触发点赞上限的回复内容"""
 
 
+generate_schema(PresetReactionConfig)
 preset_reaction_cfg = load_register_model_from_file(
     PresetReactionConfig, cfg.preset_reaction_config_file_path
 )

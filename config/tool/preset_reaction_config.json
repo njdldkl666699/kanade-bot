@@ -1,4 +1,5 @@
 {
+  "$schema": "../../schemas/generated/PresetReactionConfig.json",
   "receive_poke_messages": [
     "（被戳一下后，轻轻晃了晃神）",
     "啊…嗯？怎么了？",

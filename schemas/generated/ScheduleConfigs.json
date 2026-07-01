@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "ScheduleConfig": {
+      "description": "定时任务配置",
+      "properties": {
+        "cron": {
+          "description": "定时任务的Cron表达式",
+          "title": "Cron",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "data": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ],
+          "description": "定时任务发送的消息内容",
+          "title": "Message"
+        }
+      },
+      "required": [
+        "cron",
+        "message"
+      ],
+      "title": "ScheduleConfig",
+      "type": "object"
+    }
+  },
+  "description": "定时任务配置字典",
+  "properties": {
+    "configs": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/ScheduleConfig"
+        },
+        "type": "object"
+      },
+      "default": {},
+      "description": "定时任务配置字典，键为群号，值为该群的定时任务列表\n\n定时任务列表的键为定时任务名称，每个群内不可重复，值为定时任务配置",
+      "title": "Configs",
+      "type": "object"
+    }
+  },
+  "title": "ScheduleConfigs",
+  "type": "object"
+}

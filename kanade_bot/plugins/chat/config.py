@@ -5,7 +5,7 @@ from copilot import ProviderConfig
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.common import AttrDocModel, PlatformType, generate_schema
 
 require("nonebot_plugin_localstore")
 require("model_updater")
@@ -112,7 +112,7 @@ class Config(BaseModel):
 cfg = get_plugin_config(Config).chat
 
 
-class AutoReplyConfig(BaseModel):
+class AutoReplyConfig(AttrDocModel):
     """主动回复配置
 
     该配置用于设置在群聊中达到一定消息量后自动回复的行为，包括触发阈值和回复概率
@@ -129,7 +129,7 @@ class AutoReplyConfig(BaseModel):
     """达到阈值后自动回复的概率，取值范围为0.0到1.0"""
 
 
-class ChatConfig(BaseModel):
+class ChatConfig(AttrDocModel):
     """聊天配置"""
 
     banned_users: set[str] = set()
@@ -140,7 +140,7 @@ class ChatConfig(BaseModel):
     """主动回复配置，键为群ID，值为AutoReplyConfig对象"""
 
 
-class ChatConfigs(BaseModel):
+class ChatConfigs(AttrDocModel):
     """聊天配置文件"""
 
     console: ChatConfig = ChatConfig()
@@ -161,4 +161,5 @@ class ChatConfigs(BaseModel):
             return self.onebot
 
 
+generate_schema(ChatConfigs)
 chat_configs = load_register_model_from_file(ChatConfigs, cfg.configs_file_path)

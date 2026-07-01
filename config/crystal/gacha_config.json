@@ -1,0 +1,24 @@
+{
+  "$schema": "../../schemas/generated/GachaConfig.json",
+  "probabilities": {
+    "rarity_1": 0,
+    "rarity_2": 0.825,
+    "rarity_3": 0.085,
+    "rarity_birthday": 0.06,
+    "rarity_4": 0.03
+  },
+  "pity_probabilities": {
+    "rarity_1": 0,
+    "rarity_2": 0,
+    "rarity_3": 0.91,
+    "rarity_birthday": 0.06,
+    "rarity_4": 0.03
+  },
+  "bonus_crystals": {
+    "rarity_1": 0,
+    "rarity_2": 5,
+    "rarity_3": 50,
+    "rarity_birthday": 150,
+    "rarity_4": 500
+  }
+}

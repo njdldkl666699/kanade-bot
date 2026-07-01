@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "HarvestAction": {
+      "description": "采集行为配置",
+      "properties": {
+        "name": {
+          "description": "行为名称",
+          "title": "Name",
+          "type": "string"
+        },
+        "probability": {
+          "description": "行为的概率（0~1之间的浮点数）\n\n在同一行为类别下，所有行为的概率之和应为1",
+          "title": "Probability",
+          "type": "number"
+        },
+        "items": {
+          "default": [],
+          "description": "采集行为包含的采集材料项",
+          "items": {
+            "$ref": "#/$defs/HarvestMaterialItem"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "probability"
+      ],
+      "title": "HarvestAction",
+      "type": "object"
+    },
+    "HarvestActionCategory": {
+      "description": "采集行为类别配置",
+      "properties": {
+        "power_cost": {
+          "description": "行为类别消耗的体力",
+          "title": "Power Cost",
+          "type": "number"
+        },
+        "actions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/HarvestAction"
+          },
+          "default": {},
+          "description": "行为类别包含的采集行为，键为行为ID，值为对应的采集行为配置",
+          "title": "Actions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "power_cost"
+      ],
+      "title": "HarvestActionCategory",
+      "type": "object"
+    },
+    "HarvestMaterial": {
+      "description": "采集材料配置",
+      "properties": {
+        "name": {
+          "description": "材料名称",
+          "title": "Name",
+          "type": "string"
+        },
+        "bonus_crystal": {
+          "description": "材料转换为水晶的奖励数",
+          "title": "Bonus Crystal",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "bonus_crystal"
+      ],
+      "title": "HarvestMaterial",
+      "type": "object"
+    },
+    "HarvestMaterialItem": {
+      "description": "采集材料项配置",
+      "properties": {
+        "material_id": {
+          "description": "材料ID",
+          "title": "Material Id",
+          "type": "string"
+        },
+        "quantity": {
+          "description": "材料数量",
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "probability": {
+          "description": "材料项的概率（0~1之间的浮点数）",
+          "title": "Probability",
+          "type": "number"
+        }
+      },
+      "required": [
+        "material_id",
+        "quantity",
+        "probability"
+      ],
+      "title": "HarvestMaterialItem",
+      "type": "object"
+    }
+  },
+  "description": "采集配置",
+  "properties": {
+    "materials": {
+      "additionalProperties": {
+        "$ref": "#/$defs/HarvestMaterial"
+      },
+      "default": {},
+      "description": "材料配置，键为材料ID，值为对应的材料配置",
+      "title": "Materials",
+      "type": "object"
+    },
+    "action_categories": {
+      "additionalProperties": {
+        "$ref": "#/$defs/HarvestActionCategory"
+      },
+      "default": {},
+      "description": "行为配置，键为行为类别名称，值为对应的采集行为类别配置",
+      "title": "Action Categories",
+      "type": "object"
+    }
+  },
+  "title": "HarvestConfig",
+  "type": "object"
+}

@@ -1,18 +1,27 @@
 import random
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 from warnings import deprecated
 
-from nonebot.adapters import Bot, Event
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
+from nonebot.adapters.console import Event as ConsoleEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.params import CommandArg
 
 from kanade_bot.utils.common import get_platform_type
 
-from .cache import check_in_cache, check_in_weekly_cache
-from .config import crystal_config, crystal_data
+from .cache import (
+    check_in_cache,
+    check_in_weekly_cache,
+    get_or_init_harvest_power,
+    harvest_power_cache,
+)
+from .config import cfg, crystal_config, crystal_data, gacha_config, harvest_config
 from .crystal import (
     check_user_crystal,
     finish_fail_consume,
@@ -22,14 +31,25 @@ from .crystal import (
 )
 from .enum import DAYPART_TIME_RANGES, DaypartEnum, HandlerKeyEnum
 from .gacha import Card, gacha_draw_card, render_composed_card, render_gacha_10_cards
+from .harvest import (
+    HarvestResult,
+    harvest_once,
+    render_harvest_result,
+    render_harvest_results,
+)
 from .matcher import (
     check_in,
     check_ins,
     crystal_ranking,
     gacha,
     gacha_10,
+    harvest,
+    harvest_all,
+    harvest_category,
+    harvest_power,
     list_handler_consumes,
     my_crystal,
+    resume_harvest_power,
 )
 
 
@@ -175,33 +195,8 @@ async def _(bot: Bot, event: Event):
     await crystal_ranking.finish(message)
 
 
-def _card_message_console(card: Card, bonus: int) -> str:
-    """生成控制台消息"""
-    messages = [
-        f"你抽到了 {card.prefix} {card.character_name}！",
-        f"稀有度: {card.card_rarity_type.value}",
-        f"属性: {card.attr.value}",
-        f"返还的水晶数: {bonus}",
-    ]
-    return "\n".join(messages)
-
-
-def _card_message_onebot(card: Card, bonus: int, user_id: str) -> OneBotMessage:
-    """生成 OneBot 消息"""
-    card_image = render_composed_card(card)
-    bytes_io = BytesIO()
-    card_image.save(bytes_io, format="PNG")
-
-    message = OneBotMessage()
-    message += OneBotMessageSegment.at(user_id)
-    message += f"\n你抽到了 {card.prefix} {card.character_name}！\n"
-    message += OneBotMessageSegment.image(bytes_io)
-    message += f"返还的水晶数: {bonus}"
-    return message
-
-
 @gacha.handle()
-async def _(bot: Bot, event: Event):
+async def _(event: Event):
     key = HandlerKeyEnum.GACHA
     platform = get_platform_type(event)
     user_id = event.get_user_id()
@@ -209,47 +204,38 @@ async def _(bot: Bot, event: Event):
     if not check_user_crystal(key, platform, user_id):
         await finish_fail_consume(gacha, key, platform, user_id)
 
-    v = crystal_config.instance
+    v = gacha_config.instance
     # 抽一次卡
-    card = gacha_draw_card(v.gacha_cumulative_probabilities)
+    card = gacha_draw_card(v.cumulative_probabilities)
     succeed_consume(key, platform, user_id)
 
     # 返还水晶
-    bonus = v.gacha_bonus_crystals.get(card.card_rarity_type, 0)
+    bonus = v.bonus_crystals.get(card.card_rarity_type, 0)
     increment_crystal(platform, user_id, bonus)
 
-    if isinstance(bot, ConsoleBot):
-        await gacha.finish(_card_message_console(card, bonus))
-    elif isinstance(bot, OneBot):
-        await gacha.finish(_card_message_onebot(card, bonus, user_id))
+    if isinstance(event, ConsoleEvent):
+        messages = [
+            f"你抽到了 {card.prefix} {card.character_name}！",
+            f"稀有度: {card.card_rarity_type.value}",
+            f"属性: {card.attr.value}",
+            f"返还的水晶数: {bonus}",
+        ]
+        await gacha.finish("\n".join(messages))
+    elif isinstance(event, OneBotEvent):
+        card_image = render_composed_card(card)
+        bytes_io = BytesIO()
+        card_image.save(bytes_io, format="PNG")
 
-
-def _card_message_console_10(cards: list[Card], total_bonus: int) -> str:
-    """生成控制台消息"""
-    messages = ["你进行了十连抽！"]
-    for i, card in enumerate(cards, start=1):
-        messages.append(
-            f"{i}. {card.prefix} {card.character_name} - 稀有度: {card.card_rarity_type.value}, 属性: {card.attr.value}"
-        )
-    messages.append(f"返还的水晶总数: {total_bonus}")
-    return "\n".join(messages)
-
-
-async def _card_message_onebot_10(
-    cards: list[Card], total_bonus: int, user_id: str
-) -> OneBotMessage:
-    """生成 OneBot 消息"""
-    cards_image = await render_gacha_10_cards(cards)
-
-    message = OneBotMessage()
-    message += OneBotMessageSegment.at(user_id)
-    message += OneBotMessageSegment.image(cards_image)
-    message += f"返还的水晶总数: {total_bonus}"
-    return message
+        message = OneBotMessage()
+        message += OneBotMessageSegment.at(user_id)
+        message += f"\n你抽到了 {card.prefix} {card.character_name}！\n"
+        message += OneBotMessageSegment.image(bytes_io)
+        message += f"返还的水晶数: {bonus}"
+        await gacha.finish(message)
 
 
 @gacha_10.handle()
-async def _(bot: Bot, event: Event):
+async def _(event: Event):
     key = HandlerKeyEnum.GACHA_10
     platform = get_platform_type(event)
     user_id = event.get_user_id()
@@ -259,22 +245,142 @@ async def _(bot: Bot, event: Event):
 
     # 抽十次卡
     cards: list[Card] = []
-    v = crystal_config.instance
+    v = gacha_config.instance
     pity = random.randint(0, 9)
     for i in range(10):
         if i == pity:
-            card = gacha_draw_card(v.gacha_pity_cumulative_probabilities)
+            card = gacha_draw_card(v.pity_cumulative_probabilities)
         else:
-            card = gacha_draw_card(v.gacha_cumulative_probabilities)
+            card = gacha_draw_card(v.cumulative_probabilities)
         cards.append(card)
     succeed_consume(key, platform, user_id)
 
     # 返还水晶
-    total_bonus = sum(v.gacha_bonus_crystals.get(card.card_rarity_type, 0) for card in cards)
+    total_bonus = sum(v.bonus_crystals.get(card.card_rarity_type, 0) for card in cards)
     increment_crystal(platform, user_id, total_bonus)
 
-    if isinstance(bot, ConsoleBot):
-        await gacha_10.finish(_card_message_console_10(cards, total_bonus))
-    elif isinstance(bot, OneBot):
-        message = await _card_message_onebot_10(cards, total_bonus, user_id)
+    if isinstance(event, ConsoleEvent):
+        messages = ["你进行了十连抽！"]
+        for i, card in enumerate(cards, start=1):
+            messages.append(
+                f"{i}. {card.prefix} {card.character_name} - 稀有度: {card.card_rarity_type.value}, 属性: {card.attr.value}"
+            )
+        messages.append(f"返还的水晶总数: {total_bonus}")
+        await gacha_10.finish("\n".join(messages))
+    elif isinstance(event, OneBotEvent):
+        cards_image = await render_gacha_10_cards(cards)
+        message = OneBotMessage()
+        message += OneBotMessageSegment.at(user_id)
+        message += OneBotMessageSegment.image(cards_image)
+        message += f"返还的水晶总数: {total_bonus}"
         await gacha_10.finish(message)
+
+
+@harvest.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    user_id = event.get_user_id()
+
+    category_name = arg_msg.extract_plain_text().strip()
+    if not category_name:
+        category_name = None
+
+    result = harvest_once(get_platform_type(event), event.get_user_id(), category_name)
+    if result is None:
+        await harvest.finish("采集失败，体力不足或类别不存在。")
+
+    if isinstance(event, ConsoleEvent):
+        texts = [
+            f"{result.category_name}-{result.action_name} 采集成功！",
+            f"消耗体力: {result.power_cost}",
+            f"采集到的材料: {result.materials}",
+            f"额外水晶奖励: {result.bonus_crystal}",
+        ]
+        await harvest.finish("\n".join(texts))
+    elif isinstance(event, OneBotEvent):
+        image = await render_harvest_result(result)
+        message = OneBotMessage()
+        message += OneBotMessageSegment.at(user_id)
+        message += OneBotMessageSegment.image(image)
+        await harvest.finish(message)
+
+
+@harvest_all.handle()
+async def _(event: Event):
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+    results: list[HarvestResult] = []
+
+    while True:
+        result = harvest_once(platform, user_id)
+        if result is None:
+            break
+        results.append(result)
+
+    if not results:
+        await harvest_all.finish("采集失败，体力不足。")
+
+    if isinstance(event, ConsoleEvent):
+        total_power_cost = sum(result.power_cost for result in results)
+        total_bonus_crystal = sum(result.bonus_crystal for result in results)
+        texts = [
+            f"采集全部资源完成，共采集 {len(results)} 次。",
+            f"消耗体力: {total_power_cost:g}",
+            f"额外水晶奖励: {total_bonus_crystal}",
+        ]
+        await harvest_all.finish("\n".join(texts))
+    elif isinstance(event, OneBotEvent):
+        image = await render_harvest_results(results)
+        message = OneBotMessage()
+        message += OneBotMessageSegment.at(user_id)
+        message += OneBotMessageSegment.image(image)
+        await harvest_all.finish(message)
+
+
+@harvest_category.handle()
+async def _():
+    texts = ["可用的采集资源类别、消耗体力："]
+    for name, category in harvest_config.instance.action_categories.items():
+        texts.append(f"{name}: {category.power_cost} 体力")
+    await harvest_category.finish("\n".join(texts))
+
+
+@harvest_power.handle()
+async def _(event: Event):
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+    current_power = get_or_init_harvest_power(platform, user_id)
+    await harvest_power.finish(f"你当前的体力值为: {current_power:g}。")
+
+
+@resume_harvest_power.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    power = arg_msg.extract_plain_text().strip()
+    try:
+        power = float(power)
+    except ValueError:
+        await resume_harvest_power.finish("请输入有效的体力值。")
+    if power <= 0:
+        await resume_harvest_power.finish("体力值必须大于 0。")
+
+    platform = get_platform_type(event)
+    user_id = event.get_user_id()
+
+    crystal_cost = int(power * cfg.harvest.power_crystal_cost)
+    data = crystal_data.instance.get_by_platform(platform)
+    user_crystal = data.get(user_id, 0)
+    if user_crystal < crystal_cost:
+        await resume_harvest_power.finish(
+            f"水晶不足，恢复 {power} 体力需要 {crystal_cost} 水晶，你当前有 {user_crystal} 水晶。"
+        )
+
+    # 增加体力
+    current_power = get_or_init_harvest_power(platform, user_id)
+    new_power = current_power + power
+    harvest_power_cache.set(platform, user_id, new_power)
+    # 扣除水晶
+    data[user_id] = user_crystal - crystal_cost
+    crystal_data.save_to_file()
+
+    await resume_harvest_power.finish(
+        f"已恢复 {power} 体力，消耗 {crystal_cost} 水晶，你当前体力为 {new_power:g}。"
+    )

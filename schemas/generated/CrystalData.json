@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "console": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "description": "Console适配器用户水晶数据，键为用户ID，值为水晶数",
+      "title": "Console",
+      "type": "object"
+    },
+    "onebot": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "description": "OneBot适配器用户水晶数据，键为用户ID，值为水晶数",
+      "title": "Onebot",
+      "type": "object"
+    }
+  },
+  "title": "CrystalData",
+  "type": "object"
+}

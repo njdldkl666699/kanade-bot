@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "AutoReplyConfig": {
+      "description": "主动回复配置\n\n该配置用于设置在群聊中达到一定消息量后自动回复的行为，包括触发阈值和回复概率\n\n达到触发阈值后，机器人会触发一次抽取自动回复的行为，根据设定的概率决定是否进行回复，\n如果抽中，则清空上下文并回复一条消息，未抽中，则下次收到消息再次抽取。\n\n主动回复消息不受用户黑名单限制，但是受群聊黑名单限制",
+      "properties": {
+        "threshold": {
+          "default": 0,
+          "description": "自动回复的消息阈值，单位为条，小于等于0时不触发",
+          "title": "Threshold",
+          "type": "integer"
+        },
+        "probability": {
+          "default": 1.0,
+          "description": "达到阈值后自动回复的概率，取值范围为0.0到1.0",
+          "title": "Probability",
+          "type": "number"
+        }
+      },
+      "title": "AutoReplyConfig",
+      "type": "object"
+    },
+    "ChatConfig": {
+      "description": "聊天配置",
+      "properties": {
+        "banned_users": {
+          "default": [],
+          "description": "拉黑的用户ID列表",
+          "items": {
+            "type": "string"
+          },
+          "title": "Banned Users",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "banned_groups": {
+          "default": [],
+          "description": "拉黑的群ID列表",
+          "items": {
+            "type": "string"
+          },
+          "title": "Banned Groups",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "auto_reply_group_config": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AutoReplyConfig"
+          },
+          "default": {},
+          "description": "主动回复配置，键为群ID，值为AutoReplyConfig对象",
+          "title": "Auto Reply Group Config",
+          "type": "object"
+        }
+      },
+      "title": "ChatConfig",
+      "type": "object"
+    }
+  },
+  "description": "聊天配置文件",
+  "properties": {
+    "console": {
+      "$ref": "#/$defs/ChatConfig",
+      "default": {
+        "banned_users": [],
+        "banned_groups": [],
+        "auto_reply_group_config": {}
+      }
+    },
+    "onebot": {
+      "$ref": "#/$defs/ChatConfig",
+      "default": {
+        "banned_users": [],
+        "banned_groups": [],
+        "auto_reply_group_config": {}
+      }
+    },
+    "memes": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "default": {},
+      "description": "表情包列表\n\n每个表情包为一个字典，key为表情包名称，value为表情包描述。\n\n每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。",
+      "title": "Memes",
+      "type": "object"
+    }
+  },
+  "title": "ChatConfigs",
+  "type": "object"
+}

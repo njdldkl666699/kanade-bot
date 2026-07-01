@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Harvest Results</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1040px;
+        min-height: 560px;
+        background: #eef3ee;
+        color: #27322d;
+        font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .canvas {
+        width: 1040px;
+        padding: 28px;
+        background: #eef3ee;
+      }
+
+      .result {
+        overflow: hidden;
+        border: 1px solid rgba(73, 96, 78, 0.18);
+        border-radius: 8px;
+        background: #fbfcf8;
+        box-shadow: 0 10px 28px rgba(39, 50, 45, 0.12);
+      }
+
+      .header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 24px 28px 20px;
+        background: linear-gradient(135deg, #f9fbf3 0%, #e4efe5 100%);
+        border-bottom: 1px solid rgba(73, 96, 78, 0.14);
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: #68786f;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .title {
+        margin: 0;
+        color: #26362d;
+        font-size: 38px;
+        line-height: 1.15;
+        font-weight: 800;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+        min-width: 300px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 7px 14px;
+        border: 1px solid rgba(84, 111, 92, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #415247;
+        font-size: 18px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .content {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 22px;
+        padding: 24px 28px 28px;
+      }
+
+      .section-title {
+        margin: 0 0 14px;
+        color: #425349;
+        font-size: 22px;
+        line-height: 1.25;
+        font-weight: 800;
+      }
+
+      .records {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .record {
+        padding: 12px 14px;
+        border: 1px solid rgba(73, 96, 78, 0.14);
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .record-title {
+        margin: 0 0 6px;
+        color: #26362d;
+        font-size: 18px;
+        line-height: 1.25;
+        font-weight: 800;
+      }
+
+      .record-meta {
+        margin: 0;
+        color: #68786f;
+        font-size: 15px;
+        line-height: 1.35;
+        font-weight: 700;
+      }
+
+      .material-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .material {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        min-height: 98px;
+        padding: 13px;
+        border: 1px solid rgba(73, 96, 78, 0.14);
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .thumb {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 72px;
+        height: 72px;
+        border-radius: 8px;
+        background: #f0f4ef;
+      }
+
+      .thumb img {
+        display: block;
+        max-width: 64px;
+        max-height: 64px;
+        object-fit: contain;
+      }
+
+      .placeholder {
+        color: #7b897f;
+        font-size: 14px;
+      }
+
+      .material-name {
+        margin: 1px 0 6px;
+        color: #26362d;
+        font-size: 19px;
+        line-height: 1.25;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+      }
+
+      .material-detail {
+        color: #67766b;
+        font-size: 17px;
+        line-height: 1.35;
+        font-weight: 700;
+      }
+
+      .empty {
+        min-height: 112px;
+        padding: 30px;
+        border: 1px dashed rgba(73, 96, 78, 0.24);
+        border-radius: 8px;
+        background: #ffffff;
+        color: #68786f;
+        font-size: 22px;
+        line-height: 1.4;
+        text-align: center;
+      }
+
+      .summary {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(73, 96, 78, 0.14);
+        color: #26362d;
+        font-size: 24px;
+        font-weight: 900;
+      }
+
+      .summary img {
+        display: block;
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="canvas">
+      <section class="result">
+        <header class="header">
+          <div>
+            <p class="eyebrow">采集结果</p>
+            <h1 class="title">采集全部资源</h1>
+          </div>
+          <div class="meta">
+            <span class="pill">采集 {{ result_count }} 次</span>
+            <span class="pill">消耗 {{ total_power_cost }} 体力</span>
+          </div>
+        </header>
+
+        <div class="content">
+          <section>
+            <h2 class="section-title">采集记录</h2>
+            {% if results %}
+            <div class="records">
+              {% for result in results %}
+              <article class="record">
+                <p class="record-title">
+                  {{ loop.index }}. {{ result.category_name }} -
+                  {{ result.action_name }}
+                </p>
+                <p class="record-meta">
+                  消耗 {{ result.power_cost }} 体力
+                </p>
+              </article>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">没有可展示的采集记录。</div>
+            {% endif %}
+          </section>
+
+          <section>
+            <h2 class="section-title">获得材料</h2>
+            {% if materials %}
+            <div class="material-grid">
+              {% for material_id, quantity in materials.items() %}
+              <article class="material">
+                <div class="thumb">
+                  {% if material_images[material_id] %}
+                  <img
+                    src="{{ material_images[material_id] }}"
+                    alt="{{ material_names[material_id] }}"
+                  />
+                  {% else %}
+                  <span class="placeholder">No Image</span>
+                  {% endif %}
+                </div>
+                <div>
+                  <p class="material-name">{{ material_names[material_id] }}</p>
+                  <div class="material-detail">
+                    <span>x{{ quantity }}</span>
+                  </div>
+                </div>
+              </article>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">这次没有获得材料。</div>
+            {% endif %}
+          </section>
+
+          <div class="summary">
+            {% if crystal_image %}
+            <img src="{{ crystal_image }}" alt="水晶" />
+            {% endif %}
+            <span>总计 +{{ bonus_crystal }}</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

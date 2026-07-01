@@ -37,7 +37,7 @@ class ModelRegistryItem(BaseModel, Generic[T]):
 
     def save_to_file(self):
         """将模型保存到 JSON 文件"""
-        logger.info(f"保存模型 {self.cls.__name__} 到文件 {self.path}")
+        logger.debug(f"保存模型 {self.cls.__name__} 到文件 {self.path}")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             self.instance.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"

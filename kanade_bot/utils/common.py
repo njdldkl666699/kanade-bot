@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import Literal
 
 from copilot import CopilotClient
@@ -10,6 +12,7 @@ from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
+from pydantic import BaseModel
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
@@ -46,8 +49,28 @@ COPILOT_CLIENT = CopilotClient()
 负责与Copilot服务进行通信，创建和恢复会话等操作
 """
 
-
 driver = get_driver()
+
+
+class AttrDocModel(BaseModel):
+    """带有属性docstring的Pydantic模型基类"""
+
+    model_config = {
+        "use_attribute_docstrings": True,
+    }
+
+
+def generate_schema[T: BaseModel](cls: type[T]):
+    """生成JSON Schema文件"""
+    if not driver.config.generate_schemas:
+        return
+
+    schema_file_name = f"{cls.__name__}.json"
+    logger.info(f"正在生成JSON Schema文件: {schema_file_name}")
+    json_schema = json.dumps(cls.model_json_schema(), indent=2, ensure_ascii=False)
+    schema_file = Path("schemas") / "generated" / schema_file_name
+    schema_file.parent.mkdir(parents=True, exist_ok=True)
+    schema_file.write_text(json_schema, encoding="utf-8")
 
 
 @driver.on_startup

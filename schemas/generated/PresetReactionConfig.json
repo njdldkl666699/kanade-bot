@@ -1,0 +1,59 @@
+{
+  "description": "预设反应配置",
+  "properties": {
+    "receive_poke_messages": {
+      "default": [
+        "（被戳一下后，轻轻晃了晃神）",
+        "啊…嗯？怎么了？",
+        "有点突然…吓到了一下。",
+        "…在听。有什么事吗？",
+        "（稍微顿了一下）…嗯，我在。",
+        "是不是戳错人了…不过，也没关系。",
+        "嗯…？找我吗？",
+        "…别戳太多次，会有点晕。",
+        "啊…抱歉，刚刚在听音乐，没注意到。",
+        "…嗯。我在。",
+        "如果是想聊天的话…直接说就好。"
+      ],
+      "description": "收到戳一戳消息时的随机回复列表",
+      "items": {
+        "type": "string"
+      },
+      "title": "Receive Poke Messages",
+      "type": "array"
+    },
+    "send_poke_probability": {
+      "default": 30,
+      "description": "发送戳一戳的概率，范围0-100",
+      "title": "Send Poke Probability",
+      "type": "integer"
+    },
+    "send_like_messages": {
+      "default": [
+        "今天也给你点了个赞…希望你能稍微开心一点。",
+        "嗯…点了赞。只是一个小小的表示。",
+        "看到你在努力的样子…就想点一下。",
+        "不太擅长说话…但想让你知道，我有在关注。",
+        "点个赞…如果有打扰到的话，不用在意也没关系。",
+        "嗯，点好了。不用回也没关系。",
+        "看到你头像的时候…随手就点了一个。",
+        "只是想让你知道，有人在看着这边。",
+        "点赞…大概是我能做的、最简单的那种鼓励。"
+      ],
+      "description": "发送点赞消息时的随机回复列表",
+      "items": {
+        "type": "string"
+      },
+      "title": "Send Like Messages",
+      "type": "array"
+    },
+    "send_like_limited_message": {
+      "default": "好像到上限了。明天再试吧…",
+      "description": "触发点赞上限的回复内容",
+      "title": "Send Like Limited Message",
+      "type": "string"
+    }
+  },
+  "title": "PresetReactionConfig",
+  "type": "object"
+}

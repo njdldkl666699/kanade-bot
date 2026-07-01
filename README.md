@@ -29,6 +29,10 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
    - `WATCHDOG__POLL_INTERVAL=30`
 2. 启动 Watchdog：`uv run -m scripts.watchdog`
 
+## 生成JSON Schema
+
+本Bot使用了很多配置类来管理插件的配置项，它们通过读取`config/`目录下的一些JSON文件来加载配置。为了在编写时获得更好的类型提示和自动补全，可以配置`.env`或`.env.prod`中的配置项`GENERATE_SCHEMAS=true`，然后运行Bot，这次运行就会在`schemas/generated/`目录下生成对应的JSON Schema文件。
+
 ## 常见问题
 
 1. 服务器查询返回的图片字体不好看：支持Unifont，可以下载Unifont字体并安装到系统中。

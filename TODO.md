@@ -6,7 +6,8 @@
   - [x] 早中晚
   - [x] 首次用bot送水晶（data无key）
   - [x] 周签满7天额外送水晶
-  - [ ] 挖矿（烤森）
+  - [x] 挖矿（烤森），自动挖矿（？），实现handler参数解析、harvest逻辑实现
 - [x] 添加抽卡功能，消耗水晶；抽到后回收成水晶
 - [x] 抽卡渲染缓存
 - [ ] 画廊功能
+- [x] 生成json schema；修改配置类的model_config，添加use_attribute_docstrings=True，生成的json schema会带上字段的docstring

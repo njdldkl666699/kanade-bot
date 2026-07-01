@@ -1,0 +1,1318 @@
+{
+  "$schema": "../../schemas/generated/HarvestConfig.json",
+  "materials": {
+    "item_junk_1": {
+      "name": "螺丝",
+      "bonus_crystal": 1
+    },
+    "item_junk_2": {
+      "name": "钉子",
+      "bonus_crystal": 1
+    },
+    "item_junk_3": {
+      "name": "塑料",
+      "bonus_crystal": 1
+    },
+    "item_junk_4": {
+      "name": "马达",
+      "bonus_crystal": 2
+    },
+    "item_junk_5": {
+      "name": "电池",
+      "bonus_crystal": 2
+    },
+    "item_junk_6": {
+      "name": "灯泡",
+      "bonus_crystal": 2
+    },
+    "item_junk_7": {
+      "name": "电路板",
+      "bonus_crystal": 2
+    },
+    "item_junk_8": {
+      "name": "蓝天海玻璃",
+      "bonus_crystal": 5
+    },
+    "item_junk_9": {
+      "name": "流星碎片",
+      "bonus_crystal": 5
+    },
+    "item_junk_10": {
+      "name": "雪之结晶",
+      "bonus_crystal": 5
+    },
+    "item_junk_11": {
+      "name": "最棒斧子的斧刃",
+      "bonus_crystal": 5
+    },
+    "item_junk_12": {
+      "name": "最棒十字镐的镐尖",
+      "bonus_crystal": 5
+    },
+    "item_junk_13": {
+      "name": "蓬松柔软的棉花云",
+      "bonus_crystal": 5
+    },
+    "item_junk_14": {
+      "name": "「世界」晶粒",
+      "bonus_crystal": 5
+    },
+    "item_mineral_1": {
+      "name": "心愿石块",
+      "bonus_crystal": 1
+    },
+    "item_mineral_2": {
+      "name": "铜",
+      "bonus_crystal": 2
+    },
+    "item_mineral_3": {
+      "name": "铁",
+      "bonus_crystal": 2
+    },
+    "item_mineral_4": {
+      "name": "粘土",
+      "bonus_crystal": 2
+    },
+    "item_mineral_5": {
+      "name": "漂亮的玻璃",
+      "bonus_crystal": 2
+    },
+    "item_mineral_6": {
+      "name": "闪耀石英",
+      "bonus_crystal": 10
+    },
+    "item_mineral_7": {
+      "name": "钻石",
+      "bonus_crystal": 150
+    },
+    "item_mineral_8": {
+      "name": "月光石",
+      "bonus_crystal": 5
+    },
+    "item_mineral_9": {
+      "name": "雷光石",
+      "bonus_crystal": 5
+    },
+    "item_mineral_10": {
+      "name": "彩虹玻璃",
+      "bonus_crystal": 5
+    },
+    "item_plant_1": {
+      "name": "四叶草",
+      "bonus_crystal": 25
+    },
+    "item_plant_2": {
+      "name": "顺滑的亚麻",
+      "bonus_crystal": 1
+    },
+    "item_plant_3": {
+      "name": "蓬松的棉花",
+      "bonus_crystal": 1
+    },
+    "item_plant_4": {
+      "name": "花瓣",
+      "bonus_crystal": 1
+    },
+    "item_tone_8": {
+      "name": "空白的音色",
+      "bonus_crystal": 15
+    },
+    "item_wood_1": {
+      "name": "心愿木材",
+      "bonus_crystal": 1
+    },
+    "item_wood_2": {
+      "name": "硬质木材",
+      "bonus_crystal": 2
+    },
+    "item_wood_3": {
+      "name": "轻质木材",
+      "bonus_crystal": 2
+    },
+    "item_wood_4": {
+      "name": "粘稠的树液",
+      "bonus_crystal": 2
+    },
+    "item_wood_5": {
+      "name": "夕桐",
+      "bonus_crystal": 25
+    }
+  },
+  "action_categories": {
+    "砍树": {
+      "power_cost": 1,
+      "actions": {
+        "item_wood_2": {
+          "name": "阔叶树",
+          "probability": 0.31,
+          "items": [
+            {
+              "material_id": "item_wood_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_wood_2",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_wood_3": {
+          "name": "针叶树",
+          "probability": 0.31,
+          "items": [
+            {
+              "material_id": "item_wood_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_wood_3",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_wood_4": {
+          "name": "热带树",
+          "probability": 0.31,
+          "items": [
+            {
+              "material_id": "item_wood_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_4",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_4",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_wood_4",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_wood_5": {
+          "name": "夕桐",
+          "probability": 0.07,
+          "items": [
+            {
+              "material_id": "item_wood_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_5",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_wood_5",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_wood_5",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        }
+      }
+    },
+    "挖矿": {
+      "power_cost": 1,
+      "actions": {
+        "item_mineral_2": {
+          "name": "铜矿",
+          "probability": 0.225,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_mineral_2",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 0.01
+            }
+          ]
+        },
+        "item_mineral_3": {
+          "name": "铁矿",
+          "probability": 0.225,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_mineral_3",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 0.01
+            }
+          ]
+        },
+        "item_mineral_4": {
+          "name": "粘土",
+          "probability": 0.225,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_4",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_4",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_mineral_4",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 0.01
+            }
+          ]
+        },
+        "item_mineral_5": {
+          "name": "玻璃矿",
+          "probability": 0.225,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_5",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_5",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_mineral_5",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 0.01
+            }
+          ]
+        },
+        "item_mineral_6": {
+          "name": "石英矿",
+          "probability": 0.09,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_6",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_6",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_mineral_6",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 0.01
+            }
+          ]
+        },
+        "item_mineral_7": {
+          "name": "钻石矿",
+          "probability": 0.01,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 6,
+              "probability": 1
+            },
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        }
+      }
+    },
+    "开木桶": {
+      "power_cost": 0.5,
+      "actions": {
+        "item_junk_1": {
+          "name": "螺丝",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_1",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_2": {
+          "name": "钉子",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_2",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_3": {
+          "name": "塑料",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_3",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_4": {
+          "name": "马达",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_5": {
+          "name": "电池",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_6": {
+          "name": "灯泡",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_7": {
+          "name": "电路板",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_7",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_8": {
+          "name": "蓝天海玻璃",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_8",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_9": {
+          "name": "流星碎片",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_9",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_10": {
+          "name": "雪之结晶",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_10",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_13": {
+          "name": "蓬松柔软的棉花云",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_13",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_14": {
+          "name": "「世界」晶粒",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_junk_14",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_1": {
+          "name": "心愿石块",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_1",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_2": {
+          "name": "铜",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_2",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_3": {
+          "name": "铁",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_3",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_4": {
+          "name": "粘土",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_4",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_5": {
+          "name": "漂亮的玻璃",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_5",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_6": {
+          "name": "闪耀石英",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_6",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_7": {
+          "name": "钻石",
+          "probability": 0.024,
+          "items": [
+            {
+              "material_id": "item_mineral_7",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_8": {
+          "name": "月光石",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_8",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_9": {
+          "name": "雷光石",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_9",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_10": {
+          "name": "彩虹玻璃",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_mineral_10",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_plant_2": {
+          "name": "顺滑的亚麻",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_plant_2",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_plant_3": {
+          "name": "蓬松的棉花",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_plant_3",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_plant_4": {
+          "name": "花瓣",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_plant_4",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_wood_1": {
+          "name": "心愿木材",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_wood_1",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_wood_2": {
+          "name": "硬质木材",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_wood_2",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_wood_3": {
+          "name": "轻质木材",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_wood_3",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_wood_4": {
+          "name": "粘稠的树液",
+          "probability": 0.034,
+          "items": [
+            {
+              "material_id": "item_wood_4",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_wood_5": {
+          "name": "夕桐",
+          "probability": 0.024,
+          "items": [
+            {
+              "material_id": "item_wood_5",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        }
+      }
+    },
+    "开工具箱": {
+      "power_cost": 0.2,
+      "actions": {
+        "item_junk_1_in_4": {
+          "name": "螺丝",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_2_in_4": {
+          "name": "钉子",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_3_in_4": {
+          "name": "塑料",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_1": {
+          "name": "螺丝",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_2": {
+          "name": "钉子",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_3": {
+          "name": "塑料",
+          "probability": 0.1428571,
+          "items": [
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_1_b": {
+          "name": "螺丝",
+          "probability": 0.04761905,
+          "items": [
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_1",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_2_b": {
+          "name": "钉子",
+          "probability": 0.04761905,
+          "items": [
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_3_b": {
+          "name": "塑料",
+          "probability": 0.04761905,
+          "items": [
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        }
+      }
+    },
+    "挖大地": {
+      "power_cost": 0.5,
+      "actions": {
+        "item_junk_4_in_4": {
+          "name": "马达",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_5_in_4": {
+          "name": "电池",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_6_in_4": {
+          "name": "灯泡",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_7_in_4": {
+          "name": "电路板",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_7",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_7",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_junk_11",
+              "quantity": 1,
+              "probability": 0.25
+            },
+            {
+              "material_id": "item_junk_12",
+              "quantity": 1,
+              "probability": 0.25
+            }
+          ]
+        },
+        "item_junk_4": {
+          "name": "马达",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_4",
+              "quantity": 1,
+              "probability": 0.5
+            }
+          ]
+        },
+        "item_junk_5": {
+          "name": "电池",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_5",
+              "quantity": 1,
+              "probability": 0.5
+            }
+          ]
+        },
+        "item_junk_6": {
+          "name": "灯泡",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_6",
+              "quantity": 1,
+              "probability": 0.5
+            }
+          ]
+        },
+        "item_junk_7": {
+          "name": "电路板",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_7",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_junk_7",
+              "quantity": 1,
+              "probability": 0.5
+            }
+          ]
+        },
+        "item_junk_8": {
+          "name": "蓝天海玻璃",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_8",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_9": {
+          "name": "流星碎片",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_9",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_10": {
+          "name": "雪之结晶",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_10",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_13": {
+          "name": "蓬松柔软的棉花云",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_13",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_junk_14": {
+          "name": "「世界」晶粒",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_junk_14",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_8": {
+          "name": "月光石",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_mineral_8",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_9": {
+          "name": "雷光石",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_mineral_9",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_mineral_10": {
+          "name": "彩虹玻璃",
+          "probability": 0.06,
+          "items": [
+            {
+              "material_id": "item_mineral_10",
+              "quantity": 2,
+              "probability": 1
+            }
+          ]
+        },
+        "item_tone_8": {
+          "name": "空白的音色",
+          "probability": 0.04,
+          "items": [
+            {
+              "material_id": "item_tone_8",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        }
+      }
+    },
+    "拔植物": {
+      "power_cost": 0.2,
+      "actions": {
+        "item_plant_1": {
+          "name": "四叶草",
+          "probability": 0.05,
+          "items": [
+            {
+              "material_id": "item_plant_1",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
+        "item_plant_2": {
+          "name": "顺滑的亚麻",
+          "probability": 0.3,
+          "items": [
+            {
+              "material_id": "item_plant_2",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_plant_2",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_plant_1",
+              "quantity": 1,
+              "probability": 0.1
+            }
+          ]
+        },
+        "item_plant_3": {
+          "name": "蓬松的棉花",
+          "probability": 0.3,
+          "items": [
+            {
+              "material_id": "item_plant_3",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_plant_3",
+              "quantity": 1,
+              "probability": 0.5
+            },
+            {
+              "material_id": "item_plant_1",
+              "quantity": 1,
+              "probability": 0.1
+            }
+          ]
+        },
+        "item_plant_4": {
+          "name": "花瓣",
+          "probability": 0.35,
+          "items": [
+            {
+              "material_id": "item_plant_4",
+              "quantity": 1,
+              "probability": 1
+            },
+            {
+              "material_id": "item_plant_4",
+              "quantity": 1,
+              "probability": 0.5
+            }
+          ]
+        }
+      }
+    }
+  }
+}

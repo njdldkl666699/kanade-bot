@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "RarityEnum": {
+      "description": "卡牌稀有度枚举",
+      "enum": [
+        "rarity_1",
+        "rarity_2",
+        "rarity_3",
+        "rarity_birthday",
+        "rarity_4"
+      ],
+      "title": "RarityEnum",
+      "type": "string"
+    }
+  },
+  "description": "抽卡配置",
+  "properties": {
+    "probabilities": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "default": {},
+      "description": "抽卡稀有度概率配置，键为稀有度枚举，值为对应的概率（0~1之间的浮点数）",
+      "propertyNames": {
+        "$ref": "#/$defs/RarityEnum"
+      },
+      "title": "Probabilities",
+      "type": "object"
+    },
+    "pity_probabilities": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "default": {},
+      "description": "十连必出一张卡牌，此卡牌的稀有度概率配置",
+      "propertyNames": {
+        "$ref": "#/$defs/RarityEnum"
+      },
+      "title": "Pity Probabilities",
+      "type": "object"
+    },
+    "bonus_crystals": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "description": "抽卡稀有度转换为水晶的奖励配置，键为稀有度枚举，值为对应的水晶奖励数",
+      "propertyNames": {
+        "$ref": "#/$defs/RarityEnum"
+      },
+      "title": "Bonus Crystals",
+      "type": "object"
+    }
+  },
+  "title": "GachaConfig",
+  "type": "object"
+}

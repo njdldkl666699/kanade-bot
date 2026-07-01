@@ -1,0 +1,197 @@
+{
+  "$defs": {
+    "CheckInConfig": {
+      "description": "每日签到配置",
+      "properties": {
+        "min_crystal": {
+          "default": 25,
+          "description": "每次获得的最少水晶",
+          "title": "Min Crystal",
+          "type": "integer"
+        },
+        "max_crystal": {
+          "default": 50,
+          "description": "每次获得的最多水晶",
+          "title": "Max Crystal",
+          "type": "integer"
+        },
+        "max_times": {
+          "default": 3,
+          "description": "每天的最大次数",
+          "title": "Max Times",
+          "type": "integer"
+        },
+        "succeed_templates": {
+          "default": [
+            "嗯，{daypart}。获得 {crystal} 水晶…一点点积攒起来呢。",
+            "{daypart}。今天有{crystal} 水晶入账…不多，但也算个小进展。",
+            "啊…{daypart}。+{crystal} 水晶。希望没弄错。",
+            "嗯…{daypart}。轻轻按一下。签到成功，+{crystal} 水晶。",
+            "{daypart}，签到成功。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
+            "{daypart}。啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
+            "{daypart}。好，签好了。今天也加 {crystal} 水晶…慢慢来。"
+          ],
+          "description": "成功的消息模板列表。\n\n- `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语\n- `crystal`: `int` 本次签到获得的水晶数",
+          "items": {
+            "type": "string"
+          },
+          "title": "Succeed Templates",
+          "type": "array"
+        },
+        "already_templates": {
+          "default": [
+            "…看了一下，{daypart}的时间已经签过了。现在水晶是 {total_crystal}。",
+            "嗯…{daypart}，好像之前就签到了。当前水晶：{total_crystal}。",
+            "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
+          ],
+          "description": "当前时间段已经签到的消息模板列表。\n\n- `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语\n- `total_crystal`: `int` 当前水晶总数",
+          "items": {
+            "type": "string"
+          },
+          "title": "Already Templates",
+          "type": "array"
+        },
+        "wrong_daypart_templates": {
+          "default": [
+            "嗯…现在是{daypart}的时间呢。"
+          ],
+          "description": "时间段不正确的消息模板列表。\n\n- `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语",
+          "items": {
+            "type": "string"
+          },
+          "title": "Wrong Daypart Templates",
+          "type": "array"
+        },
+        "max_times_templates": {
+          "default": [
+            "{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"
+          ],
+          "description": "达到最大次数后的消息模板列表。\n\n- `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语\n- `total_crystal`: `int` 当前水晶总数",
+          "items": {
+            "type": "string"
+          },
+          "title": "Max Times Templates",
+          "type": "array"
+        },
+        "first_use_bonus": {
+          "default": 500,
+          "description": "首次使用水晶系统的额外奖励水晶数",
+          "title": "First Use Bonus",
+          "type": "integer"
+        },
+        "first_use_templates": {
+          "default": [
+            "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
+          ],
+          "description": "首次使用水晶系统的消息模板列表。\n\n- `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数",
+          "items": {
+            "type": "string"
+          },
+          "title": "First Use Templates",
+          "type": "array"
+        },
+        "weekly_bonus": {
+          "default": 500,
+          "description": "每周签到满7天的额外奖励水晶数",
+          "title": "Weekly Bonus",
+          "type": "integer"
+        },
+        "weekly_bonus_templates": {
+          "default": [
+            "恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"
+          ],
+          "description": "每周签到满7天的额外奖励消息模板列表。\n\n- `weekly_bonus`: `int` 每周签到满7天的额外奖励水晶数",
+          "items": {
+            "type": "string"
+          },
+          "title": "Weekly Bonus Templates",
+          "type": "array"
+        }
+      },
+      "title": "CheckInConfig",
+      "type": "object"
+    },
+    "HandlerKeyEnum": {
+      "description": "命令处理函数的唯一ID枚举",
+      "enum": [
+        "聊天",
+        "刷新老婆",
+        "随机图",
+        "总结",
+        "抽卡",
+        "十连抽"
+      ],
+      "title": "HandlerKeyEnum",
+      "type": "string"
+    }
+  },
+  "description": "水晶配置",
+  "properties": {
+    "check_in": {
+      "$ref": "#/$defs/CheckInConfig",
+      "default": {
+        "min_crystal": 25,
+        "max_crystal": 50,
+        "max_times": 3,
+        "succeed_templates": [
+          "嗯，{daypart}。获得 {crystal} 水晶…一点点积攒起来呢。",
+          "{daypart}。今天有{crystal} 水晶入账…不多，但也算个小进展。",
+          "啊…{daypart}。+{crystal} 水晶。希望没弄错。",
+          "嗯…{daypart}。轻轻按一下。签到成功，+{crystal} 水晶。",
+          "{daypart}，签到成功。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
+          "{daypart}。啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
+          "{daypart}。好，签好了。今天也加 {crystal} 水晶…慢慢来。"
+        ],
+        "already_templates": [
+          "…看了一下，{daypart}的时间已经签过了。现在水晶是 {total_crystal}。",
+          "嗯…{daypart}，好像之前就签到了。当前水晶：{total_crystal}。",
+          "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
+        ],
+        "wrong_daypart_templates": [
+          "嗯…现在是{daypart}的时间呢。"
+        ],
+        "max_times_templates": [
+          "{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"
+        ],
+        "first_use_bonus": 500,
+        "first_use_templates": [
+          "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
+        ],
+        "weekly_bonus": 500,
+        "weekly_bonus_templates": [
+          "恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"
+        ]
+      }
+    },
+    "handler_consumes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "description": "每个命令的处理函数消耗的水晶，键为唯一ID，值为消耗的水晶数",
+      "propertyNames": {
+        "$ref": "#/$defs/HandlerKeyEnum"
+      },
+      "title": "Handler Consumes",
+      "type": "object"
+    },
+    "handler_consume_failed_templates": {
+      "default": [
+        "嗯…水晶好像不够。需要 {consume} 水晶…还差一些。",
+        "啊…不行。当前水晶有{crystal}，需要 {consume} 水晶…有点可惜。",
+        "系统提示说水晶不够…需要 {consume} 水晶。我这边也没办法跳过呢。",
+        "啊…这个需要 {consume} 水晶。现在还不够，只有{crystal}…再攒几天吧。",
+        "…看来用不了。需要 {consume} 水晶，现在有 {crystal}…慢慢来吧。",
+        "嗯…水晶还差一点呢。需要{consume}水晶，现在只有{crystal}。抱歉，暂时用不了这个功能。"
+      ],
+      "description": "命令处理函数消耗水晶失败的消息模板列表。\n\n- `consume`: `int` 该命令处理函数消耗的水晶数\n- `crystal`: `int` 当前水晶总数",
+      "items": {
+        "type": "string"
+      },
+      "title": "Handler Consume Failed Templates",
+      "type": "array"
+    }
+  },
+  "title": "CrystalConfig",
+  "type": "object"
+}

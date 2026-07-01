@@ -53,3 +53,38 @@ gacha_10 = on_command(
     priority=2,
     block=True,
 )
+
+harvest = on_command(
+    "采集资源",
+    aliases={"harvest", "采集", "挖"},
+    priority=2,
+    block=True,
+)
+
+harvest_all = on_command(
+    "采集全部资源",
+    aliases={"harvest_all", "一键采集", "自动采集"},
+    priority=2,
+    block=True,
+)
+
+harvest_category = on_command(
+    "查看资源采集种类",
+    aliases={"harvest_category", "查看采集种类", "采集种类列表"},
+    priority=2,
+    block=True,
+)
+
+harvest_power = on_command(
+    "我的采集体力",
+    aliases={"harvest_power", "我的体力"},
+    priority=2,
+    block=True,
+)
+
+resume_harvest_power = on_command(
+    "恢复采集体力",
+    aliases={"resume_harvest_power", "恢复体力"},
+    priority=2,
+    block=True,
+)
