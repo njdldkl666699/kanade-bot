@@ -95,35 +95,6 @@
         font-weight: 800;
       }
 
-      .records {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-      }
-
-      .record {
-        padding: 12px 14px;
-        border: 1px solid rgba(73, 96, 78, 0.14);
-        border-radius: 8px;
-        background: #ffffff;
-      }
-
-      .record-title {
-        margin: 0 0 6px;
-        color: #26362d;
-        font-size: 18px;
-        line-height: 1.25;
-        font-weight: 800;
-      }
-
-      .record-meta {
-        margin: 0;
-        color: #68786f;
-        font-size: 15px;
-        line-height: 1.35;
-        font-weight: 700;
-      }
-
       .material-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -226,27 +197,6 @@
         </header>
 
         <div class="content">
-          <section>
-            <h2 class="section-title">采集记录</h2>
-            {% if results %}
-            <div class="records">
-              {% for result in results %}
-              <article class="record">
-                <p class="record-title">
-                  {{ loop.index }}. {{ result.category_name }} -
-                  {{ result.action_name }}
-                </p>
-                <p class="record-meta">
-                  消耗 {{ result.power_cost }} 体力
-                </p>
-              </article>
-              {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty">没有可展示的采集记录。</div>
-            {% endif %}
-          </section>
-
           <section>
             <h2 class="section-title">获得材料</h2>
             {% if materials %}

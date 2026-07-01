@@ -101,6 +101,10 @@ driver = get_driver()
 
 @driver.on_startup
 async def startup():
+    if not rag.enabled:
+        logger.info("RAG功能未启用，跳过初始化。")
+        return
+
     global collection
     embedding_function = _get_embedding_function()
     client = PersistentClient(path=rag.db_dir_path)

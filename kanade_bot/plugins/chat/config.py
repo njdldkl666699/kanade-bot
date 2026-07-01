@@ -18,6 +18,8 @@ from kanade_bot.plugins.model_updater import load_register_model_from_file
 class RAGConfig(BaseModel):
     """RAG相关配置"""
 
+    enabled: bool = False
+    """是否启用RAG功能"""
     query_n_results: int = 3
     """查询返回的相关文档数量"""
     distance_threshold: float = 0.65
