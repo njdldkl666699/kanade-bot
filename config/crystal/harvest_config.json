@@ -15,47 +15,47 @@
     },
     "item_junk_4": {
       "name": "马达",
-      "bonus_crystal": 2
+      "bonus_crystal": 1
     },
     "item_junk_5": {
       "name": "电池",
-      "bonus_crystal": 2
+      "bonus_crystal": 1
     },
     "item_junk_6": {
       "name": "灯泡",
-      "bonus_crystal": 2
+      "bonus_crystal": 1
     },
     "item_junk_7": {
       "name": "电路板",
-      "bonus_crystal": 2
+      "bonus_crystal": 1
     },
     "item_junk_8": {
       "name": "蓝天海玻璃",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_9": {
       "name": "流星碎片",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_10": {
       "name": "雪之结晶",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_11": {
       "name": "最棒斧子的斧刃",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_12": {
       "name": "最棒十字镐的镐尖",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_13": {
       "name": "蓬松柔软的棉花云",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_junk_14": {
       "name": "「世界」晶粒",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_mineral_1": {
       "name": "心愿石块",
@@ -79,23 +79,23 @@
     },
     "item_mineral_6": {
       "name": "闪耀石英",
-      "bonus_crystal": 10
+      "bonus_crystal": 4
     },
     "item_mineral_7": {
       "name": "钻石",
-      "bonus_crystal": 150
+      "bonus_crystal": 50
     },
     "item_mineral_8": {
       "name": "月光石",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_mineral_9": {
       "name": "雷光石",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_mineral_10": {
       "name": "彩虹玻璃",
-      "bonus_crystal": 5
+      "bonus_crystal": 2
     },
     "item_plant_1": {
       "name": "四叶草",
