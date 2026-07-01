@@ -1,5 +1,8 @@
 import asyncio
+import re
 from collections import deque
+from pathlib import Path
+from urllib.parse import unquote, urldefrag, urlsplit
 
 from copilot import CopilotSession
 from copilot.rpc import ModelSwitchToRequest
@@ -23,12 +26,64 @@ from .tool import (
     write_memory,
 )
 
+FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
+MARKDOWN_FILE_LINK_RE = re.compile(r"(?<!!)\[[^\]\n]+\]\((?P<target>[^)\n]+)\)")
+
+
+def _resolve_markdown_link(target: str, base_dir: Path) -> Path | None:
+    target = target.strip()
+    if target.startswith("<") and target.endswith(">"):
+        target = target[1:-1].strip()
+
+    target, _ = urldefrag(target)
+    url_parts = urlsplit(target)
+    if url_parts.scheme or url_parts.netloc:
+        return None
+
+    link_path = Path(unquote(target))
+    if link_path.suffix.lower() != ".md":
+        return None
+
+    if not link_path.is_absolute():
+        link_path = base_dir / link_path
+    return link_path.resolve()
+
+
+def _expand_markdown_file_links(sp: str, base_dir: Path, visited: set[Path]) -> str:
+    def replace_link(match: re.Match[str]) -> str:
+        link_target = _resolve_markdown_link(match.group("target"), base_dir)
+        if not link_target:
+            return match.group(0)
+
+        if link_target in visited:
+            logger.warning(f"系统提示词文件链接循环引用，路径: {link_target}")
+            return match.group(0)
+        if not link_target.is_file():
+            logger.warning(f"系统提示词文件链接不存在，路径: {link_target}")
+            return match.group(0)
+
+        linked_sp = link_target.read_text(encoding="utf-8")
+        return _expand_markdown_file_links(linked_sp, link_target.parent, visited | {link_target})
+
+    return MARKDOWN_FILE_LINK_RE.sub(replace_link, sp)
+
+
+def _build_system_prompt() -> str:
+    sp_path = cfg.system_prompt_file_path
+    if not sp_path.is_file():
+        logger.warning(f"系统提示词文件不存在，路径: {sp_path.absolute()}")
+        return FALLBACK_SYSTEM_PROMPT
+
+    sp = sp_path.read_text(encoding="utf-8")
+    parse_links = cfg.system_prompt_parse_links
+    if not parse_links:
+        return sp
+
+    return _expand_markdown_file_links(sp, sp_path.parent, {sp_path.resolve()})
+
 
 class CopilotSessionManager:
     """Copilot会话管理器，负责管理会话对象、消息缓冲区、会话锁等资源，并提供发送消息、添加缓冲消息、重置会话等功能"""
-
-    SESSION_COMPACTION_RETRY_MAX = 2
-    """发生压缩时最多重发次数"""
 
     tools: list[Tool] = [
         tavily_search,
@@ -53,13 +108,8 @@ class CopilotSessionManager:
     ]
     """工具列表，包含所有可用工具的名称"""
 
-    system_prompt_path = cfg.system_prompt_file_path
-    system_prompt = ""
+    system_prompt = _build_system_prompt()
     """系统提示词"""
-    if not system_prompt_path.is_file():
-        logger.warning(f"系统提示词文件不存在，路径: {system_prompt_path.absolute()}")
-    else:
-        system_prompt = system_prompt_path.read_text(encoding="utf-8")
 
     system_message: SystemMessageConfig = {
         "mode": "replace",

@@ -62,10 +62,18 @@ class ScopedConfig(BaseModel):
     """模型ID，需要支持图片输入"""
     provider: ProviderConfig | None = None
     """模型提供商配置，如果为None则使用Copilot内置模型"""
-    system_prompt_file: str = "Kanade-v3.md"
-    """系统提示词文件名"""
     tavily_api_key: str
     """Tavily API Key"""
+
+    system_prompt_file: str = "Kanade-v3.md"
+    """系统提示词文件名"""
+    system_prompt_parse_links: bool = True
+    """是否解析系统提示词中的文件链接
+
+    如果为True，则会将系统提示词中的Markdown文件链接解析为对应文件的内容，
+    并替换掉链接文本。否则，保留原始链接文本。
+    """
+
     session_prompt_buffer_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
 
@@ -83,27 +91,22 @@ class ScopedConfig(BaseModel):
 
     @property
     def system_prompt_file_path(self) -> Path:
-        """系统提示词文件的路径"""
         return get_plugin_config_file(self.system_prompt_file)
 
     @property
     def configs_file_path(self) -> Path:
-        """聊天配置文件的路径"""
         return get_plugin_config_file(self.configs_file)
 
     @property
     def fail_image_file_path(self) -> Path:
-        """聊天失败时发送的图片的路径"""
         return get_plugin_config_file(self.fail_image_file)
 
     @property
     def memes_dir_path(self) -> Path:
-        """表情包存储目录的路径"""
         return get_plugin_data_file(self.memes_dir)
 
     @property
     def memories_dir_path(self) -> Path:
-        """记忆文件存储目录的路径"""
         return get_plugin_data_file(self.memories_dir)
 
 

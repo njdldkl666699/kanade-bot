@@ -143,8 +143,10 @@ async def send_message_in_chunks(
         attachments.extend(reply_attachments)
 
     # 进行RAG查询，获取相关文档
-    query_str = message.extract_plain_text().strip()
-    rag_docs = query(query_str) if query_str else None
+    rag_docs: list[str] | None = None
+    if cfg.rag.enabled:
+        query_str = message.extract_plain_text().strip()
+        rag_docs = query(query_str) if query_str else None
 
     session_info = await extract_session_info(event, bot)
 
