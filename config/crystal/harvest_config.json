@@ -83,7 +83,7 @@
     },
     "item_mineral_7": {
       "name": "钻石",
-      "bonus_crystal": 50
+      "bonus_crystal": 100
     },
     "item_mineral_8": {
       "name": "月光石",
@@ -99,7 +99,7 @@
     },
     "item_plant_1": {
       "name": "四叶草",
-      "bonus_crystal": 25
+      "bonus_crystal": 40
     },
     "item_plant_2": {
       "name": "顺滑的亚麻",
@@ -115,7 +115,7 @@
     },
     "item_tone_8": {
       "name": "空白的音色",
-      "bonus_crystal": 15
+      "bonus_crystal": 20
     },
     "item_wood_1": {
       "name": "心愿木材",
@@ -135,7 +135,7 @@
     },
     "item_wood_5": {
       "name": "夕桐",
-      "bonus_crystal": 25
+      "bonus_crystal": 40
     }
   },
   "action_categories": {
