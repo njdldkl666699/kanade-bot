@@ -80,7 +80,7 @@ harvest_config = HarvestConfig.model_validate_json(p.read_text(encoding="utf-8")
 
 
 # 蒙特卡洛模拟期望
-num_simulations = 50000
+num_simulations = 100000
 total_bonus_crystal = 0
 total_power_cost = 0
 
