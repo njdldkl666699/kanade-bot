@@ -39,3 +39,6 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
 2. 终端打印的Banner错乱：
    1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
    2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。
+3. 程序长久不启动，或运行到`COPILOT_CLIENT = CopilotClient()`时报错：
+   1. 检查网络连接是否正常，确保可以访问GitHub Releases；
+   2. 参考`.env`关于Copilot SDK的配置项，在启动程序时传入需要的环境变量；

@@ -10,6 +10,7 @@ def _format_langs(langs: list[TranslateLang]) -> str:
     lines = ["查询到以下语言："]
     for lang in langs:
         lines.append(f"- {lang.label} ({lang.code})")
+    lines.append("请使用语言代码重新指定。")
     return "\n".join(lines)
 
 

@@ -38,6 +38,7 @@
     "tool",
     "chat",
     "crystal",
-    "model_updater"
+    "model_updater",
+    "api60s"
   ]
 }
