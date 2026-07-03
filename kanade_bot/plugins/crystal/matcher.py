@@ -84,7 +84,7 @@ harvest_power = on_command(
 
 resume_harvest_power = on_command(
     "恢复采集体力",
-    aliases={"resume_harvest_power", "恢复体力"},
+    aliases={"resume_harvest_power", "恢复体力", "回复体力"},
     priority=2,
     block=True,
 )

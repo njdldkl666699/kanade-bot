@@ -83,7 +83,7 @@
     },
     "item_mineral_7": {
       "name": "钻石",
-      "bonus_crystal": 75
+      "bonus_crystal": 60
     },
     "item_mineral_8": {
       "name": "月光石",
@@ -99,7 +99,7 @@
     },
     "item_plant_1": {
       "name": "四叶草",
-      "bonus_crystal": 35
+      "bonus_crystal": 30
     },
     "item_plant_2": {
       "name": "顺滑的亚麻",
@@ -135,7 +135,7 @@
     },
     "item_wood_5": {
       "name": "夕桐",
-      "bonus_crystal": 35
+      "bonus_crystal": 30
     }
   },
   "action_categories": {
