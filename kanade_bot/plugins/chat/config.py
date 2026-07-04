@@ -67,11 +67,11 @@ class ScopedConfig(BaseModel):
 
     system_prompt_file: str = "Kanade-v3.md"
     """系统提示词文件名"""
-    system_prompt_parse_links: bool = True
-    """是否解析系统提示词中的文件链接
-
-    如果为True，则会将系统提示词中的Markdown文件链接解析为对应文件的内容，
-    并替换掉链接文本。否则，保留原始链接文本。
+    system_prompt_extras: dict[str, str] = {}
+    """系统提示词额外内容，键为占位符，值为替换内容的文件名
+    
+    例如：{"kanade_wiki": "Kanade-wiki.md"}表示在系统提示词中遇到{{kanade_wiki}}时，
+    会将其替换为Kanade-wiki.md文件的内容
     """
 
     session_prompt_buffer_max_size: int = 100
@@ -92,6 +92,10 @@ class ScopedConfig(BaseModel):
     @property
     def system_prompt_file_path(self) -> Path:
         return get_plugin_config_file(self.system_prompt_file)
+
+    @property
+    def system_prompt_extras_paths(self) -> dict[str, Path]:
+        return {k: get_plugin_config_file(f) for k, f in self.system_prompt_extras.items()}
 
     @property
     def configs_file_path(self) -> Path:
