@@ -27,9 +27,10 @@ from .matcher import (
     receive_poke,
     remove_a_schedule,
     send_a_poke,
-    send_emoji_like,
     send_face,
     send_like,
+    set_emoji_like,
+    set_this_emoji_like,
     thunder_link_parse,
 )
 from .mcstatus import render_mc_status
@@ -151,32 +152,55 @@ async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
     await remove_a_schedule.finish(f"已移除定时任务 {name}")
 
 
-@send_emoji_like.handle()
-async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = CommandArg()):
-    message_id = reply.message_id if (reply := event.reply) else event.message_id
-    emoji_id: int | None = None
-
-    for segment in arg_msg:
+def parse_emoji_id_from_message(message: OneBotMessage) -> int | None:
+    """
+    从消息中解析出表情ID。支持以下格式：
+    1. 回复消息中的表情
+    2. 消息中包含的表情
+    3. 消息中包含的单个emoji字符（部分emoji可能为多个码位组成，无法使用）
+    4. 消息中包含的数字（作为表情ID）
+    """
+    for segment in message:
         if segment.type == "face":
-            emoji_id = segment.data["id"]
+            return segment.data["id"]
         if segment.type == "text":
             text: str = segment.data["text"].strip()
             if text.isnumeric():
-                emoji_id = int(text)
+                return int(text)
             if emoji.is_emoji(text):
                 # 部分emoji可能包含变体选择器（如 \ufe0f），需要去除后再转换为码点ID
                 emoji_stripped = text.replace("\ufe0f", "").replace("\ufe0e", "")
-                emoji_id = int.from_bytes(emoji_stripped.encode("utf-32-be"), "big")
+                return int.from_bytes(emoji_stripped.encode("utf-32-be"), "big")
 
+
+@set_emoji_like.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: OneBotMessage = CommandArg()):
+    message_id = reply.message_id if (reply := event.reply) else event.message_id
+    emoji_id = parse_emoji_id_from_message(arg_msg)
     if emoji_id is None:
-        await send_emoji_like.finish(
-            "请提供一个表情或单个emoji字符（部分emoji可能为多个码位组成，无法使用）"
-        )
+        await set_emoji_like.finish("请提供单个表情或emoji（部分emoji为多个码位组成，无法使用）")
 
     try:
         await set_msg_emoji_like(bot, message_id, emoji_id)
     except ActionFailed:
-        await send_emoji_like.finish("设置表情点赞失败，可能是表情ID无效")
+        await set_emoji_like.finish("设置表情回应失败，可能是表情ID无效")
+
+
+@set_this_emoji_like.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent):
+    reply = event.reply
+    if not reply:
+        await set_this_emoji_like.finish("请回复一条消息以设置表情回应")
+
+    message_id = reply.message_id
+    emoji_id = parse_emoji_id_from_message(reply.message)
+    if emoji_id is None:
+        await set_this_emoji_like.finish("回复的消息中没有有效的表情或emoji")
+
+    try:
+        await set_msg_emoji_like(bot, message_id, emoji_id)
+    except ActionFailed:
+        await set_this_emoji_like.finish("设置表情回应失败，可能是表情ID无效")
 
 
 @send_a_poke.handle()
