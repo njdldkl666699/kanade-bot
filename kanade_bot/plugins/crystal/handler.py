@@ -127,11 +127,15 @@ for daypart, matcher in check_ins.items():
         # 添加周缓存
         check_in_weekly_cache.set(platform, user_id, True)
         weekly_check_in_data = check_in_weekly_cache.get_week(platform, user_id)
+
         if weekly_check_in_data is not None and datetime.now().isoweekday() == 7:
             # 如果在周日，检查用户是否全勤
             if len(weekly_check_in_data) == 7 and all(weekly_check_in_data.values()):
                 # 全勤，赠送额外水晶
                 increment_crystal(platform, user_id, cfg.weekly_bonus)
+                # 移除前6天的缓存数据，保留周日的签到记录，防止重复赠送
+                for weekday in range(1, 7):
+                    weekly_check_in_data.pop(weekday, None)
                 template = random.choice(cfg.weekly_bonus_templates)
                 message = template.format(weekly_bonus=cfg.weekly_bonus)
                 await matcher.send(message)

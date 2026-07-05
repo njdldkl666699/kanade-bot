@@ -26,9 +26,9 @@ def init_nonebot():
     nonebot.load_plugin("nonebot_plugin_localstore")
     nonebot.load_plugin("nonebot_plugin_apscheduler")
     nonebot.load_plugin("nonebot_plugin_htmlrender")
-    # nonebot.load_plugin("nonebot_plugin_picstatus_ng")
-    # nonebot.load_plugin("nonebot_plugin_whateat_pic")
-    # nonebot.load_plugin("nonebot_plugin_wordcloud")
+    nonebot.load_plugin("nonebot_plugin_picstatus_ng")
+    nonebot.load_plugin("nonebot_plugin_whateat_pic")
+    nonebot.load_plugin("nonebot_plugin_wordcloud")
 
     nonebot.load_plugins("kanade_bot/plugins")
 
@@ -112,5 +112,5 @@ def patch_foreign_plugins():
 if __name__ == "__main__":
     print(get_kanade())
     init_nonebot()
-    # patch_foreign_plugins()
+    patch_foreign_plugins()
     nonebot.run()
