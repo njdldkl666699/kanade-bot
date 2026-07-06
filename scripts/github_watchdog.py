@@ -25,7 +25,7 @@ class ScopedConfig(BaseModel):
     """GitHub 访问令牌，建议使用具有 repo 访问权限的个人访问令牌（PAT），以避免 API 速率限制"""
     poll_interval: int = 30
     """轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0"""
-    core_command: str = "nb run"
+    core_command: str = "uv sync && nb run"
     """要作为 core process 启动的命令，可包含参数"""
     user_agent: str = "kanade-watchdog"
     """User-Agent 字段，用于标识请求来源"""
