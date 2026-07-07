@@ -1,3 +1,5 @@
+from typing import cast
+
 from nonebot import get_driver, get_plugin_config, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
@@ -7,6 +9,7 @@ from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventMessage, EventPlainText
@@ -63,6 +66,31 @@ async def handle_ciallo_onebot(bot: OneBot):
     await ciallo.finish(OneBotMessageSegmentMeme(ciallo_image_path))
 
 
+def _is_equal_message(msg1: Message | None, msg2: Message | None) -> bool:
+    """判断两条消息是否相同"""
+    if msg1 is None or msg2 is None:
+        return msg1 is msg2
+    if len(msg1) != len(msg2):
+        return False
+    if type(msg1) is not type(msg2):
+        return False
+
+    if isinstance(msg1, OneBotMessage):
+        msg2 = cast(OneBotMessage, msg2)
+        for seg1, seg2 in zip(msg1, msg2):
+            if seg1.type != seg2.type:
+                return False
+
+            if seg1.type == "image":
+                if seg1.data.get("file") != seg2.data.get("file"):
+                    return False
+            # 可以在这里添加更多类型的消息比较逻辑
+            elif seg1.data != seg2.data:
+                return False
+        return True
+    return msg1 == msg2
+
+
 @plus_one.handle()
 async def _(event: Event, message: Message = EventMessage()):
     # 获取触发阈值
@@ -82,7 +110,7 @@ async def _(event: Event, message: Message = EventMessage()):
     # 比对当前消息和上一条消息
     last_message = messages[-1] if messages else None
     # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
-    if message != last_message:
+    if not _is_equal_message(message, last_message):
         messages.clear()
     messages.append(message)  # pyright: ignore[reportArgumentType]
 
