@@ -12,11 +12,11 @@ from nonebot_plugin_localstore import (
 )
 
 DEFAULT_WELCOME_MESSAGE_TEMPLATES = [
-    "嗯…欢迎{nickname}。我是K，请多指教。",
-    "…{nickname}，欢迎你。这里不吵，但如果你需要说话，我会在的。",
-    "欢迎{nickname}。我刚好在泡面…有点失礼，不过很高兴认识你。",
-    "啊，{nickname}来了。不用太拘束，安静待着也可以。",
-    "欢迎{nickname}。我可能话不多，但会一直听着。",
+    "嗯…欢迎{nickname} 。我是K，请多指教。",
+    "…{nickname} ，欢迎你。这里不吵，但如果你需要说话，我会在的。",
+    "欢迎{nickname} 。我刚好在泡面…有点失礼，不过很高兴认识你。",
+    "啊，{nickname} 来了。不用太拘束，安静待着也可以。",
+    "欢迎{nickname} 。我可能话不多，但会一直听着。",
 ]
 
 

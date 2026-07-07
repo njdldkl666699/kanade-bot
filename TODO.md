@@ -11,3 +11,4 @@
 - [x] 抽卡渲染缓存
 - [ ] 画廊功能
 - [x] 生成json schema；修改配置类的model_config，添加use_attribute_docstrings=True，生成的json schema会带上字段的docstring
+- [x] 增强+1

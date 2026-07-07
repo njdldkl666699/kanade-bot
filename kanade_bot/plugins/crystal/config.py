@@ -177,7 +177,7 @@ class CheckInConfig(AttrDocModel):
         "嗯…{daypart}。轻轻按一下。签到成功，+{crystal} 水晶。",
         "{daypart}，签到成功。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
         "{daypart}。啊…显示签到成功了。获得 {crystal} 水晶…先记着吧。",
-        "{daypart}。好，签好了。今天也加 {crystal} 水晶…慢慢来。",
+        "{daypart}，签好了。今天也加 {crystal} 水晶…慢慢来。",
     ]
     """成功的消息模板列表。
     

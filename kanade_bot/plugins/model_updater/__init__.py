@@ -132,6 +132,7 @@ async def update_model(payload: dict[str, Any]):
     except Exception as e:
         raise HTTPException(400, f"数据验证失败: {str(e)}")
 
+    logger.info(f"模型 {model_name} 已更新并保存到文件 {target_item.path}")
     return {"status": "success", "message": f"{model_name} 已更新"}
 
 

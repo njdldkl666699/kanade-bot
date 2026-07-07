@@ -8,9 +8,7 @@ ciallo = on_fullmatch(
     block=True,
 )
 
-
 plus_one = on_message(priority=5, block=False)
-
 
 random_duanzi = on_command(
     "随机段子",
@@ -19,7 +17,6 @@ random_duanzi = on_command(
     block=True,
 )
 
-
 add_a_duanzi = on_command(
     "添加段子",
     aliases={"add_duanzi", "添史"},
@@ -27,14 +24,12 @@ add_a_duanzi = on_command(
     block=True,
 )
 
-
 list_duanzi = on_command(
     "段子列表",
     aliases={"list_duanzi", "史官"},
     priority=2,
     block=True,
 )
-
 
 remove_a_duanzi = on_command(
     "删除段子",
@@ -44,7 +39,6 @@ remove_a_duanzi = on_command(
     block=True,
 )
 
-
 today_waifu = on_command(
     "今日老婆",
     aliases={"今天老婆", "today_waifu"},
@@ -52,14 +46,12 @@ today_waifu = on_command(
     block=True,
 )
 
-
 refresh_waifu = on_command(
     "刷新老婆",
     aliases={"刷新今日老婆", "刷新今天老婆", "refresh_waifu"},
     priority=2,
     block=True,
 )
-
 
 random_waifu = on_command(
     "随机图",

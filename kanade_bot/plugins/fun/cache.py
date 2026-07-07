@@ -4,6 +4,8 @@ from nonebot import get_plugin_config, require
 
 from kanade_bot.utils.cache import UserDailyCache
 from kanade_bot.utils.common import PlatformType
+from nonebot.adapters.console import Message as ConsoleMessage
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 
 from .config import Config
 
@@ -44,3 +46,26 @@ class UserDailyWaifuCache(UserDailyCache[Path]):
 
 
 waifu_cache = UserDailyWaifuCache(Path, cfg.cache_file_path)
+
+
+class GroupMessageCache:
+    """群消息缓存，存储群内的消息列表"""
+
+    def __init__(self):
+        self._console: dict[str, list[ConsoleMessage]] = {}
+        self._onebot: dict[int, list[OneBotMessage]] = {}
+
+    def get_console(self, group_id: str) -> list[ConsoleMessage]:
+        """获取群消息列表，如果不存在则创建一个空列表"""
+        if group_id not in self._console:
+            self._console[group_id] = []
+        return self._console[group_id]
+
+    def get_onebot(self, group_id: int) -> list[OneBotMessage]:
+        """获取群消息列表，如果不存在则创建一个空列表"""
+        if group_id not in self._onebot:
+            self._onebot[group_id] = []
+        return self._onebot[group_id]
+
+
+group_message_cache = GroupMessageCache()

@@ -9,12 +9,12 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
-from nonebot.params import CommandArg, EventPlainText
+from nonebot.params import CommandArg, EventMessage, EventPlainText
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 
-from .cache import waifu_cache
+from .cache import group_message_cache, waifu_cache
 from .config import Config
 from .duanzi import (
     add_duanzi,
@@ -63,54 +63,33 @@ async def handle_ciallo_onebot(bot: OneBot):
     await ciallo.finish(OneBotMessageSegmentMeme(ciallo_image_path))
 
 
-group_message_cache: dict[str | int, list[str]] = {}
-
-
 @plus_one.handle()
-async def _(event: Event):
+async def _(event: Event, message: Message = EventMessage()):
     # 获取触发阈值
     threshold = cfg.plus_one_threshold
     if threshold <= 0:
         return
 
     # 仅处理群聊消息
-    group_id = None
+    messages = None
     if isinstance(event, ConsolePublicMessageEvent):
-        group_id = event.channel.id
+        messages = group_message_cache.get_console(event.channel.id)
     elif isinstance(event, OneBotGroupMessageEvent):
-        group_id = event.group_id
+        messages = group_message_cache.get_onebot(event.group_id)
     else:
         return
 
-    # 获取群聊记录
-    if group_id not in group_message_cache:
-        group_message_cache[group_id] = []
-    cached_messages = group_message_cache[group_id]
-
-    # 获取当前信息
-    message = event.get_message()
-    if len(message) != 1 or not message[0].is_text():
-        cached_messages.clear()
-        return
-
-    # 仅处理一段文本消息
-    new_text: str | None = message[0].data.get("text")
-    if not new_text:
-        return
-
     # 比对当前消息和上一条消息
-    last_text = cached_messages[-1] if cached_messages else None
+    last_message = messages[-1] if messages else None
     # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
-    if new_text != last_text:
-        cached_messages.clear()
-    cached_messages.append(new_text)
+    if message != last_message:
+        messages.clear()
+    messages.append(message)  # pyright: ignore[reportArgumentType]
 
     # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
-    if len(cached_messages) >= threshold:
-        await plus_one.send(new_text)
-        cached_messages.clear()
-
-    group_message_cache[group_id] = cached_messages
+    if len(messages) >= threshold:
+        await plus_one.send(message)
+        messages.clear()
 
 
 @random_duanzi.handle()
