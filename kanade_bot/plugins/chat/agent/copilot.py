@@ -60,7 +60,7 @@ async def _get_image_caption(attachment: Attachment) -> str | None:
 
     match event.data:
         case AssistantMessageData() as data:
-            return data.content
+            return data.content.strip()
 
 
 def _build_system_prompt() -> str:

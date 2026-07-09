@@ -100,19 +100,11 @@ async def parse_onebot_message_for_ai(
         forward_id: str = forward_message.data["id"]
         fwd_msg_events: list[dict[str, Any]] = []
 
-        if "content" in forward_message.data:
-            # 情况一：有content字段，直接视作fwd_msg_events使用
-            # 这种情况我测试下是message是从reply中拿到的，content里直接是转发消息事件列表
-            # 这种情况可以拿到嵌套合并转发的消息事件
-            fwd_msg_events = forward_message.data["content"]
-        else:
-            # 如果message直接是event.message，就没有content字段
-            # 这种情况下无法获取嵌套合并转发。
-            try:
-                forward_response = await bot.get_forward_msg(id=forward_id)
-                fwd_msg_events = forward_response["messages"]
-            except ActionFailed as e:
-                logger.warning("获取转发消息失败: {}", e)
+        try:
+            forward_response = await bot.get_forward_msg(id=forward_id)
+            fwd_msg_events = forward_response["messages"]
+        except ActionFailed as e:
+            logger.warning("获取转发消息失败: {}", e)
 
         text_parts.append(f"<forward id={forward_id}>")
 
