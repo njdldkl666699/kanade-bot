@@ -24,6 +24,13 @@ mc_status = on_command(
     block=True,
 )
 
+mc_skin = on_command(
+    "我的世界皮肤",
+    aliases={"mcskin", "mc_skin", "玩家皮肤"},
+    priority=2,
+    block=True,
+)
+
 list_schedules = on_command(
     "定时任务列表",
     aliases={"schedule_list"},

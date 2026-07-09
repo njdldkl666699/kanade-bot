@@ -18,10 +18,12 @@ from nonebot.typing import T_State
 from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
+from .client import client
 from .config import preset_reaction_cfg
 from .matcher import (
     add_a_schedule,
     list_schedules,
+    mc_skin,
     mc_status,
     pjsk_skill_multiplier,
     receive_poke,
@@ -105,6 +107,33 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     image_path = get_plugin_cache_file("mc_status.png")
     image_path.write_bytes(image)
     await mc_status.finish("服务器状态已保存到 mc_status.png")
+
+
+@mc_skin.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    username = arg_msg.extract_plain_text().strip()
+    if not username:
+        await mc_skin.finish("请提供玩家用户名")
+
+    resp = await client.get(f"https://api.mojang.com/users/profiles/minecraft/{username}")
+    data = resp.json()
+    if resp.status_code == 404:
+        await mc_skin.finish(data["errorMessage"])
+    if resp.status_code != 200:
+        await mc_skin.finish("查询UUID失败")
+    uuid = data["id"]
+
+    body_data = await client.get(f"https://skins.manacube.com/renders/body/{uuid}?scale=10&overlay")
+    if body_data.status_code != 200:
+        await mc_skin.finish("获取皮肤失败")
+
+    info_message = f"玩家: {username}\nUUID: {uuid}"
+    if isinstance(event, OneBotMessageEvent):
+        message = OneBotMessage(info_message)
+        message += MessageSegment.image(body_data.content)
+        await mc_skin.finish(message)
+
+    await mc_skin.finish(info_message)
 
 
 @list_schedules.handle()
