@@ -123,7 +123,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         await mc_skin.finish("查询UUID失败")
     uuid = data["id"]
 
-    body_data = await client.get(f"https://skins.manacube.com/renders/body/{uuid}?scale=10&overlay")
+    body_data = await client.get(f"https://mc-api.io/render/full/{username}/java?size=256")
     if body_data.status_code != 200:
         await mc_skin.finish("获取皮肤失败")
 
