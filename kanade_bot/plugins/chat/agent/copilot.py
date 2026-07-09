@@ -25,6 +25,39 @@ from .tool import (
 
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
+IMAGE_CAPTION_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内容转述为文字描述。
+
+请充分查看、分析和理解图片内容，详细地描述图片内容中的场景、元素等信息，避免遗漏重要信息。
+
+输出要求：直接输出图片的文字描述，不要包含任何额外的解释或说明。
+"""
+
+
+async def _get_image_caption(attachment: Attachment) -> str:
+    """使用图片转述模型获取图片的文字描述"""
+    session = await COPILOT_CLIENT.create_session(
+        model=cfg.image_caption_model,
+        provider=cfg.image_caption_provider,
+        system_message={
+            "mode": "replace",
+            "content": IMAGE_CAPTION_SYSTEM_PROMPT,
+        },
+    )
+    async with session:
+        event = await session.send_and_wait(
+            prompt="请描述这张图片的内容。",
+            attachments=[attachment],
+            timeout=30,
+        )
+
+    if not event:
+        logger.warning(f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}")
+        return ""
+    match event.data:
+        case AssistantMessageData() as data:
+            return data.content
+    return ""
+
 
 def _build_system_prompt() -> str:
     sp_path = cfg.system_prompt_file_path
@@ -170,12 +203,13 @@ class CopilotSessionManager:
                     logger.info("发送给模型的消息为空，未触发生成")
                     return None
 
-            send_prompt = self._build_send_prompt(
+            send_prompt = await self._build_send_prompt(
                 session_info,
                 prompt,
                 rag_docs=rag_docs,
                 buffered_messages=buffered_messages,
                 reply_text=reply_text,
+                attachments=attachments,
             )
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
@@ -198,18 +232,16 @@ class CopilotSessionManager:
             match session_event.data:
                 case AssistantMessageData() as data:
                     return data.content
-                case data:
-                    logger.warning(f"会话{session_id}的响应内容不是文本，数据: {data}")
-                    return None
 
     @staticmethod
-    def _build_send_prompt(
+    async def _build_send_prompt(
         session_info: SessionInfo,
         prompt: str,
         *,
         rag_docs: list[str] | None = None,
         buffered_messages: deque[str] | None = None,
         reply_text: str | None = None,
+        attachments: list[Attachment] | None = None,
     ) -> str:
         """构建发送给模型的完整提示词"""
         prompt_parts: list[str] = []
@@ -218,19 +250,29 @@ class CopilotSessionManager:
             prompt_parts.append(f"$ 现在的会话在群聊{group_info}中。")
 
         if rag_docs:
-            prompt_parts.append("$ 检索到可能相关的文档：")
+            prompt_parts.append("\n$ 检索到可能相关的文档：")
             prompt_parts.extend(rag_docs)
         if buffered_messages:
-            prompt_parts.append("$ 下面是之前的消息缓冲区中的消息：")
+            prompt_parts.append("\n$ 下面是之前的消息缓冲区中的消息：")
             prompt_parts.extend(buffered_messages)
         if reply_text:
-            prompt_parts.append("$ 用户引用了之前的消息：")
+            prompt_parts.append("\n$ 用户引用了之前的消息：")
             prompt_parts.append(reply_text)
 
+        if cfg.image_caption_model and attachments:
+            prompt_parts.append("\n$ 下面是这次的用户消息中的图片附件的文字转述：")
+            image_captions: list[str] = []
+            for attachment in attachments:
+                caption = await _get_image_caption(attachment)
+                if not caption:
+                    continue
+                image_captions.append(f"图片{attachment.get('displayName')}：{caption}")
+            prompt_parts.extend(image_captions)
+
         if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-            prompt = f"{user_info} ：{prompt}"
+            prompt = f"{user_info}：{prompt}"
         if prompt:
-            prompt_parts.append("$ 下面是这次的用户消息：")
+            prompt_parts.append("\n$ 下面是这次的用户消息：")
             prompt_parts.append(prompt)
 
         return "\n".join(prompt_parts).strip()

@@ -13,4 +13,4 @@
 - [x] 生成json schema；修改配置类的model_config，添加use_attribute_docstrings=True，生成的json schema会带上字段的docstring
 - [x] 增强+1
 - [x] mcskin
-- [ ] 为chat添加图片转述配置
+- [x] 为chat添加图片转述配置

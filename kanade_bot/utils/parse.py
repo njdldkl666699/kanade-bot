@@ -123,7 +123,7 @@ async def parse_onebot_message_for_ai(
             # 附带发送者信息
             session_info = await extract_session_info(e, bot)
             if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-                text = f"{user_info} : {text}"
+                text = f"{user_info}：{text}"
 
             text_parts.append(text)
             attachments.extend(fwd_attachments)

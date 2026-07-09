@@ -43,7 +43,7 @@ async def record_recv_msg(event: OneBotMessageEvent | ConsoleMessageEvent):
     message_str, _ = await parse_message_for_ai(event)
     session_info = await extract_session_info(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        message_str = f"$ {user_info} : {message_str}"
+        message_str = f"$ {user_info}：{message_str}"
 
     summarizer.add_message(session_info.session_id, message_str)
 

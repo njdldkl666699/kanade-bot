@@ -59,9 +59,16 @@ class RAGConfig(BaseModel):
 
 class ScopedConfig(BaseModel):
     model: str = "gpt-5-mini"
-    """模型ID，需要支持图片输入"""
+    """模型ID"""
     provider: ProviderConfig | None = None
     """模型提供商配置，如果为None则使用Copilot内置模型"""
+    image_caption_model: str | None = None
+    """图片转述模型，如果为None则不使用
+    
+    如果不使用图片转述，且主模型不支持图片输入，则无法处理图片消息
+    """
+    image_caption_provider: ProviderConfig | None = None
+    """图片转述模型提供商配置，如果为None则使用Copilot内置模型"""
     tavily_api_key: str
     """Tavily API Key"""
 
