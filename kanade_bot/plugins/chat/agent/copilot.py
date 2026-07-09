@@ -221,7 +221,7 @@ class CopilotSessionManager:
             try:
                 session_event = await session.send_and_wait(
                     send_prompt,
-                    attachments=attachments,
+                    attachments=attachments if cfg.image_caption_model is None else None,
                     timeout=timeout,
                 )
             finally:
