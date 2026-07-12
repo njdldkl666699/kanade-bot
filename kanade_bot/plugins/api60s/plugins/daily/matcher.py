@@ -1,4 +1,8 @@
-from nonebot import on_command
+from nonebot import on_command, require
+
+require("command_counter")
+
+from kanade_bot.plugins.command_counter import register_matcher
 
 daily60s = on_command(
     "每天60秒读懂世界",
@@ -6,7 +10,7 @@ daily60s = on_command(
     aliases={"60s", "60秒", "日报"},
     block=True,
 )
-
+register_matcher(daily60s, "每天60秒读懂世界")
 
 ai_news = on_command(
     "AI资讯快报",
@@ -14,7 +18,7 @@ ai_news = on_command(
     priority=2,
     block=True,
 )
-
+register_matcher(ai_news, "AI资讯快报")
 
 epic = on_command(
     "Epic",
@@ -22,7 +26,7 @@ epic = on_command(
     priority=2,
     block=True,
 )
-
+register_matcher(epic, "Epic游戏")
 
 it_news = on_command(
     "实时IT资讯",
@@ -30,3 +34,4 @@ it_news = on_command(
     priority=2,
     block=True,
 )
+register_matcher(it_news, "实时IT资讯")

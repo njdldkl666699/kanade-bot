@@ -39,6 +39,7 @@
     "chat",
     "crystal",
     "model_updater",
-    "api60s"
+    "api60s",
+    "command_counter"
   ]
 }

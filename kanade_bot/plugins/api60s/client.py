@@ -5,4 +5,4 @@ from .config import Config
 
 cfg = get_plugin_config(Config)
 
-client = AsyncClient(base_url=cfg.api60s_base_url)
+client = AsyncClient(base_url=cfg.api60s_base_url, timeout=20)

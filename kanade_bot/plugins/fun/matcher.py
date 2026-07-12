@@ -1,5 +1,9 @@
-from nonebot import on_command, on_fullmatch, on_message
+from nonebot import on_command, on_fullmatch, on_message, require
 from nonebot.permission import SUPERUSER
+
+require("command_counter")
+
+from kanade_bot.plugins.command_counter import register_matcher
 
 ciallo = on_fullmatch(
     ("Ciallo", "Ciallo～(∠・ω< )⌒☆", "Ciallo～(∠・ω< )⌒★"),
@@ -7,6 +11,7 @@ ciallo = on_fullmatch(
     ignorecase=True,
     block=True,
 )
+register_matcher(ciallo, "Ciallo")
 
 plus_one = on_message(priority=5, block=False)
 
@@ -16,6 +21,7 @@ random_duanzi = on_command(
     priority=2,
     block=True,
 )
+register_matcher(random_duanzi, "随机段子")
 
 add_a_duanzi = on_command(
     "添加段子",
@@ -23,6 +29,7 @@ add_a_duanzi = on_command(
     priority=2,
     block=True,
 )
+register_matcher(add_a_duanzi, "添加段子")
 
 list_duanzi = on_command(
     "段子列表",
@@ -30,6 +37,7 @@ list_duanzi = on_command(
     priority=2,
     block=True,
 )
+register_matcher(list_duanzi, "段子列表")
 
 remove_a_duanzi = on_command(
     "删除段子",
@@ -38,6 +46,7 @@ remove_a_duanzi = on_command(
     permission=SUPERUSER,
     block=True,
 )
+register_matcher(remove_a_duanzi, "删除段子")
 
 today_waifu = on_command(
     "今日老婆",
@@ -45,6 +54,7 @@ today_waifu = on_command(
     priority=2,
     block=True,
 )
+register_matcher(today_waifu, "今日老婆")
 
 refresh_waifu = on_command(
     "刷新老婆",
@@ -52,6 +62,7 @@ refresh_waifu = on_command(
     priority=2,
     block=True,
 )
+register_matcher(refresh_waifu, "刷新老婆")
 
 random_waifu = on_command(
     "随机图",
@@ -59,3 +70,4 @@ random_waifu = on_command(
     priority=2,
     block=True,
 )
+register_matcher(random_waifu, "随机图")

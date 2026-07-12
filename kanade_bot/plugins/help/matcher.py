@@ -1,6 +1,10 @@
-from nonebot import on_command, on_notice
+from nonebot import on_command, on_notice, require
 
 from kanade_bot.utils.common import superuser_onebot_private_permission
+
+require("command_counter")
+
+from kanade_bot.plugins.command_counter import register_matcher
 
 help_command = on_command(
     "帮助",
@@ -8,13 +12,13 @@ help_command = on_command(
     priority=2,
     block=True,
 )
-
+register_matcher(help_command, "帮助")
 
 offline_notice = on_notice(
     priority=1,
     block=False,
 )
-
+register_matcher(offline_notice, "下线通知")
 
 execute_command = on_command(
     "execute",
@@ -23,9 +27,10 @@ execute_command = on_command(
     permission=superuser_onebot_private_permission,
     block=True,
 )
-
+register_matcher(execute_command, "execute")
 
 welcome = on_notice(
     priority=1,
     block=False,
 )
+register_matcher(welcome, "欢迎新成员")

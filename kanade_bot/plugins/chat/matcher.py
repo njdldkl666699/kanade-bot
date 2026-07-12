@@ -1,8 +1,12 @@
-from nonebot import on_command, on_message
+from nonebot import on_command, on_message, require
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
 from kanade_bot.utils.common import group_permission, not_to_me
+
+require("command_counter")
+
+from kanade_bot.plugins.command_counter import register_matcher
 
 chat = on_message(
     rule=to_me() & group_permission,
@@ -24,6 +28,7 @@ chat_reset = on_command(
     permission=SUPERUSER,
     block=True,
 )
+register_matcher(chat_reset, "重置会话")
 
 chat_ban = on_command(
     "聊天拉黑",
@@ -32,6 +37,7 @@ chat_ban = on_command(
     permission=SUPERUSER,
     block=True,
 )
+register_matcher(chat_ban, "聊天拉黑")
 
 chat_unban = on_command(
     "聊天解除拉黑",
@@ -40,6 +46,7 @@ chat_unban = on_command(
     permission=SUPERUSER,
     block=True,
 )
+register_matcher(chat_unban, "聊天解除拉黑")
 
 list_memes = on_command(
     "表情包列表",
@@ -47,6 +54,7 @@ list_memes = on_command(
     priority=2,
     block=True,
 )
+register_matcher(list_memes, "表情包列表")
 
 add_meme = on_command(
     "添加表情",
@@ -55,3 +63,4 @@ add_meme = on_command(
     permission=SUPERUSER,
     block=True,
 )
+register_matcher(add_meme, "添加表情")

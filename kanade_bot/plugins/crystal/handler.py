@@ -1,3 +1,4 @@
+from pathlib import Path
 import random
 from datetime import datetime
 from io import BytesIO
@@ -263,6 +264,11 @@ async def _(event: Event):
     increment_crystal(platform, user_id, total_bonus)
 
     if isinstance(event, ConsoleEvent):
+        ### DEBUG
+        cards_image = await render_gacha_10_cards(cards)
+        Path("gacha_10_result.png").write_bytes(cards_image)
+        ###
+
         messages = ["你进行了十连抽！"]
         for i, card in enumerate(cards, start=1):
             messages.append(

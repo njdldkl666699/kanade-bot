@@ -133,6 +133,20 @@
 
 - `/总结 <消息条数>`
 
+# 命令统计
+
+- `/命令排行 [时间段]`
+
+# 状态
+
+来自插件`nonebot-plugin-picstatus-ng`。
+
+## `/状态`
+
+别名：`/status`
+
+查看当前Bot运行的各种状态信息。
+
 # 今天吃什么
 
 来自插件`nonebot-plugin-whateat-pic`。

@@ -1,4 +1,8 @@
-from nonebot import on_command
+from nonebot import on_command, require
+
+require("command_counter")
+
+from kanade_bot.plugins.command_counter import register_matcher
 
 weather = on_command(
     "实时天气",
@@ -7,7 +11,7 @@ weather = on_command(
     block=True,
     force_whitespace=True,
 )
-
+register_matcher(weather, "实时天气")
 
 weather_forecast = on_command(
     "天气预报",
@@ -15,7 +19,7 @@ weather_forecast = on_command(
     priority=2,
     block=True,
 )
-
+register_matcher(weather_forecast, "天气预报")
 
 fanyi = on_command(
     "翻译",
@@ -23,7 +27,7 @@ fanyi = on_command(
     priority=2,
     block=True,
 )
-
+register_matcher(fanyi, "翻译")
 
 moyu = on_command(
     "摸鱼日报",
@@ -31,3 +35,4 @@ moyu = on_command(
     priority=2,
     block=True,
 )
+register_matcher(moyu, "摸鱼日报")

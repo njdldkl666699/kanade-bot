@@ -48,7 +48,7 @@ async def _get_image_caption(attachment: Attachment) -> str | None:
             event = await session.send_and_wait(
                 prompt="请描述这张图片的内容。",
                 attachments=[attachment],
-                timeout=120,
+                timeout=180,
             )
     except Exception as e:
         logger.exception("获取图片转述时发生错误: {}", e)
