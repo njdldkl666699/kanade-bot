@@ -18,7 +18,6 @@ offline_notice = on_notice(
     priority=1,
     block=False,
 )
-register_matcher(offline_notice, "下线通知")
 
 execute_command = on_command(
     "execute",
@@ -33,4 +32,3 @@ welcome = on_notice(
     priority=1,
     block=False,
 )
-register_matcher(welcome, "欢迎新成员")
