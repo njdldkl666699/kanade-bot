@@ -1,9 +1,9 @@
 import asyncio
 from collections import deque
+from typing import Any
 
 from copilot import CopilotSession
-from copilot.rpc import ModelSwitchToRequest
-from copilot.session import Attachment, PermissionHandler, SystemMessageConfig
+from copilot.session import Attachment, PermissionHandler
 from copilot.session_events import AssistantMessageData
 from copilot.tools import Tool
 from nonebot import logger
@@ -112,20 +112,25 @@ class CopilotSessionManager:
     """系统提示词"""
     logger.debug(f"系统提示词:\n{system_prompt}")
 
-    system_message: SystemMessageConfig = {
-        "mode": "replace",
-        "content": system_prompt,
-    }
+    @classmethod
+    def session_config(cls, session_info: SessionInfo) -> dict[str, Any]:
+        """返回会话配置字典"""
+        session_system_prompt = cls.system_prompt
+        if group_info := build_sender_info(session_info.group_name, session_info.group_id):
+            session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
 
-    SESSION_CONFIG = {
-        "on_permission_request": PermissionHandler.approve_all,
-        "model": cfg.model,
-        "reasoning_effort": "medium",
-        "tools": tools,
-        "available_tools": available_tools,
-        "system_message": system_message,
-        "provider": cfg.provider,
-    }
+        return {
+            "on_permission_request": PermissionHandler.approve_all,
+            "model": cfg.model,
+            "provider": cfg.provider,
+            "reasoning_effort": "medium",
+            "tools": cls.tools,
+            "available_tools": cls.available_tools,
+            "system_message": {
+                "mode": "replace",
+                "content": session_system_prompt,
+            },
+        }
 
     def __init__(self):
         self._sessions: dict[str, CopilotSession] = {}
@@ -140,29 +145,21 @@ class CopilotSessionManager:
         self._global_lock = asyncio.Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
 
-    async def _resume_or_create_session(self, session_id: str) -> tuple[CopilotSession, bool]:
+    async def _resume_or_create_session(
+        self,
+        session_id: str,
+        session_info: SessionInfo,
+    ) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
+        session_config = self.session_config(session_info)
         new_session = False
         try:
-            session = await COPILOT_CLIENT.resume_session(session_id, **self.SESSION_CONFIG)
+            session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
-            session = await COPILOT_CLIENT.create_session(
-                session_id=session_id, **self.SESSION_CONFIG
-            )
+            session = await COPILOT_CLIENT.create_session(session_id=session_id, **session_config)
             new_session = True
-
-        current_model = await session.rpc.model.get_current()
-        if current_model.model_id != cfg.model:
-            logger.warning(
-                "会话{}模型设置失败，期望{}，但实际是{}，请检查模型是否可用或名称是否正确，将设置为gpt-4.1",
-                session_id,
-                cfg.model,
-                current_model.model_id,
-            )
-            await session.rpc.model.switch_to(ModelSwitchToRequest("gpt-4.1"))
-
         return session, new_session
 
     async def send_and_wait(
@@ -186,7 +183,9 @@ class CopilotSessionManager:
 
             new_session = False
             if not session:
-                session, new_session = await self._resume_or_create_session(session_id)
+                session, new_session = await self._resume_or_create_session(
+                    session_id, session_info
+                )
                 async with self._global_lock:
                     self._sessions[session_id] = session
 
@@ -249,9 +248,6 @@ class CopilotSessionManager:
     ) -> str:
         """构建发送给模型的完整提示词"""
         prompt_parts: list[str] = []
-
-        if group_info := build_sender_info(session_info.group_name, session_info.group_id):
-            prompt_parts.append(f"$ 现在的会话在群聊{group_info}中。")
 
         if rag_docs:
             prompt_parts.append("\n$ 检索到可能相关的文档：")
