@@ -41,11 +41,11 @@ def save_pictures(name: str, pic_paths: list[Path]):
     gallery_name_data.save_to_file()
 
 
-GALLERY_COLUMNS = 4
-THUMBNAIL_SIZE = (200, 150)
+GALLERY_COLUMNS = 10
+THUMBNAIL_SIZE = (100, 75)
 GALLERY_PADDING = 16
-GALLERY_GAP = 12
-LABEL_HEIGHT = 36
+GALLERY_GAP = 8
+LABEL_HEIGHT = 24
 
 
 def render_gallery_thumbnails(pic_files: list[Path]) -> bytes:
