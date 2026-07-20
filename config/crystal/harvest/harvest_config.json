@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/generated/HarvestConfig.json",
+  "$schema": "../../../schemas/generated/HarvestConfig.json",
   "materials": {
     "item_junk_1": {
       "name": "螺丝",

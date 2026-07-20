@@ -9,9 +9,11 @@
   - [x] 挖矿（烤森），自动挖矿（？），实现handler参数解析、harvest逻辑实现
 - [x] 添加抽卡功能，消耗水晶；抽到后回收成水晶
 - [x] 抽卡渲染缓存
-- [ ] 画廊功能
 - [x] 生成json schema；修改配置类的model_config，添加use_attribute_docstrings=True，生成的json schema会带上字段的docstring
 - [x] 增强+1
 - [x] mcskin
 - [x] 为chat添加图片转述配置
 - [x] 命令次数统计
+- [x] 画廊功能
+- [ ] 画廊扩展，pjsk卡牌图片
+- [x] 优化crystal插件结构，子插件

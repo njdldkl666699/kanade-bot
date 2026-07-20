@@ -1,8 +1,6 @@
-from base64 import b64encode
 from typing import Any, SupportsIndex
 
 from copilot.session import Attachment
-from httpx import AsyncClient
 from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -17,21 +15,23 @@ from .session import extract_session_info
 def parse_arg_message(
     arg_str: str,
     mappings: dict[str, type] | None = None,
+    *,
+    sep: str | None = None,
     maxsplit: SupportsIndex = -1,
 ) -> dict[str, Any]:
     """解析命令参数消息
 
-    参数:
+    Args:
         arg_str: 命令参数消息
         mappings: 可选的参数名称映射字典，键为参数名称，值为参数类型
+        sep: 分割参数消息的分隔符，默认为 None（按空白字符分割）
         maxsplit: 分割参数消息时的最大分割次数，默认为 -1（不限制）
 
-    返回:
-        dict: 解析后的参数字典，键为参数名称，值为参数值；\
+    Returns:
+        dict: 解析后的参数字典，键为参数名称，值为参数值；\n
             如果参数值无法转换为指定类型或缺失，则值为 None
 
-    示例:
-
+    Examples:
         >>> parse_arg_message(Message("北京 3"), {"query": str, "days": int})
         {"query": "北京", "days": 3}
         >>> parse_arg_message(Message("上海"), {"query": str, "days": int})
@@ -41,7 +41,7 @@ def parse_arg_message(
     if not mappings:
         return {}
 
-    args = arg_str.strip().split(maxsplit=maxsplit)
+    args = arg_str.strip().split(sep=sep, maxsplit=maxsplit)
     arg_dict: dict[str, Any] = {}
 
     for index, (name, value_type) in enumerate(mappings.items()):
@@ -82,13 +82,11 @@ def build_sender_info(name: str | None, id: str | None) -> str:
 
 async def parse_onebot_message_for_ai(
     event_or_reply: OneBotMessageEvent | Reply,
-    client: AsyncClient | None = None,
     bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
     """解析OneBot消息，返回AI可读的文本和附件列表
 
-    :param client: 用于请求图片的HTTP客户端，如果需要提取图片附件则必须提供
-    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息
+    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
     """
     message = event_or_reply.message
     text_parts: list[str] = []
@@ -119,7 +117,7 @@ async def parse_onebot_message_for_ai(
         for fwd_msg_event in fwd_msg_events:
             fwd_msg_event["post_type"] = "message"
             e = OneBotMessageEvent.model_validate(fwd_msg_event)
-            text, fwd_attachments = await parse_onebot_message_for_ai(e, client, bot)
+            text, fwd_attachments = await parse_onebot_message_for_ai(e, bot)
 
             # 附带发送者信息
             session_info = await extract_session_info(e, bot)
@@ -139,18 +137,15 @@ async def parse_onebot_message_for_ai(
         if segment.type != "image":
             continue
 
+        file = segment.data["file"]
         image: Attachment = {
-            "type": "blob",
-            "data": "",
-            "mimeType": "application/octet-stream",
-            "displayName": segment.data["file"] or "image.png",
+            "type": "file",
+            "path": "",
+            "displayName": file or "image.png",
         }
-        if client:
-            url: str = segment.data["url"]
-            response = await client.get(url)
-            response.raise_for_status()
-            image["data"] = b64encode(response.content).decode()
-            image["mimeType"] = response.headers.get("Content-Type", "application/octet-stream")
+        if bot:
+            r = await bot.get_image(file=file)
+            image["path"] = r["file"]
 
         # 把前半段内容转为文字
         splitted_segments = message[:i]
@@ -202,13 +197,11 @@ async def parse_onebot_message_for_ai(
 
 async def parse_message_for_ai(
     event: Event,
-    client: AsyncClient | None = None,
     bot: OneBot | None = None,
 ) -> tuple[str, list[Attachment]]:
     """解析消息，返回AI可读的文本和附件列表
 
-    :param client: 用于请求图片的HTTP客户端，如果需要提取图片附件则必须提供
-    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息
+    :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
     """
     prompt: str = ""
     attachments: list[Attachment] = []
@@ -219,6 +212,6 @@ async def parse_message_for_ai(
     ## OneBot消息
     # 处理发送消息
     if isinstance(event, OneBotMessageEvent):
-        prompt, attachments = await parse_onebot_message_for_ai(event, client, bot)
+        prompt, attachments = await parse_onebot_message_for_ai(event, bot)
 
     return prompt, attachments

@@ -1,27 +1,28 @@
-import base64
 import random
-from io import BytesIO
 from pathlib import Path
 
-from nonebot import get_driver, logger, require
-from PIL import Image
+from nonebot import get_driver, logger
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from pydantic import BaseModel, RootModel
 from pydantic.alias_generators import to_camel
 
-from .config import cfg as scoped_cfg
+from .config import cfg
 from .enum import CHARACTERS, AttrEnum, RarityEnum
-
-require("nonebot_plugin_htmlrender")
-
-from nonebot_plugin_htmlrender import template_to_pic
-
-cfg = scoped_cfg.gacha
 
 CARD_SIZE = (940, 530)
 ATTRIBUTE_ICON_POSITION = (815, 0)
 RARITY_ICON_X = 33
 RARITY_ICON_BOTTOM_MARGIN = 22
 RARITY_ICON_SPACING = 66
+GACHA_COLUMNS = 5
+GACHA_ROWS = 2
+GACHA_THUMBNAIL_SIZE = (320, 180)
+GACHA_PADDING = 28
+GACHA_GAP = 18
+GACHA_BACKGROUND = "#f4f0f7"
+GACHA_SLOT_RADIUS = 8
+GACHA_SHADOW_OFFSET = 8
+GACHA_SHADOW_BLUR = 10
 
 
 class Card(BaseModel):
@@ -84,7 +85,7 @@ def card_file_name(trained: bool = False) -> str:
 
 
 def render_composed_card(card: Card) -> Image.Image:
-    """渲染一张卡牌，返回PIL Image对象"""
+    """渲染一张卡牌"""
     show_trained = card.card_rarity_type.can_train and cfg.show_trained
     render_file_name = card_file_name(show_trained)
 
@@ -132,28 +133,58 @@ def render_composed_card(card: Card) -> Image.Image:
     return image
 
 
-def _image_to_data_url(image: Image.Image) -> str:
-    bytes_io = BytesIO()
-    image.save(bytes_io, format="PNG")
-    encoded = base64.b64encode(bytes_io.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
-
-
-async def render_gacha_10_cards(cards: list[Card]) -> bytes:
-    """渲染10连抽卡牌，返回图片字节流"""
-    images = [
-        {
-            "src": _image_to_data_url(render_composed_card(card)),
-            "alt": f"{index}. {card.prefix} {card.character_name}",
-        }
-        for index, card in enumerate(cards[:10], start=1)
-    ]
-
-    return await template_to_pic(
-        template_path=str(cfg.template_dir_path),
-        template_name=cfg.template_file,
-        templates={"images": images},
+async def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
+    """渲染10连抽卡牌"""
+    thumbnail_width, thumbnail_height = GACHA_THUMBNAIL_SIZE
+    canvas_width = (
+        GACHA_PADDING * 2 + GACHA_COLUMNS * thumbnail_width + (GACHA_COLUMNS - 1) * GACHA_GAP
     )
+    canvas_height = GACHA_PADDING * 2 + GACHA_ROWS * thumbnail_height + (GACHA_ROWS - 1) * GACHA_GAP
+    canvas = Image.new("RGBA", (canvas_width, canvas_height), GACHA_BACKGROUND)
+
+    shadow_mask = Image.new("L", canvas.size)
+    shadow_draw = ImageDraw.Draw(shadow_mask)
+    for index in range(min(len(cards), GACHA_COLUMNS * GACHA_ROWS)):
+        row, column = divmod(index, GACHA_COLUMNS)
+        x = GACHA_PADDING + column * (thumbnail_width + GACHA_GAP)
+        y = GACHA_PADDING + row * (thumbnail_height + GACHA_GAP)
+        shadow_draw.rounded_rectangle(
+            (
+                x,
+                y + GACHA_SHADOW_OFFSET,
+                x + thumbnail_width,
+                y + thumbnail_height + GACHA_SHADOW_OFFSET,
+            ),
+            radius=GACHA_SLOT_RADIUS,
+            fill=41,
+        )
+    shadow_mask = shadow_mask.filter(ImageFilter.GaussianBlur(GACHA_SHADOW_BLUR))
+    shadow = Image.new("RGBA", canvas.size, (50, 38, 66, 0))
+    shadow.putalpha(shadow_mask)
+    canvas.alpha_composite(shadow)
+
+    corner_mask = Image.new("L", GACHA_THUMBNAIL_SIZE)
+    ImageDraw.Draw(corner_mask).rounded_rectangle(
+        (0, 0, thumbnail_width - 1, thumbnail_height - 1),
+        radius=GACHA_SLOT_RADIUS,
+        fill=255,
+    )
+
+    for index, card in enumerate(cards[: GACHA_COLUMNS * GACHA_ROWS]):
+        row, column = divmod(index, GACHA_COLUMNS)
+        x = GACHA_PADDING + column * (thumbnail_width + GACHA_GAP)
+        y = GACHA_PADDING + row * (thumbnail_height + GACHA_GAP)
+        thumbnail = ImageOps.fit(
+            render_composed_card(card).convert("RGBA"),
+            GACHA_THUMBNAIL_SIZE,
+            method=Image.Resampling.LANCZOS,
+        )
+        slot = Image.new("RGBA", GACHA_THUMBNAIL_SIZE, "white")
+        slot.alpha_composite(thumbnail)
+        slot.putalpha(corner_mask)
+        canvas.alpha_composite(slot, (x, y))
+
+    return canvas
 
 
 def gacha_draw_card(cumulative_probabilities: dict[RarityEnum, float]) -> Card:

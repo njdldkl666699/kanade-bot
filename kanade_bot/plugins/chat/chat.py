@@ -20,7 +20,6 @@ from kanade_bot.utils.session import extract_session_info
 
 from .agent.copilot import copilot
 from .ban import is_banned
-from .client import file_client as client
 from .config import cfg, chat_configs
 from .rag import query
 
@@ -134,12 +133,12 @@ async def send_message_in_chunks(
 ):
     message = event.get_message()
     onebot = bot if isinstance(bot, OneBot) else None
-    prompt, attachments = await parse_message_for_ai(event, client, onebot)
+    prompt, attachments = await parse_message_for_ai(event, onebot)
 
     # 处理引用（回复）消息
     reply_text: str | None = None
     if isinstance(event, OneBotMessageEvent) and (reply := event.reply):
-        reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, client, onebot)
+        reply_text, reply_attachments = await parse_onebot_message_for_ai(reply, onebot)
         attachments.extend(reply_attachments)
 
     # 进行RAG查询，获取相关文档

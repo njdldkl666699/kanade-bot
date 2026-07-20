@@ -5,18 +5,15 @@ from pathlib import Path
 
 from nonebot import require
 
+from kanade_bot.plugins.crystal import increment_crystal
 from kanade_bot.utils.common import PlatformType
 
 from .cache import get_or_init_harvest_power, harvest_power_cache
-from .config import cfg as scoped_cfg
-from .config import harvest_config
-from .crystal import increment_crystal
+from .config import cfg, harvest_config
 
 require("nonebot_plugin_htmlrender")
 
 from nonebot_plugin_htmlrender import template_to_pic
-
-cfg = scoped_cfg.harvest
 
 
 @dataclass

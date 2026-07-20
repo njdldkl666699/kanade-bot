@@ -1,3 +1,4 @@
+import shutil
 import uuid
 
 from nonebot import require
@@ -5,6 +6,7 @@ from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
+from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
@@ -17,7 +19,6 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.copilot import copilot
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
-from .client import file_client as client
 from .config import cfg, chat_configs
 from .matcher import add_meme, chat, chat_ban, chat_monitor, chat_reset, chat_unban, list_memes
 
@@ -117,7 +118,7 @@ async def handle_list_memes():
 
 
 @add_meme.handle()
-async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
+async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
     args = parse_arg_message(arg_msg.extract_plain_text(), {"name": str, "description": str})
     name: str | None = args.get("name") or None
     if not name:
@@ -128,24 +129,22 @@ async def handle_add_meme(event: OneBotMessageEvent, arg_msg: Message = CommandA
     if not event.reply:
         await add_meme.finish()
     message = event.reply.message
-    image_url: str | None = None
+    image_file: str | None = None
     for segment in message:
         if segment.type == "image":
-            image_url = segment.data.get("url")
+            image_file = segment.data["file"]
             break
-    if not image_url:
+    if not image_file:
         await add_meme.finish()
 
     # 下载图片
-    response = await client.get(image_url)
-    response.raise_for_status()
-    image = response.content
+    r = await bot.get_image(file=image_file)
     # 确保表情包目录存在
     meme_path = cfg.memes_dir_path / name
     meme_path.mkdir(parents=True, exist_ok=True)
     # 保存图片到表情包目录
     image_path = meme_path / f"{uuid.uuid4()}.png"
-    image_path.write_bytes(image)
+    shutil.copy(r["file"], image_path)
 
     # 将表情包信息添加（或更新）到配置中
     memes = chat_configs.instance.memes

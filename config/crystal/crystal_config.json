@@ -18,20 +18,12 @@
       "嗯…{daypart}，好像之前就签到了。当前水晶：{total_crystal}。",
       "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
     ],
-    "wrong_daypart_templates": [
-      "嗯…现在是{daypart}的时间呢。"
-    ],
-    "max_times_templates": [
-      "{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"
-    ],
+    "wrong_daypart_templates": ["嗯…现在是{daypart}的时间呢。"],
+    "max_times_templates": ["{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"],
     "first_use_bonus": 500,
-    "first_use_templates": [
-      "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
-    ],
-    "weekly_bonus": 500,
-    "weekly_bonus_templates": [
-      "恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"
-    ]
+    "first_use_templates": ["欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"],
+    "weekly_bonus": 700,
+    "weekly_bonus_templates": ["恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"]
   },
   "handler_consumes": {
     "聊天": 10,
