@@ -41,6 +41,7 @@
     "crystal",
     "model_updater",
     "api60s",
-    "command_counter"
+    "command_counter",
+    "gallery"
   ]
 }

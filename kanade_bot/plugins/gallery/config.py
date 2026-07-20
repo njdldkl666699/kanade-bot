@@ -18,13 +18,6 @@ class ScopedConfig(BaseModel):
     send_pic_limit: int = 10
     """每次发送图片的数量限制"""
 
-    pjsk_plugin_name: str | None = "crystal"
-    """加载了pjsk卡片资源的插件名称，默认是 crystal 插件
-    
-    如果指定，则会尝试从该插件中加载 pjsk 卡片资源，并将其作为画廊的一部分。
-    如果为None，则不会加载。
-    """
-
     @property
     def name_data_file_path(self) -> Path:
         return get_plugin_data_file(self.name_data_file)
@@ -56,9 +49,6 @@ class GalleryNameData(BaseModel):
 
     iota: int = 0
     """用于生成图片名称的自增计数器"""
-
-    pjsk_chr_alias_to_id: dict[str, int] = {}
-    """pjsk角色别名到characterId的映射"""
 
 
 gallery_name_data = load_register_model_from_file(GalleryNameData, cfg.name_data_file_path)
