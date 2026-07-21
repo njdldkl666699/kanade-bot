@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.repository }}-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version change
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_version="$(python3 - <<'PY'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as file:
+              print(tomllib.load(file)["project"]["version"])
+          PY
+          )"
+
+          previous_version=""
+          if [[ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
+            && git cat-file -e "$BEFORE_SHA:pyproject.toml" 2>/dev/null; then
+            previous_version="$(
+              git show "$BEFORE_SHA:pyproject.toml" | python3 -c \
+                'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])'
+            )"
+          fi
+
+          if ! git check-ref-format "refs/tags/$current_version"; then
+            echo "::error::pyproject.toml 中的版本号不能用作 Git 标签：$current_version"
+            exit 1
+          fi
+
+          {
+            echo "current=$current_version"
+            echo "previous=$previous_version"
+          } >> "$GITHUB_OUTPUT"
+
+          if [[ "$current_version" == "$previous_version" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pyproject.toml 有改动，但版本号仍为 $current_version，跳过发布。"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "检测到版本更新：${previous_version:-<none>} -> $current_version"
+          fi
+
+      - name: Create release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.current }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+            tag_commit="$(git rev-list -n 1 "$VERSION")"
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::标签 $VERSION 已指向 $tag_commit，不能用于当前提交 $GITHUB_SHA。"
+              exit 1
+            fi
+
+            if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "Release $VERSION 已存在，无需重复创建。"
+              exit 0
+            fi
+
+            gh release create "$VERSION" \
+              --verify-tag \
+              --title "$VERSION" \
+              --generate-notes
+          else
+            gh release create "$VERSION" \
+              --target "$GITHUB_SHA" \
+              --title "$VERSION" \
+              --generate-notes
+          fi

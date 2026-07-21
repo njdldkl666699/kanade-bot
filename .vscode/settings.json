@@ -42,6 +42,7 @@
     "model_updater",
     "api60s",
     "command_counter",
-    "gallery"
+    "gallery",
+    "imgtool"
   ]
 }

@@ -116,8 +116,8 @@ async def _(event: Event, message: Message = EventMessage()):
 
     # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
     if len(messages) >= threshold:
-        await plus_one.send(message)
         messages.clear()
+        await plus_one.send(message)
 
 
 @random_duanzi.handle()

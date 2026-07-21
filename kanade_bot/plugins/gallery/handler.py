@@ -80,7 +80,7 @@ async def _(arg_msg: Message = CommandArg()):
     # XXX: 这里可以考虑限制别名字符串的长度，避免过长的输出
     # alias_str_truncated = alias_str if len(alias_str) <= 50 else alias_str[:50] + "..."
 
-    await gallery_info.finish(f"画廊：{name}\n图片数量：{num_pictures}\n别名：{alias_str}\n")
+    await gallery_info.finish(f"画廊：{name}\n图片数量：{num_pictures}\n别名：{alias_str}")
 
 
 @add_gallery.handle()
