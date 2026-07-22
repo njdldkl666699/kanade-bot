@@ -32,6 +32,8 @@ class ScopedConfig(BaseModel):
 
     power_cache_file: str = "harvest_power_cache.json"
     """采集体力缓存文件名"""
+    crystal_power_cache_file: str = "harvest_crystal_power_cache.json"
+    """水晶恢复的体力数据文件名（不会被每日清除）"""
 
     result_template_file: str = "harvest_result_template.html"
     """一次采集结果HTML模板文件名"""
@@ -57,6 +59,10 @@ class ScopedConfig(BaseModel):
     @property
     def power_cache_file_path(self) -> Path:
         return get_plugin_cache_file(self.power_cache_file)
+
+    @property
+    def crystal_power_cache_file_path(self) -> Path:
+        return get_plugin_cache_file(self.crystal_power_cache_file)
 
     @property
     def template_dir_path(self) -> Path:

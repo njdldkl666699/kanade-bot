@@ -74,8 +74,7 @@ class UserDailyCache[T]:
         return self._data.get_by_platform(platform).get(user_id)
 
     def set(self, platform: PlatformType, user_id: str, value: T) -> None:
-        cache = self._data.get_by_platform(platform)
-        cache[user_id] = value
+        self._data.get_by_platform(platform)[user_id] = value
         self._save()
 
     def _auto_clear_cache(self):

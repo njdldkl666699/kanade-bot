@@ -42,7 +42,7 @@ async def _finish_onebot_message(
     *,
     reply_id: int | None = None,
 ):
-    messages: list[OneBotMessage] = []
+    segments: list[MessageSegment] = []
 
     def replace_meme(match: re.Match[str]) -> str:
         meme_name = match.group(1)
@@ -61,35 +61,42 @@ async def _finish_onebot_message(
         # 随机选择一张图片
         selected_image = random.choice(image_files)
         # 将动画表情添加到消息中
-        meme_segment = OneBotMessageSegmentMeme(selected_image)
-        messages.append(OneBotMessage(meme_segment))
+        segments.append(OneBotMessageSegmentMeme(selected_image))
         return ""  # 替换为一个空字符串，表情包会在发送时添加
 
     # 处理表情包引用，格式{{表情包名称}}
     for chunk in chunks:
         text = re.sub(r"\{\{(\w+?)\}\}", replace_meme, chunk)
-        messages.append(OneBotMessage(text))
+        segments.append(MessageSegment.text(text))
 
-    if not messages:
+    if not segments:
         await matcher.finish()
 
     # 消息数==1，引用回复
-    if len(messages) == 1:
-        if reply_id:
-            messages[0].insert(0, MessageSegment.reply(reply_id))
-        await matcher.finish(messages[0])
+    if len(segments) == 1:
+        segment = segments[0]
+        if not reply_id:
+            await matcher.finish(segment)
+        reply = MessageSegment.reply(reply_id)
+        await matcher.finish(reply + segment)
 
     # 消息数<=3，按条发送
-    if len(messages) <= 3:
-        for message in messages:
-            await matcher.send(message)
+    if len(segments) <= 3:
+        for segment in segments:
+            await matcher.send(segment)
         await matcher.finish()
 
-    # 消息数>3，合并转发
+    # 消息数>10，合并为一条消息发送
+    if len(segments) > 10:
+        await matcher.finish(OneBotMessage(segments))
+
+    # 消息数>3但<=10，合并转发
     bot_id, bot_nickname = await get_onebot_info(bot)
     node_custom_message = OneBotMessage()
-    for message in messages:
-        node_custom_message += MessageSegment.node_custom(bot_id, bot_nickname, message)
+    for segment in segments:
+        node_custom_message += MessageSegment.node_custom(
+            bot_id, bot_nickname, OneBotMessage(segment)
+        )
     await matcher.finish(node_custom_message)
 
 

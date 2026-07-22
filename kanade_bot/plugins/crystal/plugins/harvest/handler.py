@@ -8,7 +8,7 @@ from nonebot.params import CommandArg
 from kanade_bot.plugins.crystal.config import crystal_data
 from kanade_bot.utils.common import get_platform_type
 
-from .cache import get_or_init_harvest_power, harvest_power_cache
+from .cache import harvest_power_cache
 from .config import cfg, harvest_config
 from .harvest import HarvestResult, harvest_once, render_harvest_result, render_harvest_results
 from .matcher import harvest, harvest_all, harvest_category, harvest_power, resume_harvest_power
@@ -86,7 +86,7 @@ async def _():
 async def _(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
-    current_power = get_or_init_harvest_power(platform, user_id)
+    current_power = harvest_power_cache.get(platform, user_id)
     await harvest_power.finish(f"你当前的体力值为: {current_power:g}。")
 
 
@@ -112,9 +112,9 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         )
 
     # 增加体力
-    current_power = get_or_init_harvest_power(platform, user_id)
+    current_power = harvest_power_cache.get(platform, user_id)
     new_power = current_power + power
-    harvest_power_cache.set(platform, user_id, new_power)
+    harvest_power_cache.set_by(platform, user_id, power)
     # 扣除水晶
     data[user_id] = user_crystal - crystal_cost
     crystal_data.save_to_file()

@@ -8,7 +8,7 @@ from nonebot import require
 from kanade_bot.plugins.crystal import increment_crystal
 from kanade_bot.utils.common import PlatformType
 
-from .cache import get_or_init_harvest_power, harvest_power_cache
+from .cache import harvest_power_cache
 from .config import cfg, harvest_config
 
 require("nonebot_plugin_htmlrender")
@@ -49,7 +49,7 @@ def harvest_once(
     """
     name = category_name
     # 检查剩余体力
-    power = get_or_init_harvest_power(platform, user_id)
+    power = harvest_power_cache.get(platform, user_id)
 
     v = harvest_config.instance
     categories = v.action_categories
@@ -102,7 +102,7 @@ def harvest_once(
     # 增加水晶
     increment_crystal(platform, user_id, bonus_crystal)
     # 扣除体力
-    harvest_power_cache.set(platform, user_id, power - category.power_cost)
+    harvest_power_cache.set_by(platform, user_id, -category.power_cost)
 
     # 返回采集结果
     return HarvestResult(
