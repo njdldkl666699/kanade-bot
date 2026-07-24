@@ -1,10 +1,10 @@
-from datetime import date
-
 from nonebot import logger
 from nonebot.matcher import Matcher
 from nonebot.plugin import PluginMetadata
 
-from . import handler as _  # noqa: F401
+from kanade_bot.utils.common import asia_shanghai_now
+
+from . import handler as handler
 from .config import Config, command_counter_data
 
 __plugin_meta__ = PluginMetadata(
@@ -21,11 +21,11 @@ def register_matcher(matcher: type[Matcher], name: str):
     注意：该函数应在 Matcher 注册后立即调用，本函数会在 Matcher 的
     handlers 追加一个 handler 用于计数调用次数。
     """
-    logger.debug(f"命令计数器注册 Matcher {name}: {repr(matcher)}")
+    logger.debug(f"命令计数器注册 Matcher {name}: {matcher!r}")
 
     @matcher.handle()
     def _():
-        today = date.today()
+        today = asia_shanghai_now().date()
         data = command_counter_data.root
         if today not in data:
             data[today] = {}

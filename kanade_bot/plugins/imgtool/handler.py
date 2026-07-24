@@ -62,8 +62,8 @@ async def _get_reply_image(bot: Bot, event: MessageEvent) -> bytes:
                 path = Path(local_file)
                 if path.is_file():
                     return await asyncio.to_thread(path.read_bytes)
-        except Exception as exc:
-            logger.debug(f"imgtool 调用 get_image 失败，将尝试直接读取图片：{exc}")
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"imgtool 调用 get_image 失败，将尝试直接读取图片：{e}")
 
     # 某些实现会直接把本地路径或 URL 放在 image.file 中。
     if image_file:
@@ -363,11 +363,11 @@ async def _handle(
     try:
         image_data = await _get_reply_image(bot, event)
         result = await asyncio.to_thread(operation, image_data, _arguments(arg_msg))
-    except ImageToolError as exc:
-        await matcher.finish(str(exc))
-    except Exception as exc:
+    except ImageToolError as e:
+        await matcher.finish(str(e))
+    except Exception as e:  # noqa: BLE001
         logger.exception("imgtool 处理图片失败")
-        await matcher.finish(f"处理图片失败：{exc}")
+        await matcher.finish(f"处理图片失败：{e}")
     else:  # 防止Pylance误报
         await matcher.finish(MessageSegment.image(result))
 

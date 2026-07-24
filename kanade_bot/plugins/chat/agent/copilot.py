@@ -1,6 +1,6 @@
 import asyncio
 from collections import deque
-from typing import Any
+from typing import Any, ClassVar
 
 from copilot import CopilotSession
 from copilot.session import Attachment, PermissionHandler
@@ -50,7 +50,7 @@ async def _get_image_caption(attachment: Attachment) -> str | None:
                 attachments=[attachment],
                 timeout=180,
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception("获取图片转述时发生错误: {}", e)
         return
 
@@ -85,7 +85,7 @@ def _build_system_prompt() -> str:
 class CopilotSessionManager:
     """Copilot会话管理器，负责管理会话对象、消息缓冲区、会话锁等资源，并提供发送消息、添加缓冲消息、重置会话等功能"""
 
-    tools: list[Tool] = [
+    tools: ClassVar[list[Tool]] = [
         tavily_search,
         tavily_extract,
         list_memes,
@@ -94,7 +94,7 @@ class CopilotSessionManager:
         view_image,
     ]
 
-    available_tools: list[str] = [
+    available_tools: ClassVar[list[str]] = [
         "view",
         "read",
         "search",
@@ -156,7 +156,7 @@ class CopilotSessionManager:
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             logger.info(f"恢复会话{session_id}成功")
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
             session = await COPILOT_CLIENT.create_session(session_id=session_id, **session_config)
             new_session = True
@@ -294,14 +294,13 @@ class CopilotSessionManager:
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
-        async with await self._ensure_session_lock(session_id):
-            async with self._global_lock:
-                if session_id not in self._sessions_prompt_buffer:
-                    self._sessions_prompt_buffer[session_id] = deque(
-                        maxlen=cfg.session_prompt_buffer_max_size
-                    )
-                # deque(maxlen)会在溢出时自动丢弃最早的消息
-                self._sessions_prompt_buffer[session_id].append(prompt)
+        async with await self._ensure_session_lock(session_id), self._global_lock:
+            if session_id not in self._sessions_prompt_buffer:
+                self._sessions_prompt_buffer[session_id] = deque(
+                    maxlen=cfg.session_prompt_buffer_max_size
+                )
+            # deque(maxlen)会在溢出时自动丢弃最早的消息
+            self._sessions_prompt_buffer[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """删除会话，清空缓冲区。**此操作不可逆**"""

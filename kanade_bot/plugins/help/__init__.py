@@ -1,6 +1,6 @@
 from nonebot.plugin import PluginMetadata
 
-from . import handler as _  # noqa: F401
+from . import handler as handler
 from .config import Config
 
 __plugin_meta__ = PluginMetadata(

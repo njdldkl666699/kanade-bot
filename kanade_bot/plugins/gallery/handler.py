@@ -21,9 +21,9 @@ from .matcher import (
     add_gallery,
     add_gallery_alias,
     add_picture,
-    gallery_pictures,
     gallery_info,
     gallery_list,
+    gallery_pictures,
     get_picture,
     remove_gallery,
     remove_gallery_alias,
@@ -99,7 +99,7 @@ async def _(arg_msg: Message = CommandArg()):
         gallery_dir.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
         await add_gallery.finish(f"画廊目录 {gallery_dir} 已存在，无法创建。")
-    except Exception as e:
+    except OSError as e:
         logger.exception(f"创建画廊目录 {gallery_dir} 失败：{e}")
         await add_gallery.finish(f"创建画廊目录失败：{e}")
 
@@ -123,7 +123,7 @@ async def _(arg_msg: Message = CommandArg()):
     gallery_dir = cfg.data_dir_path / name
     try:
         send2trash(gallery_dir)
-    except Exception as e:
+    except OSError as e:
         logger.exception(f"删除画廊目录 {gallery_dir} 失败：{e}")
         await remove_gallery.finish(f"删除画廊目录失败：{e}")
 
@@ -150,7 +150,7 @@ async def _(arg_msg: Message = CommandArg()):
     v = gallery_name_data.instance
     if name not in v.name_to_aliases:
         await add_gallery_alias.finish(f"画廊 {name} 不存在。")
-    if alias in v.name_to_aliases.keys():
+    if alias in v.name_to_aliases:
         # 别名不能与现有画廊名称冲突
         await add_gallery_alias.finish(f"{alias} 已被画廊名称使用。")
     if alias in v.alias_to_name:
@@ -302,7 +302,7 @@ async def _(arg_msg: Message = CommandArg()):
     # 将图片文件移至废纸篓
     try:
         send2trash(pic_path)
-    except Exception as e:
+    except OSError as e:
         logger.exception(f"删除图片文件 {pic_path} 失败：{e}")
         await remove_picture.finish(f"删除图片文件失败：{e}")
     await remove_picture.finish(f"成功删除图片 {pic_id}。")

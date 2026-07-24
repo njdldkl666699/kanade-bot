@@ -5,7 +5,7 @@ from nonebot import get_driver, logger, require
 from pydantic import BaseModel
 
 from kanade_bot.utils.cache import UserDailyCache
-from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.common import PlatformType, asia_shanghai_now
 
 from .config import cfg
 from .enum import DaypartEnum
@@ -26,7 +26,7 @@ class UserWeeklyCacheModel[T](BaseModel):
 
     console: dict[str, dict[int, T]] = {}
     onebot: dict[str, dict[int, T]] = {}
-    updated_at: datetime = datetime.now()
+    updated_at: datetime = asia_shanghai_now()
 
     def get_by_platform(self, platform: PlatformType):
         if platform == "console":
@@ -60,7 +60,7 @@ class UserWeeklyCache[T]:
             data = UserWeeklyCacheModel[T_type].model_validate_json(data_json)
             # 如果周数不同，则清空缓存
             data_week = data.updated_at.isocalendar()[1]
-            current_week = datetime.now().isocalendar()[1]
+            current_week = asia_shanghai_now().isocalendar()[1]
             if data_week != current_week:
                 logger.info(
                     "缓存数据已过期，日期为 {}，周数为 {}，当前周数为 {}，已忽略",
@@ -89,7 +89,7 @@ class UserWeeklyCache[T]:
             )
 
     def get(self, platform: PlatformType, user_id: str) -> T | None:
-        weekday = datetime.now().isoweekday()  # 获取当前日期的星期几（1=周一, 7=周日）
+        weekday = asia_shanghai_now().isoweekday()  # 获取当前日期的星期几（1=周一, 7=周日）
         return self._data.get_by_platform(platform).get(user_id, {}).get(weekday)
 
     def get_week(self, platform: PlatformType, user_id: str) -> dict[int, T] | None:
@@ -97,7 +97,7 @@ class UserWeeklyCache[T]:
         return self._data.get_by_platform(platform).get(user_id)
 
     def set(self, platform: PlatformType, user_id: str, value: T) -> None:
-        weekday = datetime.now().isoweekday()
+        weekday = asia_shanghai_now().isoweekday()
         cache = self._data.get_by_platform(platform)
         cache[user_id] = cache.get(user_id, {})
         cache[user_id][weekday] = value
@@ -110,7 +110,7 @@ class UserWeeklyCache[T]:
 
     def _save(self):
         """将当前缓存数据保存到文件"""
-        self._data.updated_at = datetime.now()
+        self._data.updated_at = asia_shanghai_now()
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         data_json = self._data.model_dump_json(ensure_ascii=False, indent=2)
         self._file_path.write_text(data_json, encoding="utf-8")

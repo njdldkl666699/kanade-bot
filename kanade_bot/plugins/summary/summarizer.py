@@ -1,13 +1,13 @@
 import json
 from collections import deque
-from datetime import datetime
+from typing import ClassVar
 
 from copilot import CopilotSession
 from copilot.session import PermissionHandler, SystemMessageConfig
 from copilot.session_events import AssistantMessageData
 from nonebot import get_plugin_config, logger
 
-from kanade_bot.utils.common import COPILOT_CLIENT
+from kanade_bot.utils.common import COPILOT_CLIENT, asia_shanghai_now
 
 from .config import Config
 
@@ -25,12 +25,12 @@ class Summarizer:
         system_prompt = system_prompt_path.read_text(encoding="utf-8")
         system_prompt = system_prompt.replace("{{summary_bot_name}}", cfg.bot_name)
 
-    system_message: SystemMessageConfig = {
+    system_message: ClassVar[SystemMessageConfig] = {
         "mode": "replace",
         "content": system_prompt,
     }
 
-    SESSION_CONFIG = {
+    SESSION_CONFIG: ClassVar = {
         "on_permission_request": PermissionHandler.approve_all,
         "model": cfg.model,
         "reasoning_effort": "medium",
@@ -104,7 +104,7 @@ class Summarizer:
             prefix = f"私聊 {group_or_user_name}: \n\n"
 
         prompt = prefix + "\n\n".join(messages_slice)
-        copilot_session_id = f"summary-{session_id}-{int(datetime.now().timestamp())}"
+        copilot_session_id = f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}"
 
         session: CopilotSession | None = None
         try:
@@ -113,7 +113,7 @@ class Summarizer:
             )
             session_event = await session.send_and_wait(prompt, timeout=timeout)
             await session.disconnect()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception(f"总结会话{session_id}发生错误: {e}")
             session_event = None
 

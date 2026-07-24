@@ -8,8 +8,8 @@ from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMe
 from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
-from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventMessage, EventPlainText
@@ -154,10 +154,9 @@ async def _(event: ConsolePublicMessageEvent, arg_msg: Message = CommandArg()):
 
 @add_a_duanzi.handle()
 async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
-    if reply := event.reply:
-        if duanzi := reply.message.extract_plain_text().strip():
-            add_duanzi(duanzi)
-            await add_a_duanzi.finish("添加完成")
+    if (reply := event.reply) and (duanzi := reply.message.extract_plain_text().strip()):
+        add_duanzi(duanzi)
+        await add_a_duanzi.finish("添加完成")
 
     duanzi = arg_msg.extract_plain_text().strip()
     if not duanzi:

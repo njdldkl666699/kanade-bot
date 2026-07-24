@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pydantic import BaseModel
 
 from kanade_bot.plugins.api60s.client import client
@@ -14,8 +16,8 @@ class TranslateLang(BaseModel):
 class TranslateLangCache:
     """翻译语言缓存"""
 
-    _langs: list[TranslateLang] = []
-    _code_index: dict[str, TranslateLang] = {}
+    _langs: ClassVar[list[TranslateLang]] = []
+    _code_index: ClassVar[dict[str, TranslateLang]] = {}
 
     @classmethod
     async def _load_cache(cls):

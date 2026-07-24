@@ -165,7 +165,7 @@ async def send_message_in_chunks(
             attachments=attachments,
             timeout=300,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception("发送消息时发生错误: {}", e)
         await _send_fail_message(matcher)
         return
@@ -214,10 +214,7 @@ def should_reply_event(event: Event):
     # 检查用户是否在聊天黑名单中
     ban_type = "user"
     user_id: str = event.get_user_id()
-    if user_id and is_banned(user_id, ban_type, platform):
-        return False
-
-    return True
+    return not (user_id and is_banned(user_id, ban_type, platform))
 
 
 def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):

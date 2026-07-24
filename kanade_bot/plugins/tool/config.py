@@ -1,3 +1,4 @@
+# ruff: noqa: RUF012
 from pathlib import Path
 
 from nonebot import get_plugin_config, require

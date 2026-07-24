@@ -1,4 +1,5 @@
 import base64
+import binascii
 import random
 
 import emoji
@@ -55,7 +56,7 @@ async def _(arg_msg: Message = CommandArg()):
         if decoded_str.startswith("AA") and decoded_str.endswith("ZZ"):
             decoded_str = decoded_str[2:-2]
         await thunder_link_parse.finish(decoded_str)
-    except Exception as e:
+    except (binascii.Error, UnicodeDecodeError) as e:
         await thunder_link_parse.finish(f"解析失败: {e}")
 
 
@@ -93,7 +94,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         # 使用 JavaServer.async_lookup 以支持 SRV 记录解析。
         server = await JavaServer.async_lookup(address)
         status = await server.async_status()
-    except Exception as e:
+    except (TypeError, ValueError, OSError) as e:
         logger.warning(f"查询服务器状态失败: {e}")
         await mc_status.finish("服务器查询失败")
 

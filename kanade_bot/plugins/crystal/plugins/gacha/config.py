@@ -1,3 +1,4 @@
+# ruff: noqa: RUF012
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
@@ -12,7 +13,6 @@ require("model_updater")
 
 from nonebot_plugin_localstore import (
     get_plugin_cache_dir,
-    get_plugin_cache_file,
     get_plugin_config_file,
     get_plugin_data_file,
 )

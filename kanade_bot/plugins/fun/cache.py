@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
+from nonebot.adapters.console import Message as ConsoleMessage
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 
 from kanade_bot.utils.cache import UserDailyCache
 from kanade_bot.utils.common import PlatformType
-from nonebot.adapters.console import Message as ConsoleMessage
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 
 from .config import Config
 

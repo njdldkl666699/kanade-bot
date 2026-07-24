@@ -60,8 +60,6 @@ class Card(BaseModel):
 class Cards(RootModel[list[Card]]):
     """卡牌列表模型"""
 
-    pass
-
 
 CARDS: dict[RarityEnum, list[Card]] = {rarity: [] for rarity in RarityEnum}
 """卡牌信息字典，键为稀有度枚举，值为对应稀有度的卡牌列表"""

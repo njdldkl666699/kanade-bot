@@ -127,7 +127,7 @@ def _read_lyric_file(lyric_file: Path) -> Lyric | None:
 
         logger.warning(f"不支持的歌词文件类型: {lyric_file}")
         return None
-    except Exception:
+    except OSError:
         logger.exception(f"读取歌词文件失败: {lyric_file}")
         return None
 

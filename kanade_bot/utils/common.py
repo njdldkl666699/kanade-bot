@@ -1,6 +1,8 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from copilot import CopilotClient
 from copilot.client import StopError
@@ -25,7 +27,7 @@ def get_platform_type(event: Event) -> PlatformType:
     elif isinstance(event, OneBotEvent):
         return "onebot"
     else:
-        raise ValueError(f"Unsupported event type: {type(event)}")
+        raise TypeError(f"Unsupported event type: {type(event)}")
 
 
 def group_permission(event: OneBotGroupMessageEvent | ConsolePublicMessageEvent) -> bool:
@@ -43,13 +45,9 @@ def not_to_me(to_me: bool = EventToMe()):
     return not to_me
 
 
-COPILOT_CLIENT = CopilotClient()
-"""全局Copilot客户端单例
-
-负责与Copilot服务进行通信，创建和恢复会话等操作
-"""
-
-driver = get_driver()
+def asia_shanghai_now() -> datetime:
+    """获取当前的上海时间"""
+    return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
 class AttrDocModel(BaseModel):
@@ -58,6 +56,9 @@ class AttrDocModel(BaseModel):
     model_config = {
         "use_attribute_docstrings": True,
     }
+
+
+driver = get_driver()
 
 
 def generate_schema[T: BaseModel](cls: type[T]):
@@ -71,6 +72,13 @@ def generate_schema[T: BaseModel](cls: type[T]):
     schema_file = Path("schemas") / "generated" / schema_file_name
     schema_file.parent.mkdir(parents=True, exist_ok=True)
     schema_file.write_text(json_schema, encoding="utf-8")
+
+
+COPILOT_CLIENT = CopilotClient()
+"""全局Copilot客户端单例
+
+负责与Copilot服务进行通信，创建和恢复会话等操作
+"""
 
 
 @driver.on_startup

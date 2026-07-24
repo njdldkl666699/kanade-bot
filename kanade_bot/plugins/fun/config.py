@@ -6,9 +6,9 @@ from pydantic import BaseModel
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import (
+    get_plugin_cache_file,
     get_plugin_config_file,
     get_plugin_data_file,
-    get_plugin_cache_file,
 )
 
 

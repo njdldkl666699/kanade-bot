@@ -1,4 +1,5 @@
 import base64
+import binascii
 from pathlib import Path
 from typing import Literal
 
@@ -31,7 +32,7 @@ def _resolve_icon_src(icon_data: str | None) -> str:
         try:
             base64.b64decode(icon_data.split(",", 1)[1])
             return icon_data
-        except Exception:
+        except binascii.Error:
             pass
 
     return _encode_image_as_data_url(cfg.fallback_icon_file_path)

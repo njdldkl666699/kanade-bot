@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Playwright Linux 国内一键安装提速脚本
 功能：自动配置国内镜像，加速 Playwright 及其浏览器的安装全过程。
@@ -79,9 +78,10 @@ def is_playwright_package_installed(use_uv=False):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=20,
+            check=False,
         )
         return result.returncode == 0
-    except Exception:
+    except subprocess.SubprocessError:
         return False
 
 
@@ -113,6 +113,7 @@ def check_sudo():
         result = subprocess.run(
             ["sudo", "-n", "true"],
             capture_output=True,
+            check=False,
         )
         if result.returncode == 0:
             return True
@@ -208,13 +209,14 @@ def find_config_file(use_uv=False):
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0:
             driver_path = result.stdout.strip()
             potential_paths.append(
                 os.path.join(driver_path, "package", "lib", "server", "registry", "index.js")
             )
-    except Exception:
+    except subprocess.SubprocessError:
         pass
 
     # 策略1：site-packages
@@ -226,15 +228,12 @@ def find_config_file(use_uv=False):
         )
 
     # 策略2：用户 site-packages
-    try:
-        user_sp = site.getusersitepackages()
-        potential_paths.append(
-            os.path.join(
-                user_sp, "playwright", "driver", "package", "lib", "server", "registry", "index.js"
-            )
+    user_sp = site.getusersitepackages()
+    potential_paths.append(
+        os.path.join(
+            user_sp, "playwright", "driver", "package", "lib", "server", "registry", "index.js"
         )
-    except Exception:
-        pass
+    )
 
     # 策略3：当前 venv
     if sys.prefix != sys.base_prefix:
@@ -267,12 +266,13 @@ def find_config_file(use_uv=False):
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
         if result.returncode == 0:
             for line in result.stdout.strip().splitlines():
                 if line and line not in potential_paths:
                     potential_paths.append(line)
-    except Exception:
+    except subprocess.SubprocessError:
         pass
 
     return potential_paths
@@ -332,7 +332,7 @@ def patch_config_file(use_uv=False):
         print(f"[ERROR] 无写入权限：{target_file}")
         print(f"        请尝试: sudo python3 {__file__}")
         return False
-    except Exception as e:
+    except OSError as e:
         print(f"[ERROR] 修改配置文件时出错：{e}")
         return False
 
@@ -354,9 +354,10 @@ def is_browser_installed(browser, use_uv=False):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=20,
+            check=False,
         )
         return result.returncode == 0
-    except Exception:
+    except subprocess.SubprocessError:
         return False
 
 
@@ -411,17 +412,20 @@ def verify_installation(use_uv=False):
             python_command_args(use_uv)
             + [
                 "-c",
-                "from playwright.sync_api import sync_playwright; "
-                "p = sync_playwright().start(); "
-                "b = p.chromium.launch(); "
-                "page = b.new_page(); "
-                'page.goto("about:blank"); '
-                'print("BROWSER_OK"); '
-                "b.close(); p.stop()",
+                (
+                    "from playwright.sync_api import sync_playwright; "
+                    "p = sync_playwright().start(); "
+                    "b = p.chromium.launch(); "
+                    "page = b.new_page(); "
+                    'page.goto("about:blank"); '
+                    'print("BROWSER_OK"); '
+                    "b.close(); p.stop()"
+                ),
             ],
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         if "BROWSER_OK" in result.stdout:
             print("[OK] Playwright 与 Chromium 运行正常！")
@@ -440,7 +444,7 @@ def verify_installation(use_uv=False):
     except subprocess.TimeoutExpired:
         print("[WARN] 验证超时，但安装可能已成功。")
         return False
-    except Exception as e:
+    except subprocess.SubprocessError as e:
         print(f"[WARN] 验证时出错：{e}")
         return False
 
@@ -486,10 +490,6 @@ def main():
     print("=" * 60)
     print("  Playwright Linux 国内安装提速脚本 v1.0")
     print("=" * 60)
-
-    if sys.version_info < (3, 7):
-        print("[ERROR] 需要 Python 3.7 或更高版本。")
-        sys.exit(1)
 
     if sys.platform != "linux":
         print(f"[WARN] 当前平台为 {sys.platform}，此脚本针对 Linux 优化。")

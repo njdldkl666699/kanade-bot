@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 import nonebot
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from nonebot import get_plugin_config, logger, require
 from nonebot.plugin import PluginMetadata
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .config import Config
 
@@ -22,10 +22,8 @@ __plugin_meta__ = PluginMetadata(
 )
 cfg = get_plugin_config(Config)
 
-T = TypeVar("T", bound=BaseModel, covariant=True)
 
-
-class ModelRegistryItem(BaseModel, Generic[T]):
+class ModelRegistryItem[T: BaseModel](BaseModel):
     """模型注册表项"""
 
     cls: type[T]
@@ -48,7 +46,9 @@ model_registry: list[ModelRegistryItem[BaseModel]] = []
 """模型注册表"""
 
 
-def load_register_model_from_file(cls: type[T], file_path: Path) -> ModelRegistryItem[T]:
+def load_register_model_from_file[T: BaseModel](
+    cls: type[T], file_path: Path
+) -> ModelRegistryItem[T]:
     """从 JSON 文件加载模型并注册，文件不存在时使用默认值并保存
 
     Returns:
@@ -63,7 +63,7 @@ def load_register_model_from_file(cls: type[T], file_path: Path) -> ModelRegistr
         model = cls.model_validate_json(file_path.read_text(encoding="utf-8"))
 
     registered_item = ModelRegistryItem(cls=cls, instance=model, path=file_path)
-    model_registry.append(registered_item)
+    model_registry.append(registered_item)  # pyright: ignore[reportArgumentType]
     return registered_item
 
 
@@ -129,8 +129,8 @@ async def update_model(payload: dict[str, Any]):
         new_instance = target_class.model_validate(new_data)
         target_item.instance = new_instance  # 更新指针指向的值
         target_item.save_to_file()  # 保存到文件
-    except Exception as e:
-        raise HTTPException(400, f"数据验证失败: {str(e)}")
+    except (ValidationError, OSError) as e:
+        raise HTTPException(400, f"数据验证失败: {e}")
 
     logger.info(f"模型 {model_name} 已更新并保存到文件 {target_item.path}")
     return {"status": "success", "message": f"{model_name} 已更新"}

@@ -1,4 +1,4 @@
-from httpx import AsyncClient
+from httpx import AsyncClient, HTTPStatusError
 from nonebot import get_plugin_config, logger
 
 from .config import Config
@@ -26,7 +26,7 @@ async def send_offline_notice(
 
     # 构建消息主体
     title = f"{tag} 你的Bot掉线了"
-    content = f"你的Bot账号: {bot_id} 掉线了，赶快去看看吧。\n`Message`: {message}".encode("utf-8")
+    content = f"你的Bot账号: {bot_id} 掉线了，赶快去看看吧。\n`Message`: {message}".encode()
     headers = {"Title": title}
 
     path = cfg.login_qrcode_file_path
@@ -42,6 +42,6 @@ async def send_offline_notice(
             content=content,
         )
         response.raise_for_status()
-    except Exception as e:
+    except HTTPStatusError as e:
         logger.error(f"发送Bot掉线通知请求时发生异常: {e}")
         return

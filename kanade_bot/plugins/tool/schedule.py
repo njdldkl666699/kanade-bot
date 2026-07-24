@@ -1,6 +1,7 @@
 from apscheduler.triggers.cron import CronTrigger
 from nonebot import get_driver, logger, require
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, NetworkError
+from nonebot.exception import ActionFailed
 
 from .config import ScheduleConfig, schedules
 
@@ -31,7 +32,7 @@ def print_schedules_pretty(group_id: int) -> str | None:
 async def _send_scheduled_message(bot: Bot, group_id: int, message: Message):
     try:
         await bot.send_group_msg(group_id=group_id, message=message)
-    except Exception as e:
+    except (NetworkError, ActionFailed) as e:
         logger.error(f"发送定时消息失败: {e}")
 
 

@@ -1,3 +1,4 @@
+# ruff: noqa: RUF012
 from pathlib import Path
 from typing import Literal
 

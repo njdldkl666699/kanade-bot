@@ -74,8 +74,6 @@ driver = get_driver()
 
 @driver.on_startup
 def on_startup():
-    global DOC_NAMES
-
     doc_dir = cfg.docs_dir_path
     if not doc_dir.is_dir():
         logger.warning(f"帮助文档目录不存在，路径: {doc_dir.absolute()}")

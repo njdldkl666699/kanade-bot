@@ -4,7 +4,7 @@ from pathlib import Path
 from nonebot import get_driver, logger, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.common import PlatformType, asia_shanghai_now
 
 require("nonebot_plugin_apscheduler")
 
@@ -16,7 +16,7 @@ class UserDailyCacheModel[T](BaseModel):
 
     console: dict[str, T] = {}
     onebot: dict[str, T] = {}
-    updated_at: datetime = datetime.now()
+    updated_at: datetime = asia_shanghai_now()
 
     def get_by_platform(self, platform: PlatformType):
         if platform == "console":
@@ -48,7 +48,7 @@ class UserDailyCache[T]:
 
             data_json = p.read_text(encoding="utf-8")
             data = UserDailyCacheModel[T_type].model_validate_json(data_json)
-            if data.updated_at.date() != datetime.now().date():
+            if data.updated_at.date() != asia_shanghai_now().date():
                 logger.info(f"缓存数据已过期，日期为 {data.updated_at.date()}，已忽略")
                 return
 
@@ -84,7 +84,7 @@ class UserDailyCache[T]:
 
     def _save(self):
         """将当前缓存数据保存到文件"""
-        self._data.updated_at = datetime.now()
+        self._data.updated_at = asia_shanghai_now()
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         data_json = self._data.model_dump_json(ensure_ascii=False, indent=2)
         self._file_path.write_text(data_json, encoding="utf-8")
