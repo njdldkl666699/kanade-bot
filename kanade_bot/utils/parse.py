@@ -2,7 +2,7 @@ import base64
 from typing import Any, SupportsIndex
 
 from copilot.session import Attachment
-from nonebot import get_driver, logger
+from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.onebot.v11 import ActionFailed, GroupMessageEvent
@@ -161,7 +161,7 @@ async def parse_onebot_message_for_ai(
         if segment.type != "image":
             continue
 
-        file = segment.data["file"]
+        file: str = segment.data["file"]
         attachment: Attachment
         if forward_image:
             # 转发消息中的图片，使用http client获取图片附件
@@ -186,8 +186,13 @@ async def parse_onebot_message_for_ai(
                 "displayName": file or "image.png",
             }
         else:
-            logger.warning("无法获取图片附件，缺少bot实例")
-            continue
+            # 没有bot实例，仅返回图片的displayName
+            attachment = {
+                "type": "blob",
+                "data": base64.b64encode(file.encode()).decode(),
+                "mimeType": "text/plain",
+                "displayName": file or "image.png",
+            }
 
         # 把前半段内容转为文字
         splitted_segments = message[:i]
