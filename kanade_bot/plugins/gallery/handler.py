@@ -13,7 +13,7 @@ from nonebot.typing import T_State
 from send2trash import send2trash
 
 from kanade_bot.plugins.gallery.gallery import render_gallery_thumbnails
-from kanade_bot.utils.parse import parse_arg_message
+from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
 
 from .config import cfg, gallery_name_data
 from .gallery import get_gallery_name, get_picture_by_id, save_pictures
@@ -243,6 +243,21 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     await get_picture.finish(message)
 
 
+async def _get_pictures_from_message(bot: OneBot, message: OneBotMessage) -> list[Path]:
+    """从消息中提取图片文件路径"""
+    pic_paths: list[Path] = []
+    for seg in message:
+        if seg.type == "image":
+            pic_url = seg.data["file"]
+            r = await bot.get_image(file=pic_url)
+            pic_paths.append(Path(r["file"]))
+        if seg.type == "forward":
+            _, fwd_msg_events = await get_forward_message_events(bot, seg)
+            for e in fwd_msg_events:
+                pic_paths.extend(await _get_pictures_from_message(bot, e.message))
+    return pic_paths
+
+
 @add_picture.handle()
 async def _(
     state: T_State,
@@ -259,13 +274,7 @@ async def _(
 
     # 获取引用的图片
     if event.reply:
-        pic_paths: list[Path] = []
-        for seg in event.reply.message:
-            if seg.type == "image":
-                pic_url = seg.data["file"]
-                r = await bot.get_image(file=pic_url)
-                pic_paths.append(Path(r["file"]))
-
+        pic_paths = await _get_pictures_from_message(bot, event.reply.message)
         save_pictures(name, pic_paths)
         await add_picture.finish(f"成功添加 {len(pic_paths)} 张图片到画廊 {name}。")
 
@@ -276,13 +285,7 @@ async def _(
 
 @add_picture.handle()
 async def _(state: T_State, bot: OneBot, message: OneBotMessage = EventMessage()):
-    pic_paths: list[Path] = []
-    for seg in message:
-        if seg.type == "image":
-            pic_url = seg.data["file"]
-            r = await bot.get_image(file=pic_url)
-            pic_paths.append(Path(r["file"]))
-
+    pic_paths = await _get_pictures_from_message(bot, message)
     name = state["gallery_name"]
     save_pictures(name, pic_paths)
     await add_picture.finish(f"成功添加 {len(pic_paths)} 张图片到画廊 {name}。")

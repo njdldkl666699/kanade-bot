@@ -18,10 +18,10 @@ def get_gallery_name(name_or_alias: str) -> str | None:
 
 def get_picture_by_id(pic_id: int) -> Path | None:
     """根据图片id获取图片文件路径"""
-    pic_files = list(cfg.data_dir_path.glob(f"{pic_id}.*"))
-    if not pic_files:
-        return None
-    return pic_files[0]
+    for file in cfg.data_dir_path.rglob(f"{pic_id}.*"):
+        if file.is_file():
+            return file
+    return None
 
 
 def save_pictures(name: str, pic_paths: list[Path]):
