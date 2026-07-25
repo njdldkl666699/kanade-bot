@@ -5,7 +5,9 @@ from copilot.tools import ToolBinaryResult, ToolInvocation, ToolResult
 from nonebot import logger
 from pydantic import BaseModel, Field
 
-from ..client import file_client, tavily_client
+from kanade_bot.utils.common import HTTPX_CLIENT
+
+from ..client import tavily_client
 from ..config import chat_configs
 from .memory import MemoryType, WriteMode, read_memory_content, write_memory_content
 
@@ -134,7 +136,7 @@ async def view_image(urls: list[str]) -> ToolResult:
     error_urls: list[str] = []
 
     for url in urls:
-        response = await file_client.get(url)
+        response = await HTTPX_CLIENT.get(url)
         logger.info(
             "模型调用工具{}，查看图片：{}，返回了结果，状态码：{}",
             view_image.name,

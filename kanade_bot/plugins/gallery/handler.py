@@ -13,6 +13,7 @@ from nonebot.typing import T_State
 from send2trash import send2trash
 
 from kanade_bot.plugins.gallery.gallery import render_gallery_thumbnails
+from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
 
 from .config import cfg, gallery_name_data
@@ -243,19 +244,46 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     await get_picture.finish(message)
 
 
-async def _get_pictures_from_message(bot: OneBot, message: OneBotMessage) -> list[Path]:
-    """从消息中提取图片文件路径"""
-    pic_paths: list[Path] = []
+async def _get_pictures_from_message(
+    bot: OneBot,
+    message: OneBotMessage,
+    *,
+    forward_image: bool = False,
+) -> list[Path]:
+    """从消息中提取图片文件
+
+    :param forward_image: 当前message是否为转发消息
+        如果是，则使用http client获取图片附件，否则使用bot.get_image获取图片附件
+    """
+    pictures: list[Path] = []
     for seg in message:
         if seg.type == "image":
-            pic_url = seg.data["file"]
-            r = await bot.get_image(file=pic_url)
-            pic_paths.append(Path(r["file"]))
-        if seg.type == "forward":
+            file: str = seg.data["file"]
+            if not forward_image:
+                # 普通消息中的图片，使用bot.get_image获取图片附件
+                r = await bot.get_image(file=file)
+                pictures.append(Path(r["file"]))
+                continue
+
+            # 转发消息中的图片，使用http client获取图片附件
+            url = seg.data["url"]
+            r = await HTTPX_CLIENT.get(url)
+            if r.status_code != 200:
+                logger.warning("获取转发消息中的图片失败: {}", url)
+                continue
+
+            cache_dir = cfg.cache_dir_path
+            pic_path = cache_dir / file
+            pic_path.write_bytes(r.content)
+            pictures.append(pic_path)
+
+        elif seg.type == "forward":
             _, fwd_msg_events = await get_forward_message_events(bot, seg)
             for e in fwd_msg_events:
-                pic_paths.extend(await _get_pictures_from_message(bot, e.message))
-    return pic_paths
+                pictures.extend(
+                    await _get_pictures_from_message(bot, e.message, forward_image=True)
+                )
+    return pictures
 
 
 @add_picture.handle()

@@ -11,6 +11,8 @@ from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, MessageSegme
 from nonebot.params import CommandArg
 from PIL import Image, UnidentifiedImageError
 
+from kanade_bot.utils.common import HTTPX_CLIENT
+
 from .matcher import back, fan, flow, mid, mirror, rotate, speed
 
 # QQ 客户端对 GIF 的帧间隔支持并不一致。20ms 是参考实现使用的
@@ -41,23 +43,23 @@ async def _get_reply_image(bot: Bot, event: MessageEvent) -> bytes:
     if event.reply is None:
         raise ImageToolError("请引用一条包含图片的消息。")
 
-    image_segment = next(
+    segment = next(
         (segment for segment in event.reply.message if segment.type == "image"),
         None,
     )
-    if image_segment is None:
+    if segment is None:
         raise ImageToolError("引用的消息中没有图片。")
 
-    image_file = image_segment.data.get("file")
-    image_url = image_segment.data.get("url")
+    file: str = segment.data["file"]
+    url: str | None = segment.data.get("url")
 
     # 优先使用 OneBot 的 get_image API。它既能处理客户端内部的图片标识，
     # 也能避免再次从公网下载已经落盘的图片。
-    if image_file:
+    if file:
         try:
-            image_info = await bot.get_image(file=image_file)
-            local_file = image_info.get("file")
-            image_url = image_info.get("url") or image_url
+            r = await bot.get_image(file=file)
+            local_file = r["file"]
+            url = r.get("url") or url
             if local_file:
                 path = Path(local_file)
                 if path.is_file():
@@ -66,23 +68,22 @@ async def _get_reply_image(bot: Bot, event: MessageEvent) -> bytes:
             logger.debug(f"imgtool 调用 get_image 失败，将尝试直接读取图片：{e}")
 
     # 某些实现会直接把本地路径或 URL 放在 image.file 中。
-    if image_file:
-        if str(image_file).startswith(("http://", "https://")):
-            image_url = str(image_file)
+    if file:
+        if file.startswith(("http://", "https://")):
+            url = file
         else:
             try:
-                path = Path(image_file)
+                path = Path(file)
                 if path.is_file():
                     return await asyncio.to_thread(path.read_bytes)
             except OSError:
                 pass
 
-    if image_url and str(image_url).startswith(("http://", "https://")):
+    if url and url.startswith(("http://", "https://")):
         try:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-                response = await client.get(str(image_url))
-                response.raise_for_status()
-                return response.content
+            response = await HTTPX_CLIENT.get(str(url))
+            response.raise_for_status()
+            return response.content
         except httpx.HTTPError as exc:
             logger.warning(f"imgtool 下载引用图片失败：{exc}")
 

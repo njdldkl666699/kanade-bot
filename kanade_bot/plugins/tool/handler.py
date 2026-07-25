@@ -16,10 +16,10 @@ from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 
+from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
-from .client import client
 from .config import preset_reaction_cfg
 from .matcher import (
     add_a_schedule,
@@ -116,7 +116,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     if not username:
         await mc_skin.finish("请提供玩家用户名")
 
-    resp = await client.get(f"https://api.mojang.com/users/profiles/minecraft/{username}")
+    resp = await HTTPX_CLIENT.get(f"https://api.mojang.com/users/profiles/minecraft/{username}")
     data = resp.json()
     if resp.status_code == 404:
         await mc_skin.finish(data["errorMessage"])
@@ -124,7 +124,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         await mc_skin.finish("查询UUID失败")
     uuid = data["id"]
 
-    body_data = await client.get(f"https://mc-api.io/render/full/{username}/java?size=256")
+    body_data = await HTTPX_CLIENT.get(f"https://mc-api.io/render/full/{username}/java?size=256")
     if body_data.status_code != 200:
         await mc_skin.finish("获取皮肤失败")
 

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from copilot import CopilotClient
 from copilot.client import StopError
+from httpx import AsyncClient
 from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
@@ -57,6 +58,9 @@ class AttrDocModel(BaseModel):
         "use_attribute_docstrings": True,
     }
 
+
+HTTPX_CLIENT = AsyncClient(timeout=20)
+"""全局HTTPX客户端单例"""
 
 driver = get_driver()
 

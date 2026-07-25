@@ -6,7 +6,11 @@ from pydantic import BaseModel
 require("nonebot_plugin_localstore")
 require("model_updater")
 
-from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_data_file
+from nonebot_plugin_localstore import (
+    get_plugin_cache_dir,
+    get_plugin_data_dir,
+    get_plugin_data_file,
+)
 
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
@@ -26,6 +30,11 @@ class ScopedConfig(BaseModel):
     def data_dir_path(self) -> Path:
         """画廊数据存储根目录"""
         return get_plugin_data_dir()
+
+    @property
+    def cache_dir_path(self) -> Path:
+        """画廊缓存目录"""
+        return get_plugin_cache_dir()
 
 
 class Config(BaseModel):

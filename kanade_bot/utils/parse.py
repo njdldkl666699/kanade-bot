@@ -1,7 +1,8 @@
+import base64
 from typing import Any, SupportsIndex
 
 from copilot.session import Attachment
-from nonebot import logger
+from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.onebot.v11 import ActionFailed, GroupMessageEvent
@@ -9,6 +10,8 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.onebot.v11.event import Reply
+
+from kanade_bot.utils.common import HTTPX_CLIENT
 
 from .session import extract_session_info
 
@@ -118,10 +121,14 @@ async def get_forward_message_events(
 async def parse_onebot_message_for_ai(
     event_or_reply: OneBotMessageEvent | Reply,
     bot: OneBot | None = None,
+    *,
+    forward_image: bool = False,
 ) -> tuple[str, list[Attachment]]:
     """解析OneBot消息，返回AI可读的文本和附件列表
 
     :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
+    :param forward_image: 当前event_or_reply是否是转发消息
+        如果是，则使用http client获取图片附件，否则使用bot.get_image获取图片附件
     """
     message = event_or_reply.message
     text_parts: list[str] = []
@@ -134,7 +141,7 @@ async def parse_onebot_message_for_ai(
         text_parts.append(f"<forward id={fwd_id}>")
 
         for e in fwd_msg_events:
-            text, fwd_attachments = await parse_onebot_message_for_ai(e, bot)
+            text, fwd_attachments = await parse_onebot_message_for_ai(e, bot, forward_image=True)
 
             # 附带发送者信息
             session_info = await extract_session_info(e, bot)
@@ -155,14 +162,32 @@ async def parse_onebot_message_for_ai(
             continue
 
         file = segment.data["file"]
-        image: Attachment = {
-            "type": "file",
-            "path": "",
-            "displayName": file or "image.png",
-        }
-        if bot:
+        attachment: Attachment
+        if forward_image:
+            # 转发消息中的图片，使用http client获取图片附件
+            url = segment.data["url"]
+            r = await HTTPX_CLIENT.get(url)
+            if r.status_code != 200:
+                logger.warning("获取转发消息中的图片失败: {}", url)
+                continue
+
+            attachment = {
+                "type": "blob",
+                "data": base64.b64encode(r.content).decode(),
+                "mimeType": r.headers.get("Content-Type", "application/octet-stream"),
+                "displayName": file or "image.png",
+            }
+        elif bot:
+            # 普通消息中的图片，使用bot.get_image获取图片附件
             r = await bot.get_image(file=file)
-            image["path"] = r["file"]
+            attachment = {
+                "type": "file",
+                "path": r["file"],
+                "displayName": file or "image.png",
+            }
+        else:
+            logger.warning("无法获取图片附件，缺少bot实例")
+            continue
 
         # 把前半段内容转为文字
         splitted_segments = message[:i]
@@ -171,8 +196,8 @@ async def parse_onebot_message_for_ai(
 
         # 添加图片附件
         last_image_index = i
-        attachments.append(image)
-        text_parts.append(f"[图片：{image['displayName']}]")
+        attachments.append(attachment)
+        text_parts.append(f"[图片：{attachment['displayName']}]")
 
     # 添加最后剩余的文本内容，没有图片则直接转换整个消息为文本
     # == -1 : 整个消息段列表都不是图片

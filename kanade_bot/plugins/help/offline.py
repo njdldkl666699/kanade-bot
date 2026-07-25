@@ -1,12 +1,11 @@
-from httpx import AsyncClient, HTTPStatusError
+from httpx import HTTPStatusError
 from nonebot import get_plugin_config, logger
+
+from kanade_bot.utils.common import HTTPX_CLIENT
 
 from .config import Config
 
 cfg = get_plugin_config(Config).help
-
-
-client = AsyncClient()
 
 
 async def send_offline_notice(
@@ -36,7 +35,7 @@ async def send_offline_notice(
 
     # 发送通知
     try:
-        response = await client.put(
+        response = await HTTPX_CLIENT.put(
             url,
             headers=headers,
             content=content,

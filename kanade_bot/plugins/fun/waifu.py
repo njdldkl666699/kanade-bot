@@ -1,10 +1,12 @@
 from io import BytesIO
 from typing import Literal
 
-from httpx import AsyncClient, TimeoutException
+from httpx import TimeoutException
 from nonebot import get_plugin_config
 from PIL import Image
 from pydantic import BaseModel
+
+from kanade_bot.utils.common import HTTPX_CLIENT
 
 from .config import Config
 
@@ -110,11 +112,9 @@ LOLI_API_URL = "https://www.loliapi.com/bg/?type=url"
 
 LOLICON_API_URL = "https://api.lolicon.app/setu/v2"
 
-client = AsyncClient(timeout=10)
-
 
 async def random_loli_waifu() -> str:
-    url_resp = await client.get(LOLI_API_URL)
+    url_resp = await HTTPX_CLIENT.get(LOLI_API_URL)
     return url_resp.text
 
 
@@ -124,7 +124,7 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
     request.proxy = cfg.lolicon_proxy
     request.size = "regular"
 
-    resp = await client.post(
+    resp = await HTTPX_CLIENT.post(
         LOLICON_API_URL,
         json=request.model_dump(exclude_none=True),
     )
@@ -143,7 +143,7 @@ async def get_compressed_image(
     lossless: bool = False,
 ) -> bytes | None:
     try:
-        resp = await client.get(url)
+        resp = await HTTPX_CLIENT.get(url)
     except TimeoutException:
         return None
 
