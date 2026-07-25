@@ -12,76 +12,27 @@ from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 from send2trash import send2trash
 
-from kanade_bot.plugins.gallery.gallery import render_gallery_thumbnails
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
 
 from .config import cfg, gallery_name_data
-from .gallery import get_gallery_name, get_picture_by_id, save_pictures
+from .gallery import (
+    add_pictures,
+    get_gallery_name,
+    get_picture_by_id,
+    render_gallery_overview,
+    render_gallery_thumbnails,
+)
 from .matcher import (
     add_gallery,
     add_gallery_alias,
     add_picture,
-    gallery_info,
-    gallery_list,
     gallery_pictures,
     get_picture,
     remove_gallery,
     remove_gallery_alias,
     remove_picture,
 )
-
-
-@gallery_list.handle()
-async def _(arg_msg: Message = CommandArg()):
-    page_arg = arg_msg.extract_plain_text().strip()
-    page: int = 1
-    if page_arg.isdigit():
-        page = int(page_arg)
-
-    gallery_names = list(gallery_name_data.instance.name_to_aliases.keys())
-    total = len(gallery_names)
-    page_size = 10
-    total_pages = (total + page_size - 1) // page_size
-
-    if page < 1 or page > total_pages:
-        await gallery_list.finish(f"无效的页码，请输入 1 到 {total_pages} 之间的数字。")
-
-    messages = [f"画廊列表（共 {total} 个）"]
-    start_index = (page - 1) * page_size
-    end_index = min(start_index + page_size, total)
-    for i in range(start_index, end_index):
-        name = gallery_names[i]
-        messages.append(f"{i + 1}. {name}")
-    messages.append(f"第 {page}/{total_pages} 页")
-
-    await gallery_list.finish("\n".join(messages))
-
-
-@gallery_info.handle()
-async def _(arg_msg: Message = CommandArg()):
-    name_or_alias = arg_msg.extract_plain_text().strip()
-    if not name_or_alias:
-        await gallery_info.finish("请提供画廊名称或别名。")
-
-    name = get_gallery_name(name_or_alias)
-    if not name:
-        await gallery_info.finish(f"未找到画廊：{name_or_alias}")
-
-    # 获取画廊图片数量
-    gallery_dir = cfg.data_dir_path / name
-    if not gallery_dir.exists() or not gallery_dir.is_dir():
-        logger.warning(f"画廊索引中存在画廊名称 {name}，但对应的目录不存在：{gallery_dir}")
-        await gallery_info.finish(f"画廊 {name} 的目录不存在。")
-    num_pictures = len(list(gallery_dir.glob("*")))
-
-    # 获取别名列表
-    aliases = gallery_name_data.instance.name_to_aliases.get(name, [])
-    alias_str = ", ".join(aliases) if aliases else "无"
-    # XXX: 这里可以考虑限制别名字符串的长度，避免过长的输出
-    # alias_str_truncated = alias_str if len(alias_str) <= 50 else alias_str[:50] + "..."
-
-    await gallery_info.finish(f"画廊：{name}\n图片数量：{num_pictures}\n别名：{alias_str}")
 
 
 @add_gallery.handle()
@@ -182,8 +133,14 @@ async def _(arg_msg: Message = CommandArg()):
 
 
 @gallery_pictures.handle()
-async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+async def _(arg_msg: Message = CommandArg()):
     name_or_alias = arg_msg.extract_plain_text().strip()
+    if not name_or_alias:
+        image = render_gallery_overview()
+        if not image:
+            await gallery_pictures.finish("当前没有画廊。")
+        await gallery_pictures.finish(OneBotMessageSegment.image(image))
+
     name = get_gallery_name(name_or_alias)
     if not name:
         await gallery_pictures.finish(f"未找到画廊：{name_or_alias}")
@@ -293,9 +250,18 @@ async def _(
     event: OneBotMessageEvent,
     arg_msg: Message = CommandArg(),
 ):
-    name_or_alias = arg_msg.extract_plain_text().strip()
+    args = parse_arg_message(
+        arg_msg.extract_plain_text(),
+        {"name_or_alias": str, "force": str},
+        maxsplit=1,
+    )
+    name_or_alias: str | None = args["name_or_alias"]
+    force_arg: str | None = args["force"]
     if not name_or_alias:
         await add_picture.finish("请提供画廊名称。")
+    if force_arg is not None and force_arg.lower() != "force":
+        await add_picture.finish("第二个参数仅支持 force，格式：<画廊名称> [force]")
+    force = force_arg is not None
     name = get_gallery_name(name_or_alias)
     if not name:
         await add_picture.finish(f"未找到画廊：{name_or_alias}")
@@ -303,11 +269,11 @@ async def _(
     # 获取引用的图片
     if event.reply:
         pic_paths = await _get_pictures_from_message(bot, event.reply.message)
-        save_pictures(name, pic_paths)
-        await add_picture.finish(f"成功添加 {len(pic_paths)} 张图片到画廊 {name}。")
+        await _finish_add_pictures(name, pic_paths, force=force)
 
     # pause，要求用户发送图片
     state["gallery_name"] = name
+    state["gallery_force"] = force
     await add_picture.pause(f"请发送要添加到画廊 {name} 的图片：")
 
 
@@ -315,8 +281,21 @@ async def _(
 async def _(state: T_State, bot: OneBot, message: OneBotMessage = EventMessage()):
     pic_paths = await _get_pictures_from_message(bot, message)
     name = state["gallery_name"]
-    save_pictures(name, pic_paths)
-    await add_picture.finish(f"成功添加 {len(pic_paths)} 张图片到画廊 {name}。")
+    await _finish_add_pictures(name, pic_paths, force=state.get("gallery_force", False))
+
+
+async def _finish_add_pictures(
+    name: str,
+    pic_paths: list[Path],
+    *,
+    force: bool,
+) -> None:
+    result = add_pictures(name, pic_paths, force=force)
+    response = OneBotMessage()
+    if result.duplicate_image:
+        response += OneBotMessageSegment.image(result.duplicate_image)
+    response += OneBotMessageSegment.text(result.summary(name))
+    await add_picture.finish(response)
 
 
 @remove_picture.handle()
