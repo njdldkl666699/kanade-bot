@@ -2,7 +2,8 @@
 from pathlib import Path
 from typing import Literal
 
-from copilot import ProviderConfig
+from copilot import MCPServerConfig, ProviderConfig
+from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
@@ -62,7 +63,16 @@ class ScopedConfig(BaseModel):
     model: str = "gpt-5-mini"
     """模型ID"""
     provider: ProviderConfig | None = None
-    """模型提供商配置，如果为None则使用Copilot内置模型"""
+    """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
+    reasoning_effort: ReasoningEffort | None = None
+    """推理努力程度"""
+    excluded_tools: list[str] | None = None
+    """排除的工具列表，如果为None则不排除任何工具"""
+    mcp_servers: dict[str, MCPServerConfig] | None = None
+    """MCP服务器配置"""
+    enable_memory: bool = True
+    """是否启用记忆功能"""
+
     image_caption_model: str | None = None
     """图片转述模型，如果为None则不使用
     
@@ -70,8 +80,6 @@ class ScopedConfig(BaseModel):
     """
     image_caption_provider: ProviderConfig | None = None
     """图片转述模型提供商配置，如果为None则使用Copilot内置模型"""
-    tavily_api_key: str
-    """Tavily API Key"""
 
     system_prompt_file: str = "Kanade-v3.md"
     """系统提示词文件名"""
@@ -89,11 +97,8 @@ class ScopedConfig(BaseModel):
     """聊天配置文件名"""
     fail_image_file: str = "chat_fail.jpg"
     """聊天失败时发送的图片名，不存在则返回默认的文本消息"""
-
     memes_dir: str = "memes/"
     """表情包存储目录名"""
-    memories_dir: str = "memories/"
-    """记忆文件存储目录名称，每个记忆为一个 Markdown 文件"""
 
     rag: RAGConfig = RAGConfig()
 
@@ -116,10 +121,6 @@ class ScopedConfig(BaseModel):
     @property
     def memes_dir_path(self) -> Path:
         return get_plugin_data_file(self.memes_dir)
-
-    @property
-    def memories_dir_path(self) -> Path:
-        return get_plugin_data_file(self.memories_dir)
 
 
 class Config(BaseModel):

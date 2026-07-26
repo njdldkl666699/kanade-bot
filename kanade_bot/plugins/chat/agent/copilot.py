@@ -1,11 +1,10 @@
 import asyncio
 from collections import deque
-from typing import Any, ClassVar
+from typing import Any
 
 from copilot import CopilotSession
 from copilot.session import Attachment, PermissionHandler
 from copilot.session_events import AssistantMessageData
-from copilot.tools import Tool
 from nonebot import logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
@@ -13,54 +12,13 @@ from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
-from .memory import delete_session_memory, set_memory_context
 from .tool import (
+    get_image_caption,
     list_memes,
-    read_memory,
-    tavily_extract,
-    tavily_search,
     view_image,
-    write_memory,
 )
 
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
-
-IMAGE_CAPTION_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内容转述为文字描述。
-
-请充分查看、分析和理解图片内容，详细地描述图片内容中的场景、元素等信息，避免遗漏重要信息。
-
-输出要求：直接输出图片的文字描述，不要包含任何额外的解释或说明。
-"""
-
-
-async def _get_image_caption(attachment: Attachment) -> str | None:
-    """使用图片转述模型获取图片的文字描述"""
-    session = await COPILOT_CLIENT.create_session(
-        model=cfg.image_caption_model,
-        provider=cfg.image_caption_provider,
-        system_message={
-            "mode": "replace",
-            "content": IMAGE_CAPTION_SYSTEM_PROMPT,
-        },
-    )
-    try:
-        async with session:
-            event = await session.send_and_wait(
-                prompt="请描述这张图片的内容。",
-                attachments=[attachment],
-                timeout=180,
-            )
-    except Exception as e:  # noqa: BLE001
-        logger.exception("获取图片转述时发生错误: {}", e)
-        return
-
-    if not event:
-        logger.warning(f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}")
-        return
-
-    match event.data:
-        case AssistantMessageData() as data:
-            return data.content.strip()
 
 
 def _build_system_prompt() -> str:
@@ -85,32 +43,9 @@ def _build_system_prompt() -> str:
 class CopilotSessionManager:
     """Copilot会话管理器，负责管理会话对象、消息缓冲区、会话锁等资源，并提供发送消息、添加缓冲消息、重置会话等功能"""
 
-    tools: ClassVar[list[Tool]] = [
-        tavily_search,
-        tavily_extract,
-        list_memes,
-        read_memory,
-        write_memory,
-        view_image,
-    ]
-
-    available_tools: ClassVar[list[str]] = [
-        "view",
-        "read",
-        "search",
-        "grep",
-        "glob",
-        "sql",
-        "skill",
-        "web_fetch",
-        "web_search",
-        *(tool.name for tool in tools),
-    ]
-    """工具列表，包含所有可用工具的名称"""
-
     system_prompt = _build_system_prompt()
     """系统提示词"""
-    logger.debug(f"系统提示词:\n{system_prompt}")
+    logger.trace(f"系统提示词:\n{system_prompt}")
 
     @classmethod
     def session_config(cls, session_info: SessionInfo) -> dict[str, Any]:
@@ -123,13 +58,15 @@ class CopilotSessionManager:
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.model,
             "provider": cfg.provider,
-            "reasoning_effort": "medium",
-            "tools": cls.tools,
-            "available_tools": cls.available_tools,
+            "reasoning_effort": cfg.reasoning_effort,
+            "tools": [list_memes, view_image],
+            "excluded_tools": cfg.excluded_tools,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,
             },
+            "mcp_servers": cfg.mcp_servers,
+            "memory": {"enabled": cfg.enable_memory},
         }
 
     def __init__(self):
@@ -156,7 +93,7 @@ class CopilotSessionManager:
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             logger.info(f"恢复会话{session_id}成功")
-        except (RuntimeError, ValueError) as e:
+        except Exception as e:  # noqa: BLE001
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
             session = await COPILOT_CLIENT.create_session(session_id=session_id, **session_config)
             new_session = True
@@ -191,7 +128,6 @@ class CopilotSessionManager:
 
             if new_session:
                 logger.info(f"会话{session_id}是新会话，旧会话可能被手动删除或损坏")
-                delete_session_memory(session_id)
 
             async with self._global_lock:
                 if new_session:
@@ -216,7 +152,6 @@ class CopilotSessionManager:
             )
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
-            set_memory_context(session_info)
             try:
                 session_event = await session.send_and_wait(
                     send_prompt,
@@ -260,7 +195,7 @@ class CopilotSessionManager:
             prompt_parts.append(reply_text)
 
         if cfg.image_caption_model and attachments:
-            image_caption_tasks = [_get_image_caption(att) for att in attachments]
+            image_caption_tasks = [get_image_caption(att) for att in attachments]
             # 并发获取图片转述，避免排队获取太慢
             image_captions = await asyncio.gather(*image_caption_tasks)
             caption_descriptions: list[str] = []
@@ -320,7 +255,6 @@ class CopilotSessionManager:
                 await COPILOT_CLIENT.delete_session(session_id)
             except RuntimeError as e:
                 logger.warning(f"删除会话{session_id}时发生错误: {e}")
-            delete_session_memory(session_id)
 
 
 copilot = CopilotSessionManager()

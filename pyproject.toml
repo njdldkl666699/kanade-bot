@@ -1,11 +1,11 @@
 [project]
 name = "kanade-bot"
-version = "v4.10.5"
+version = "v4.11.0"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13, <4.0"
 dependencies = [
-    "nonebot2[fastapi,httpx]>=2.5.0",
+    "nonebot2[fastapi]>=2.5.0",
     "nonebot-adapter-onebot @ git+https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git@master",
     "nonebot-adapter-console>=0.9.0",
     "nonebot-plugin-apscheduler>=0.5.0",
