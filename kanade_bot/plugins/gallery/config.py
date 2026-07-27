@@ -21,6 +21,8 @@ class ScopedConfig(BaseModel):
 
     send_pic_limit: int = 10
     """每次发送图片的数量限制"""
+    send_pic_as_meme: bool = True
+    """是否将发送的图片作为表情包发送"""
 
     @property
     def name_data_file_path(self) -> Path:

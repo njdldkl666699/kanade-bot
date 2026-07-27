@@ -13,6 +13,7 @@ from nonebot.typing import T_State
 from send2trash import send2trash
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
 
 from .config import cfg, gallery_name_data
@@ -197,7 +198,10 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     message = OneBotMessage()
     for _ in range(num):
         pic_file = random.choice(pic_files)
-        message += OneBotMessageSegment.image(pic_file)
+        if cfg.send_pic_as_meme:
+            message += OneBotMessageSegmentMeme(pic_file)
+        else:
+            message += OneBotMessageSegment.image(pic_file)
     await get_picture.finish(message)
 
 
