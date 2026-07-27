@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.exception import NetworkError
 from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 from send2trash import send2trash
@@ -170,17 +171,19 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     args = re.split(r"[x*×\s]+", arg_str, maxsplit=1)
     if not args or len(args) < 1:
         await get_picture.finish("请提供画廊名称。")
-    arg1 = args[0]
+    arg1: str = args[0]
 
     name = get_gallery_name(arg1)
     if not name:
         if not arg1.isdigit():
             await get_picture.finish(f"未找到画廊：{arg1}")
         # 尝试按图片id获取图片
-        if pic_file := get_picture_by_id(int(arg1)):
-            await get_picture.finish(OneBotMessageSegment.image(pic_file))
-        else:
+        if not (pic_file := get_picture_by_id(int(arg1))):
             await get_picture.finish(f"未找到图片id {arg1} 对应的图片。")
+        if cfg.send_pic_as_meme:
+            await get_picture.finish(OneBotMessageSegmentMeme(pic_file))
+        else:
+            await get_picture.finish(OneBotMessageSegment.image(pic_file))
 
     num = 1
     if len(args) > 1 and args[1].isdigit():
@@ -205,6 +208,20 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     await get_picture.finish(message)
 
 
+async def _get_image_from_url(url: str) -> Path | None:
+    """从URL获取图片文件，返回图片文件路径"""
+    r = await HTTPX_CLIENT.get(url)
+    if r.status_code != 200:
+        return None
+
+    # 将图片保存到缓存目录
+    cache_dir = cfg.cache_dir_path
+    file_name = url.split("/")[-1]
+    pic_path = cache_dir / file_name
+    pic_path.write_bytes(r.content)
+    return pic_path
+
+
 async def _get_pictures_from_message(
     bot: OneBot,
     message: OneBotMessage,
@@ -219,24 +236,24 @@ async def _get_pictures_from_message(
     pictures: list[Path] = []
     for seg in message:
         if seg.type == "image":
-            file: str = seg.data["file"]
-            if not forward_image:
+            p: Path | None = None
+            if forward_image:
+                # 转发消息中的图片，直接使用http client获取图片附件
+                p = await _get_image_from_url(seg.data["url"])
+            else:
                 # 普通消息中的图片，使用bot.get_image获取图片附件
-                r = await bot.get_image(file=file)
-                pictures.append(Path(r["file"]))
-                continue
-
-            # 转发消息中的图片，使用http client获取图片附件
-            url = seg.data["url"]
-            r = await HTTPX_CLIENT.get(url)
-            if r.status_code != 200:
-                logger.warning("获取转发消息中的图片失败: {}", url)
-                continue
-
-            cache_dir = cfg.cache_dir_path
-            pic_path = cache_dir / file
-            pic_path.write_bytes(r.content)
-            pictures.append(pic_path)
+                file: str = seg.data["file"]
+                try:
+                    r = await bot.get_image(file=file)
+                    p = Path(r["file"])
+                except NetworkError as e:
+                    logger.warning(f"bot.get_image获取图片附件失败: {file}, {e}")
+                    # 回退到使用http client获取图片附件
+                    p = await _get_image_from_url(seg.data["url"])
+            if p:
+                pictures.append(p)
+            else:
+                logger.warning(f"获取图片附件失败，消息段：{seg}")
 
         elif seg.type == "forward":
             _, fwd_msg_events = await get_forward_message_events(bot, seg)

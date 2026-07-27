@@ -66,7 +66,7 @@ class CheckInConfig(AttrDocModel):
 
     succeed_templates: list[str] = [
         "嗯，{daypart}。获得 {crystal} 水晶…一点点积攒起来呢。",
-        "{daypart}。今天有{crystal} 水晶入账…不多，但也算个小进展。",
+        "{daypart}。今天有 {crystal} 水晶入账…不多，但也算个小进展。",
         "啊…{daypart}。+{crystal} 水晶。希望没弄错。",
         "嗯…{daypart}。轻轻按一下。签到成功，+{crystal} 水晶。",
         "{daypart}，签到成功。虽然不多…但每天坚持一下也挺好的。+{crystal} 水晶。",
