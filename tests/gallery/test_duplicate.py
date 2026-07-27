@@ -76,7 +76,8 @@ def test_add_pictures_skips_exact_duplicate_and_saves_unique(monkeypatch, tmp_pa
     assert result.added_count == 1
     assert len(result.duplicates) == 1
     assert result.duplicates[0].existing_path == existing
-    assert result.duplicates[0].reason == "Exact match"
+    assert result.duplicates[0].reason == "文件完全一致"
+    assert "force 参数" in result.summary("test")
     assert (gallery_dir / "43.png").is_file()
     assert result.duplicate_image is not None
     with Image.open(BytesIO(result.duplicate_image)) as comparison:
@@ -99,7 +100,7 @@ def test_add_pictures_detects_perceptual_duplicate(monkeypatch, tmp_path):
 
     assert result.added_count == 0
     assert len(result.duplicates) == 1
-    assert result.duplicates[0].reason == "dHash + pHash + aHash"
+    assert result.duplicates[0].reason == "感知哈希相似：dHash、pHash、aHash"
 
 
 def test_add_pictures_force_bypasses_duplicate_check(monkeypatch, tmp_path):
@@ -130,7 +131,7 @@ def test_add_pictures_creates_missing_gallery_directory(monkeypatch, tmp_path):
     assert (tmp_path / "test" / "1.png").is_file()
 
 
-def test_gallery_overview_uses_smallest_picture_id_as_cover(monkeypatch, tmp_path):
+def test_gallery_overview_uses_first_picture_as_cover(monkeypatch, tmp_path):
     _configure_gallery(
         monkeypatch,
         tmp_path,
@@ -145,11 +146,19 @@ def test_gallery_overview_uses_smallest_picture_id_as_cover(monkeypatch, tmp_pat
     _make_test_image(populated_dir / "10.png", inverted=True)
     _make_test_image(populated_dir / "2.png")
     (tmp_path / "空画廊").mkdir()
+    original_iterdir = Path.iterdir
+
+    def ordered_iterdir(path: Path):
+        if path == populated_dir:
+            return iter((populated_dir / "10.png", populated_dir / "2.png"))
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", ordered_iterdir)
 
     items = gallery.get_gallery_overview_items()
 
     assert [item.name for item in items] == ["有图画廊", "空画廊", "目录缺失"]
-    assert items[0].cover_path == populated_dir / "2.png"
+    assert items[0].cover_path == populated_dir / "10.png"
     assert items[0].picture_count == 2
     assert items[0].aliases == ["别名一", "别名二"]
     assert items[1].cover_path is None
@@ -177,6 +186,45 @@ def test_render_gallery_overview_returns_png(monkeypatch, tmp_path):
     with Image.open(BytesIO(overview)) as image:
         assert image.format == "PNG"
         assert image.width > image.height
+
+
+def test_render_gallery_overview_uses_five_square_covers_and_emoji(
+    monkeypatch,
+    tmp_path,
+):
+    _configure_gallery(
+        monkeypatch,
+        tmp_path,
+        name_to_aliases={f"画廊{i}😀": [f"别名{i}❤️"] for i in range(6)},
+    )
+    emoji_color = (255, 0, 255, 255)
+    monkeypatch.setattr(
+        gallery,
+        "_render_emoji",
+        lambda _text, size: Image.new("RGBA", (size, size), emoji_color),
+    )
+
+    for i in range(6):
+        gallery_dir = tmp_path / f"画廊{i}😀"
+        gallery_dir.mkdir()
+        _make_test_image(gallery_dir / f"{i + 1}.png")
+
+    overview = gallery.render_gallery_overview()
+
+    assert gallery.OVERVIEW_COLUMNS == 5
+    assert gallery.OVERVIEW_COVER_SIZE[0] == gallery.OVERVIEW_COVER_SIZE[1]
+    with gallery._load_cover(
+        tmp_path / "画廊0😀" / "1.png",
+        gallery.OVERVIEW_COVER_SIZE,
+    ) as cover:
+        assert cover.size == gallery.OVERVIEW_COVER_SIZE
+    assert list(gallery._iter_text_units("画廊👨‍👩‍👧‍👦")) == [
+        "画",
+        "廊",
+        "👨‍👩‍👧‍👦",
+    ]
+    with Image.open(BytesIO(overview)).convert("RGBA") as image:
+        assert emoji_color in image.get_flattened_data()
 
 
 def test_render_gallery_overview_returns_empty_for_no_galleries(

@@ -1,8 +1,10 @@
 import shutil
 from dataclasses import dataclass
+from functools import cache, lru_cache
 from io import BytesIO
 from pathlib import Path
 
+from emoji import emoji_list
 from nonebot import logger
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -28,6 +30,7 @@ class AddPicturesResult:
         lines: list[str] = []
         if self.duplicates:
             lines.append(f"检测到 {len(self.duplicates)} 张重复图片，已跳过。")
+            lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
         lines.append(f"成功添加 {self.added_count} 张图片到画廊 {gallery_name}。")
         return "\n".join(lines)
 
@@ -133,7 +136,7 @@ def find_duplicate_pictures(
                     candidate_index=candidate_index,
                     candidate_path=candidate_path,
                     existing_path=existing_path,
-                    reason="Exact match",
+                    reason="文件完全一致",
                 )
             )
             continue
@@ -166,7 +169,7 @@ def find_duplicate_pictures(
                 candidate_index=candidate_index,
                 candidate_path=candidate_path,
                 existing_path=existing_path,
-                reason=" + ".join(similar_hashes),
+                reason=f"感知哈希相似：{'、'.join(similar_hashes)}",
             )
         )
 
@@ -179,9 +182,9 @@ GALLERY_PADDING = 16
 GALLERY_GAP = 8
 LABEL_HEIGHT = 24
 
-OVERVIEW_COLUMNS = 4
+OVERVIEW_COLUMNS = 5
 OVERVIEW_CELL_WIDTH = 220
-OVERVIEW_COVER_SIZE = (200, 150)
+OVERVIEW_COVER_SIZE = (200, 200)
 OVERVIEW_HEADER_HEIGHT = 58
 OVERVIEW_TEXT_GAP = 6
 
@@ -189,7 +192,7 @@ DUPLICATE_COLUMNS = 2
 DUPLICATE_THUMBNAIL_SIZE = (180, 135)
 DUPLICATE_CELL_WIDTH = 408
 DUPLICATE_CELL_HEIGHT = 200
-DUPLICATE_HEADER_HEIGHT = 58
+DUPLICATE_HEADER_HEIGHT = 80
 
 
 def render_gallery_thumbnails(pic_files: list[Path]) -> bytes:
@@ -245,16 +248,19 @@ def get_gallery_overview_items() -> list[GalleryOverviewItem]:
             items.append(GalleryOverviewItem(name, list(aliases), 0, None))
             continue
 
-        picture_files = [path for path in gallery_dir.iterdir() if path.is_file()]
-        id_picture_files = [path for path in picture_files if path.stem.isdigit()]
-        cover_path = (
-            min(id_picture_files, key=lambda path: int(path.stem)) if id_picture_files else None
-        )
+        picture_count = 0
+        cover_path: Path | None = None
+        for path in gallery_dir.iterdir():
+            if not path.is_file():
+                continue
+            picture_count += 1
+            if cover_path is None:
+                cover_path = path
         items.append(
             GalleryOverviewItem(
                 name=name,
                 aliases=list(aliases),
-                picture_count=len(picture_files),
+                picture_count=picture_count,
                 cover_path=cover_path,
             )
         )
@@ -277,12 +283,13 @@ def render_gallery_overview() -> bytes:
     measure_draw = ImageDraw.Draw(measure_canvas)
     prepared_items: list[tuple[GalleryOverviewItem, list[str], list[str], int]] = []
     for item in items:
-        name_lines = _wrap_text(measure_draw, item.name, name_font, text_width)
+        name_lines = _wrap_text(measure_draw, item.name, name_font, 20, text_width)
         aliases = "、".join(item.aliases) if item.aliases else "无"
         alias_lines = _wrap_text(
             measure_draw,
             f"别名：{aliases}",
             detail_font,
+            15,
             text_width,
         )
         cell_height = (
@@ -327,7 +334,15 @@ def render_gallery_overview() -> bytes:
         text_x = cover_x
         text_y = row_y + OVERVIEW_COVER_SIZE[1] + OVERVIEW_TEXT_GAP
         for line in name_lines:
-            draw.text((text_x, text_y), line, fill="#202124", font=name_font)
+            _draw_text_with_emoji(
+                canvas,
+                draw,
+                (text_x, text_y),
+                line,
+                name_font,
+                20,
+                fill="#202124",
+            )
             text_y += 27
         draw.text(
             (text_x, text_y),
@@ -337,7 +352,15 @@ def render_gallery_overview() -> bytes:
         )
         text_y += 22
         for line in alias_lines:
-            draw.text((text_x, text_y), line, fill="#5f6368", font=detail_font)
+            _draw_text_with_emoji(
+                canvas,
+                draw,
+                (text_x, text_y),
+                line,
+                detail_font,
+                15,
+                fill="#5f6368",
+            )
             text_y += 21
 
     output = BytesIO()
@@ -357,13 +380,11 @@ def _paste_gallery_cover(
     canvas.paste(background, (x, y))
     if cover_path is not None:
         try:
-            thumbnail = _load_thumbnail(cover_path, OVERVIEW_COVER_SIZE)
+            thumbnail = _load_cover(cover_path, OVERVIEW_COVER_SIZE)
         except OSError as e:
             logger.warning(f"无法读取画廊封面 {cover_path}，将显示占位图：{e}")
         else:
-            image_x = x + (OVERVIEW_COVER_SIZE[0] - thumbnail.width) // 2
-            image_y = y + (OVERVIEW_COVER_SIZE[1] - thumbnail.height) // 2
-            canvas.paste(thumbnail, (image_x, image_y), thumbnail)
+            canvas.paste(thumbnail, (x, y), thumbnail)
             return
 
     placeholder = "暂无图片"
@@ -385,20 +406,140 @@ def _wrap_text(
     draw: ImageDraw.ImageDraw,
     text: str,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    font_size: int,
     max_width: int,
 ) -> list[str]:
     lines: list[str] = []
     current_line = ""
-    for character in text:
-        candidate = current_line + character
-        if current_line and draw.textlength(candidate, font=font) > max_width:
+    for text_unit in _iter_text_units(text):
+        candidate = current_line + text_unit
+        if current_line and _text_length(draw, candidate, font, font_size) > max_width:
             lines.append(current_line)
-            current_line = character
+            current_line = text_unit
         else:
             current_line = candidate
     if current_line or not lines:
         lines.append(current_line)
     return lines
+
+
+def _iter_text_units(text: str):
+    """Yield normal characters and whole emoji sequences as wrapping units."""
+    emoji_matches = emoji_list(text)
+    match_index = 0
+    character_index = 0
+    while character_index < len(text):
+        if (
+            match_index < len(emoji_matches)
+            and character_index == emoji_matches[match_index]["match_start"]
+        ):
+            match = emoji_matches[match_index]
+            yield match["emoji"]
+            character_index = match["match_end"]
+            match_index += 1
+            continue
+        yield text[character_index]
+        character_index += 1
+
+
+def _text_segments(text: str) -> list[tuple[str, bool]]:
+    """Split text into normal-font and emoji-font runs."""
+    matches = emoji_list(text)
+    if not matches:
+        return [(text, False)]
+
+    segments: list[tuple[str, bool]] = []
+    start = 0
+    for match in matches:
+        match_start = match["match_start"]
+        if match_start > start:
+            segments.append((text[start:match_start], False))
+        segments.append((match["emoji"], True))
+        start = match["match_end"]
+    if start < len(text):
+        segments.append((text[start:], False))
+    return segments
+
+
+def _text_length(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    font_size: int,
+) -> float:
+    width = 0.0
+    for segment, is_emoji in _text_segments(text):
+        if is_emoji and (emoji_image := _render_emoji(segment, font_size)) is not None:
+            width += emoji_image.width
+        else:
+            width += draw.textlength(segment, font=font)
+    return width
+
+
+def _draw_text_with_emoji(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    position: tuple[int, int],
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    font_size: int,
+    *,
+    fill: str,
+) -> None:
+    x, y = position
+    for segment, is_emoji in _text_segments(text):
+        emoji_image = _render_emoji(segment, font_size) if is_emoji else None
+        if emoji_image is not None:
+            emoji_y = y + max(0, (font_size + 4 - emoji_image.height) // 2)
+            canvas.paste(emoji_image, (round(x), emoji_y), emoji_image)
+            x += emoji_image.width
+            continue
+        draw.text((x, y), segment, fill=fill, font=font)
+        x += draw.textlength(segment, font=font)
+
+
+@lru_cache(maxsize=256)
+def _render_emoji(text: str, font_size: int) -> Image.Image | None:
+    font = _load_emoji_font(font_size)
+    if font is None:
+        return None
+
+    try:
+        box = font.getbbox(text)
+        width = box[2] - box[0]
+        height = box[3] - box[1]
+        if width <= 0 or height <= 0:
+            return None
+        source = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        ImageDraw.Draw(source).text(
+            (-box[0], -box[1]),
+            text,
+            font=font,
+            embedded_color=True,
+        )
+    except (OSError, ValueError):
+        return None
+
+    target_height = font_size + 4
+    target_width = max(1, round(width * target_height / height))
+    return source.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+
+@cache
+def _load_emoji_font(font_size: int) -> ImageFont.FreeTypeFont | None:
+    font_names = (
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/local/share/fonts/NotoColorEmoji.ttf",
+        "NotoColorEmoji.ttf",
+        "seguiemj.ttf",
+    )
+    for font_name in font_names:
+        for size in (font_size, 109, 128, 160):
+            try:
+                return ImageFont.truetype(font_name, size=size)
+            except OSError:
+                continue
+    return None
 
 
 def _load_font(
@@ -436,6 +577,17 @@ def _load_thumbnail(image_path: Path, size: tuple[int, int]) -> Image.Image:
         return thumbnail.copy()
 
 
+def _load_cover(image_path: Path, size: tuple[int, int]) -> Image.Image:
+    with Image.open(image_path) as source:
+        source = ImageOps.exif_transpose(source)
+        cover = ImageOps.fit(
+            source.convert("RGBA"),
+            size,
+            Image.Resampling.LANCZOS,
+        )
+        return cover.copy()
+
+
 def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
     """Render candidate and existing pictures side by side."""
     if not duplicates:
@@ -447,14 +599,20 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
     canvas_height = DUPLICATE_HEADER_HEIGHT + GALLERY_PADDING + rows * DUPLICATE_CELL_HEIGHT
     canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
     draw = ImageDraw.Draw(canvas)
-    title_font = ImageFont.load_default(size=24)
-    label_font = ImageFont.load_default(size=17)
-    detail_font = ImageFont.load_default(size=14)
+    title_font = _load_font(24, bold=True)
+    label_font = _load_font(17, bold=True)
+    detail_font = _load_font(14)
     draw.text(
         (GALLERY_PADDING, GALLERY_PADDING),
-        f"Duplicate pictures: {len(duplicates)}",
+        f"检测到 {len(duplicates)} 张重复图片",
         fill="#202124",
         font=title_font,
+    )
+    draw.text(
+        (GALLERY_PADDING, GALLERY_PADDING + 32),
+        "如需跳过查重，请在添加图片命令末尾加上 force 参数",
+        fill="#5f6368",
+        font=detail_font,
     )
 
     for index, duplicate in enumerate(duplicates):
@@ -475,14 +633,14 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
         _paste_comparison_thumbnail(canvas, duplicate.existing_path, right_x, image_y)
         draw.text(
             (left_x, cell_y + 2),
-            f"New #{duplicate.candidate_index}",
+            f"待添加 #{duplicate.candidate_index}",
             fill="#202124",
             font=label_font,
         )
         existing_id = duplicate.existing_path.stem
         draw.text(
             (right_x, cell_y + 2),
-            f"Existing #{existing_id}",
+            f"画廊已有 #{existing_id}",
             fill="#202124",
             font=label_font,
         )
