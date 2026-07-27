@@ -1,15 +1,23 @@
 from nonebot import on_command, on_message, require
+from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
-from kanade_bot.utils.common import group_permission, not_to_me
+from kanade_bot.utils.common import not_to_me
 
 require("command_counter")
 
 from kanade_bot.plugins.command_counter import register_matcher
 
+
+def chat_permission(event: Event) -> bool:
+    """匹配非OneBot私聊消息类型事件"""
+    return not isinstance(event, OneBotPrivateMessageEvent)
+
+
 chat = on_message(
-    rule=to_me() & group_permission,
+    rule=to_me() & chat_permission,
     priority=100000,
     block=True,
 )

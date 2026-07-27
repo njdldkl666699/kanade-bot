@@ -10,9 +10,7 @@ from httpx import AsyncClient
 from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
-from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Event as OneBotEvent
-from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 from pydantic import BaseModel
@@ -29,11 +27,6 @@ def get_platform_type(event: Event) -> PlatformType:
         return "onebot"
     else:
         raise TypeError(f"Unsupported event type: {type(event)}")
-
-
-def group_permission(event: OneBotGroupMessageEvent | ConsolePublicMessageEvent) -> bool:
-    """匹配群聊消息类型事件"""
-    return True
 
 
 def superuser_onebot_private_permission(event: OneBotPrivateMessageEvent) -> bool:

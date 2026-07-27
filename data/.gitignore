@@ -1,4 +1,4 @@
-chat/memories/
+chat/memories.*
 chat/rag_db/
 command_counter/
 crystal/

@@ -17,10 +17,7 @@ class TavilySearchParams(BaseModel):
 
 
 @define_tool(
-    "list_memes",
-    description="""List the available meme dictionary where keys are meme names and values are descriptions.
-To use a meme in a reply, reference it as {{meme_name}}, for example {{happy}};
-it will be automatically replaced with the corresponding meme image when sent.""",
+    "list_memes", description="""列出当前可用的表情包字典，键为表情包名称，值为表情包描述。"""
 )
 def list_memes():
     return chat_configs.instance.memes
@@ -64,9 +61,7 @@ async def get_image_caption(attachment: Attachment) -> str | None:
 
 @define_tool(
     "view_image",
-    description="Image viewer tool. Provide one image URL, and"
-    "if you have vision capabilities, it will return the image content;"
-    "otherwise, it will return a text caption for the image.",
+    description="查看图片工具。提供一个图片URL，如果你具备视觉能力，将返回图片内容；否则将返回图片的文字转述。",
 )
 async def view_image(url: str) -> ToolResult | str:
     r = await HTTPX_CLIENT.get(url)

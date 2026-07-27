@@ -5,7 +5,7 @@ from typing import Literal
 from copilot import MCPServerConfig, ProviderConfig
 from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
-from pydantic import BaseModel
+from pydantic import BaseModel, PositiveInt
 
 from kanade_bot.utils.common import AttrDocModel, PlatformType, generate_schema
 
@@ -70,8 +70,11 @@ class ScopedConfig(BaseModel):
     """排除的工具列表，如果为None则不排除任何工具"""
     mcp_servers: dict[str, MCPServerConfig] | None = None
     """MCP服务器配置"""
-    enable_memory: bool = True
-    """是否启用记忆功能"""
+
+    memory_database_file: str = "memories.sqlite3"
+    """持久化记忆数据库文件名，位于插件数据目录下"""
+    memory_max_records_per_scope: PositiveInt = 256
+    """每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录"""
 
     image_caption_model: str | None = None
     """图片转述模型，如果为None则不使用
@@ -121,6 +124,10 @@ class ScopedConfig(BaseModel):
     @property
     def memes_dir_path(self) -> Path:
         return get_plugin_data_file(self.memes_dir)
+
+    @property
+    def memory_database_file_path(self) -> Path:
+        return get_plugin_data_file(self.memory_database_file)
 
 
 class Config(BaseModel):

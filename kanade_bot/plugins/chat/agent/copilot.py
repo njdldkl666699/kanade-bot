@@ -12,6 +12,7 @@ from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
+from .memory import MemoryContext, MemoryStore, build_memory_tools
 from .tool import (
     get_image_caption,
     list_memes,
@@ -47,29 +48,39 @@ class CopilotSessionManager:
     """系统提示词"""
     logger.trace(f"系统提示词:\n{system_prompt}")
 
-    @classmethod
-    def session_config(cls, session_info: SessionInfo) -> dict[str, Any]:
+    def session_config(self, session_info: SessionInfo) -> dict[str, Any]:
         """返回会话配置字典"""
-        session_system_prompt = cls.system_prompt
+        session_system_prompt = self.system_prompt
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
             session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
+
+        tools = [list_memes, view_image]
+        memory_context = self._update_memory_context(session_info)
+        memory_tools = build_memory_tools(memory_context, self._memory_store)
+        if memory_tools:
+            tools.extend(memory_tools)
 
         return {
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.model,
             "provider": cfg.provider,
             "reasoning_effort": cfg.reasoning_effort,
-            "tools": [list_memes, view_image],
+            "tools": tools,
             "excluded_tools": cfg.excluded_tools,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,
             },
             "mcp_servers": cfg.mcp_servers,
-            "memory": {"enabled": cfg.enable_memory},
         }
 
     def __init__(self):
+        self._memory_store = MemoryStore(
+            cfg.memory_database_file_path,
+            max_memories_per_scope=cfg.memory_max_records_per_scope,
+        )
+        self._memory_contexts: dict[str, MemoryContext] = {}
+
         self._sessions: dict[str, CopilotSession] = {}
         """会话对象缓存，键为会话ID，值为CopilotSession对象"""
 
@@ -115,6 +126,10 @@ class CopilotSessionManager:
         """
         session_id = session_info.session_id
         async with await self._ensure_session_lock(session_id):
+            # Group sessions are shared by members; switch the tool context to
+            # the current sender while the per-session lock is held.
+            self._update_memory_context(session_info)
+
             async with self._global_lock:
                 session = self._sessions.get(session_id)
 
@@ -245,6 +260,7 @@ class CopilotSessionManager:
         async with session_lock:
             async with self._global_lock:
                 session = self._sessions.pop(session_id, None)
+                self._memory_contexts.pop(session_id, None)
                 if session_id in self._sessions_prompt_buffer:
                     del self._sessions_prompt_buffer[session_id]
 
@@ -255,6 +271,15 @@ class CopilotSessionManager:
                 await COPILOT_CLIENT.delete_session(session_id)
             except RuntimeError as e:
                 logger.warning(f"删除会话{session_id}时发生错误: {e}")
+
+    def _update_memory_context(self, session_info: SessionInfo) -> MemoryContext:
+        context = self._memory_contexts.get(session_info.session_id)
+        if context is None:
+            context = MemoryContext.from_session_info(session_info)
+            self._memory_contexts[session_info.session_id] = context
+        else:
+            context.update(session_info)
+        return context
 
 
 copilot = CopilotSessionManager()

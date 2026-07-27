@@ -28,9 +28,9 @@ class AddPicturesResult:
 
     def summary(self, gallery_name: str) -> str:
         lines: list[str] = []
-        if self.duplicates:
-            lines.append(f"检测到 {len(self.duplicates)} 张重复图片，已跳过。")
-            lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
+        # if self.duplicates:
+        #     lines.append(f"检测到 {len(self.duplicates)} 张重复图片，已跳过。")
+        #     lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
         lines.append(f"成功添加 {self.added_count} 张图片到画廊 {gallery_name}。")
         return "\n".join(lines)
 
