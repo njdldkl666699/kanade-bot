@@ -58,7 +58,7 @@ register_matcher(get_picture, "获取图片")
 
 add_picture = on_command(
     "添加图片",
-    aliases={"add_picture"},
+    aliases={"add_picture", "上传图片", "上传"},
     priority=2,
     block=True,
 )

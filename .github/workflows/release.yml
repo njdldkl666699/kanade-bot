@@ -68,6 +68,50 @@ jobs:
             echo "检测到版本更新：${previous_version:-<none>} -> $current_version"
           fi
 
+      - name: Collect commits since last release
+        if: steps.version.outputs.changed == 'true'
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.current }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          previous_release_tag="$(
+            gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name' 2>/dev/null || true
+          )"
+
+          if [[ -n "$previous_release_tag" ]]; then
+            if ! git rev-parse --verify --quiet "refs/tags/$previous_release_tag^{commit}" >/dev/null; then
+              echo "::error::上一个 Release 的标签 $previous_release_tag 在本地仓库中不存在。"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$previous_release_tag" "$GITHUB_SHA"; then
+              echo "::error::上一个 Release 标签 $previous_release_tag 不是当前提交的祖先，无法生成完整提交记录。"
+              exit 1
+            fi
+            commit_range="$previous_release_tag..$GITHUB_SHA"
+          else
+            commit_range="$GITHUB_SHA"
+          fi
+
+          commit_count="$(git rev-list --count "$commit_range")"
+          {
+            echo "## 提交记录"
+            echo
+            if [[ -n "$previous_release_tag" ]]; then
+              echo "自上个 Release [$previous_release_tag](https://github.com/$GITHUB_REPOSITORY/releases/tag/$previous_release_tag) 以来的 $commit_count 条提交："
+            else
+              echo "首次发布，包含仓库中的全部 $commit_count 条提交："
+            fi
+            echo
+            git log "$commit_range" --format="- [\`%h\`](https://github.com/$GITHUB_REPOSITORY/commit/%H) %s — %an，%ad" --date=short
+          } > "$notes_file"
+
+          echo "path=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Create release
         if: steps.version.outputs.changed == 'true'
         env:
@@ -92,10 +136,12 @@ jobs:
             gh release create "$VERSION" \
               --verify-tag \
               --title "$VERSION" \
+              --notes-file "${{ steps.notes.outputs.path }}" \
               --generate-notes
           else
             gh release create "$VERSION" \
               --target "$GITHUB_SHA" \
               --title "$VERSION" \
+              --notes-file "${{ steps.notes.outputs.path }}" \
               --generate-notes
           fi
