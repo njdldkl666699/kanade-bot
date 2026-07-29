@@ -1,6 +1,7 @@
 import shutil
 from dataclasses import dataclass
 from functools import cache, lru_cache
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 
@@ -76,6 +77,9 @@ def save_pictures(name: str, pic_paths: list[Path]) -> list[Path]:
         saved_paths.append(new_pic_path)
 
     gallery_name_data.save_to_file()
+    if saved_paths:
+        invalidate_gallery_render_cache()
+        invalidate_gallery_render_cache(name)
     return saved_paths
 
 
@@ -194,9 +198,51 @@ DUPLICATE_CELL_WIDTH = 408
 DUPLICATE_CELL_HEIGHT = 200
 DUPLICATE_HEADER_HEIGHT = 80
 
+RENDER_CACHE_DIR_NAME = "rendered_v1"
+OVERVIEW_CACHE_FILE_NAME = "overview.png"
 
-def render_gallery_thumbnails(pic_files: list[Path]) -> bytes:
+
+def _render_cache_path(name: str | None = None) -> Path:
+    cache_dir = cfg.cache_dir_path / RENDER_CACHE_DIR_NAME
+    if name is None:
+        return cache_dir / OVERVIEW_CACHE_FILE_NAME
+    cache_key = sha256(name.encode()).hexdigest()
+    return cache_dir / f"gallery_{cache_key}.png"
+
+
+def _read_render_cache(cache_path: Path) -> bytes | None:
+    try:
+        return cache_path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        logger.warning(f"无法读取画廊渲染缓存 {cache_path}，将重新渲染：{e}")
+        return None
+
+
+def _write_render_cache(cache_path: Path, image: bytes) -> None:
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(image)
+    except OSError as e:
+        logger.warning(f"无法写入画廊渲染缓存 {cache_path}：{e}")
+
+
+def invalidate_gallery_render_cache(name: str | None = None) -> None:
+    """Invalidate the overview cache or one gallery's thumbnail cache."""
+    cache_path = _render_cache_path(name)
+    try:
+        cache_path.unlink(missing_ok=True)
+    except OSError as e:
+        logger.warning(f"无法删除画廊渲染缓存 {cache_path}：{e}")
+
+
+def render_gallery_thumbnails(name: str, pic_files: list[Path]) -> bytes:
     """按图片 ID 排序并渲染画廊缩略图。"""
+    cache_path = _render_cache_path(name)
+    if (cached_image := _read_render_cache(cache_path)) is not None:
+        return cached_image
+
     thumbnails: list[tuple[int, Image.Image]] = []
     for pic_file in sorted(pic_files, key=lambda path: int(path.stem)):
         try:
@@ -235,7 +281,9 @@ def render_gallery_thumbnails(pic_files: list[Path]) -> bytes:
 
     output = BytesIO()
     canvas.save(output, format="PNG")
-    return output.getvalue()
+    image = output.getvalue()
+    _write_render_cache(cache_path, image)
+    return image
 
 
 def get_gallery_overview_items() -> list[GalleryOverviewItem]:
@@ -269,6 +317,10 @@ def get_gallery_overview_items() -> list[GalleryOverviewItem]:
 
 def render_gallery_overview() -> bytes:
     """Render all gallery covers and metadata as an image."""
+    cache_path = _render_cache_path()
+    if (cached_image := _read_render_cache(cache_path)) is not None:
+        return cached_image
+
     items = get_gallery_overview_items()
     if not items:
         return b""
@@ -365,7 +417,9 @@ def render_gallery_overview() -> bytes:
 
     output = BytesIO()
     canvas.save(output, format="PNG")
-    return output.getvalue()
+    image = output.getvalue()
+    _write_render_cache(cache_path, image)
+    return image
 
 
 def _paste_gallery_cover(

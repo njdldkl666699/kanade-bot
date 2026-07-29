@@ -22,6 +22,7 @@ from .gallery import (
     add_pictures,
     get_gallery_name,
     get_picture_by_id,
+    invalidate_gallery_render_cache,
     render_gallery_overview,
     render_gallery_thumbnails,
 )
@@ -60,6 +61,7 @@ async def _(arg_msg: Message = CommandArg()):
     # 更新索引
     v.name_to_aliases[name] = []
     gallery_name_data.save_to_file()
+    invalidate_gallery_render_cache()
     await add_gallery.finish(f"成功添加画廊：{name}")
 
 
@@ -86,6 +88,8 @@ async def _(arg_msg: Message = CommandArg()):
     for alias in aliases:
         v.alias_to_name.pop(alias, None)
     gallery_name_data.save_to_file()
+    invalidate_gallery_render_cache()
+    invalidate_gallery_render_cache(name)
     await remove_gallery.finish(f"成功删除画廊：{name}")
 
 
@@ -114,6 +118,7 @@ async def _(arg_msg: Message = CommandArg()):
     v.alias_to_name[alias] = name
     v.name_to_aliases[name].append(alias)
     gallery_name_data.save_to_file()
+    invalidate_gallery_render_cache()
     await add_gallery_alias.finish(f"成功为画廊 {name} 添加别名：{alias}")
 
 
@@ -131,6 +136,7 @@ async def _(arg_msg: Message = CommandArg()):
     name = v.alias_to_name.pop(alias)
     v.name_to_aliases[name].remove(alias)
     gallery_name_data.save_to_file()
+    invalidate_gallery_render_cache()
     await remove_gallery_alias.finish(f"成功删除画廊 {name} 的别名：{alias}")
 
 
@@ -156,7 +162,7 @@ async def _(arg_msg: Message = CommandArg()):
     if not pic_files:
         await gallery_pictures.finish(f"画廊 {name} 中没有图片。")
 
-    image = render_gallery_thumbnails(pic_files)
+    image = render_gallery_thumbnails(name, pic_files)
     if not image:
         await gallery_pictures.finish(f"画廊 {name} 中没有可读取的图片。")
     await gallery_pictures.finish(OneBotMessageSegment.image(image))
@@ -336,4 +342,7 @@ async def _(arg_msg: Message = CommandArg()):
     except OSError as e:
         logger.exception(f"删除图片文件 {pic_path} 失败：{e}")
         await remove_picture.finish(f"删除图片文件失败：{e}")
+    gallery_name = str(pic_path.parent.relative_to(cfg.data_dir_path))
+    invalidate_gallery_render_cache()
+    invalidate_gallery_render_cache(gallery_name)
     await remove_picture.finish(f"成功删除图片 {pic_id}。")

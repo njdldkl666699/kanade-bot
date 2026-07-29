@@ -55,7 +55,14 @@ def _configure_gallery(
         iota=iota,
         name_to_aliases=name_to_aliases,
     )
-    monkeypatch.setattr(gallery, "cfg", SimpleNamespace(data_dir_path=tmp_path))
+    monkeypatch.setattr(
+        gallery,
+        "cfg",
+        SimpleNamespace(
+            data_dir_path=tmp_path,
+            cache_dir_path=tmp_path / "cache",
+        ),
+    )
     monkeypatch.setattr(gallery, "gallery_name_data", name_data)
     return name_data
 
@@ -234,3 +241,78 @@ def test_render_gallery_overview_returns_empty_for_no_galleries(
     _configure_gallery(monkeypatch, tmp_path)
 
     assert gallery.render_gallery_overview() == b""
+
+
+def test_render_gallery_overview_uses_cache(monkeypatch, tmp_path):
+    _configure_gallery(
+        monkeypatch,
+        tmp_path,
+        name_to_aliases={"test": []},
+    )
+    gallery_dir = tmp_path / "test"
+    gallery_dir.mkdir()
+    _make_test_image(gallery_dir / "1.png")
+
+    first_render = gallery.render_gallery_overview()
+    cache_path = gallery._render_cache_path()
+
+    assert cache_path.read_bytes() == first_render
+    monkeypatch.setattr(
+        gallery,
+        "get_gallery_overview_items",
+        lambda: (_ for _ in ()).throw(AssertionError("overview was rendered again")),
+    )
+    assert gallery.render_gallery_overview() == first_render
+
+
+def test_adding_picture_invalidates_overview_and_current_gallery_cache_only(
+    monkeypatch,
+    tmp_path,
+):
+    _configure_gallery(
+        monkeypatch,
+        tmp_path,
+        iota=2,
+        name_to_aliases={"current": [], "other": []},
+    )
+    current_dir = tmp_path / "current"
+    other_dir = tmp_path / "other"
+    current_dir.mkdir()
+    other_dir.mkdir()
+    _make_test_image(current_dir / "1.png")
+    _make_test_image(other_dir / "2.png", inverted=True)
+
+    gallery.render_gallery_overview()
+    gallery.render_gallery_thumbnails("current", [current_dir / "1.png"])
+    gallery.render_gallery_thumbnails("other", [other_dir / "2.png"])
+    overview_cache = gallery._render_cache_path()
+    current_cache = gallery._render_cache_path("current")
+    other_cache = gallery._render_cache_path("other")
+    assert overview_cache.is_file()
+    assert current_cache.is_file()
+    current_cache_contents = current_cache.read_bytes()
+    other_cache_contents = other_cache.read_bytes()
+    monkeypatch.setattr(
+        gallery,
+        "_load_thumbnail",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("gallery thumbnails were rendered again")
+        ),
+    )
+    assert (
+        gallery.render_gallery_thumbnails("current", [current_dir / "1.png"])
+        == current_cache_contents
+    )
+    assert (
+        gallery.render_gallery_thumbnails("other", [other_dir / "2.png"])
+        == other_cache_contents
+    )
+
+    candidate = tmp_path / "candidate.png"
+    _make_test_image(candidate, inverted=True)
+    result = gallery.add_pictures("current", [candidate], force=True)
+
+    assert result.added_count == 1
+    assert not overview_cache.exists()
+    assert not current_cache.exists()
+    assert other_cache.read_bytes() == other_cache_contents
