@@ -1,22 +1,24 @@
 import random
 from asyncio import subprocess
 
-from nonebot import get_driver, get_plugin_config
+from httpx import HTTPStatusError
+from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent
+from nonebot.adapters.onebot.v11 import GroupDecreaseNoticeEvent, GroupIncreaseNoticeEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 
+from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
+from kanade_bot.utils.parse import build_sender_info
 
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
-from .matcher import execute_command, help_command, offline_notice, welcome
-from .offline import send_offline_notice
+from .matcher import execute_command, help_command, leave_notice, offline_notice, welcome
 
 cfg = get_plugin_config(Config).help
 
@@ -48,11 +50,33 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
 
 @offline_notice.handle()
 async def _(event: BotOfflineNoticeEvent):
-    bot_id = event.self_id
-    tag = event.tag
-    message = event.message
+    if not (url := cfg.ntfy_topic_url):
+        logger.warning("未配置ntfy topic url，无法发送Bot掉线通知")
+        return
 
-    await send_offline_notice(bot_id, tag, message)
+    # 构建消息主体
+    title = f"{event.tag} 你的Bot掉线了"
+    content = (
+        f"你的Bot账号: {event.self_id} 掉线了，赶快去看看吧。\n`Message`: {event.message}".encode()
+    )
+    headers = {"Title": title}
+
+    path = cfg.login_qrcode_file_path
+    if path and path.is_file():
+        content = path.read_bytes()
+        headers["Filename"] = path.name
+
+    # 发送通知
+    try:
+        response = await HTTPX_CLIENT.put(
+            url,
+            headers=headers,
+            content=content,
+        )
+        response.raise_for_status()
+    except HTTPStatusError as e:
+        logger.error(f"发送Bot掉线通知请求时发生异常: {e}")
+        return
 
 
 @execute_command.handle()
@@ -92,6 +116,14 @@ async def _(event: GroupIncreaseNoticeEvent):
         message.append(OneBotMessageSegment.image(p))
 
     await welcome.finish(message)
+
+
+@leave_notice.handle()
+async def _(bot: OneBot, event: GroupDecreaseNoticeEvent):
+    user_id = event.user_id
+    r = await bot.get_stranger_info(user_id=user_id)
+    user_info_str = build_sender_info(r["nickname"], str(user_id))
+    await leave_notice.finish(f"{user_info_str} 离开了群聊...")
 
 
 driver = get_driver()

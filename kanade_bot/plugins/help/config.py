@@ -37,6 +37,9 @@ class ScopedConfig(BaseModel):
     welcome_image_file: str | None = None
     """欢迎新成员入群的图片文件名，未配置则不发送图片"""
 
+    leave_notice_disabled_group_ids: list[int] = []
+    """群成员离开群聊的通知禁用的群聊ID列表，配置后在这些群聊中群成员离开时Bot不会发送通知"""
+
     @property
     def docs_dir_path(self) -> Path:
         """帮助文档所在目录路径"""

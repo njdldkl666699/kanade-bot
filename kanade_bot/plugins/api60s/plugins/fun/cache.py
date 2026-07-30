@@ -19,10 +19,10 @@ class Luck(BaseModel):
     def __str__(self):
         return (
             f"🎯 今日运势\n"
-            f"━━━━━━━━━━━━━━━━\n"
+            f"━━━━━━━━━━━━━━━\n"
             f"🌟 运势指数：{self.luck_rank:+d}\n"
             f"📝 运势描述：{self.luck_desc}\n"
-            f"💡 贴心提示：{self.luck_tip}\n"
+            f"💡 贴心提示：{self.luck_tip}"
         )
 
 

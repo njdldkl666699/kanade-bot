@@ -32,3 +32,8 @@ welcome = on_notice(
     priority=1,
     block=False,
 )
+
+leave_notice = on_notice(
+    priority=1,
+    block=False,
+)
