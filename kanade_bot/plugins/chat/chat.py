@@ -67,7 +67,9 @@ async def _finish_onebot_message(
     # 处理表情包引用，格式{{表情包名称}}
     for chunk in chunks:
         text = re.sub(r"\{\{(\w+?)\}\}", replace_meme, chunk)
-        segments.append(MessageSegment.text(text))
+        if text.strip():
+            # 如果文本不为空，再添加到消息段中，避免发送空消息段
+            segments.append(MessageSegment.text(text))
 
     if not segments:
         await matcher.finish()

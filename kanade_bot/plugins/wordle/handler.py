@@ -1,0 +1,149 @@
+import asyncio
+from asyncio import TimerHandle
+from typing import Any
+
+from nonebot import on_regex
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent, MessageSegment
+from nonebot.matcher import Matcher
+from nonebot.params import CommandArg, RegexDict
+from nonebot.utils import run_sync
+
+from kanade_bot.utils.parse import parse_arg_message
+from kanade_bot.utils.session import extract_session_info
+
+from .matcher import dictionaries, games, hint, same_session, start_wordle, stop
+from .wordle import DIC_LIST, GuessResult, Wordle
+
+timers: dict[str, TimerHandle] = {}
+word_matchers: dict[str, type[Matcher]] = {}
+
+
+def stop_game(session_id: str):
+    if timer := timers.pop(session_id, None):
+        timer.cancel()
+    games.pop(session_id, None)
+    if matcher := word_matchers.pop(session_id, None):
+        matcher.destroy()
+
+
+async def stop_game_timeout(matcher: Matcher, session_id: str):
+    game = games.get(session_id, None)
+    stop_game(session_id)
+    if game:
+        msg = "猜单词超时，游戏结束"
+        if len(game.guessed_words) >= 1:
+            msg += f"\n{game.result}"
+        await matcher.send(msg)
+
+
+def set_timeout(matcher: Matcher, session_id: str, timeout: float = 300):
+    if timer := timers.get(session_id, None):
+        timer.cancel()
+    loop = asyncio.get_running_loop()
+    timer = loop.call_later(
+        timeout, lambda: asyncio.ensure_future(stop_game_timeout(matcher, session_id))
+    )
+    timers[session_id] = timer
+
+
+@start_wordle.handle()
+async def _(matcher: Matcher, event: MessageEvent, message: Message = CommandArg()):
+    args = parse_arg_message(
+        message.extract_plain_text().strip(), {"length": int, "dictionary": str}
+    )
+    length: int = args["length"] or 5
+    dictionary: str = args["dictionary"] or "CET4"
+    if length < 3 or length > 8:
+        await matcher.finish("单词长度应在3~8之间")
+    if dictionary not in DIC_LIST:
+        await matcher.finish("支持的词典：" + ", ".join(DIC_LIST))
+
+    game = Wordle.random_wordle(dictionary, length)
+    info = await extract_session_info(event)
+    session_id = info.session_id
+    games[session_id] = game
+    set_timeout(matcher, session_id)
+
+    word_matcher = on_regex(
+        rf"^(?P<word>[a-zA-Z]{{{length}}})$",
+        rule=same_session(session_id),
+        block=True,
+        priority=2,
+    )
+    word_matcher.append_handler(handle_word)
+    word_matchers[session_id] = word_matcher
+
+    message = Message(f"你有{game.rows}次机会猜出单词，单词长度为{game.length}，请发送单词")
+    message += MessageSegment.image(await run_sync(game.draw)())
+    await matcher.finish(message)
+
+
+async def handle_word(
+    matcher: Matcher,
+    event: MessageEvent,
+    matched: dict[str, Any] = RegexDict(),
+):
+    info = await extract_session_info(event)
+    session_id = info.session_id
+    game = games[session_id]
+    set_timeout(matcher, session_id)
+
+    word = str(matched["word"])
+    result = game.guess(word)
+
+    if result is None:
+        await matcher.finish(MessageSegment.image(await run_sync(game.draw)()))
+    elif result == GuessResult.DUPLICATE:
+        await matcher.finish("你已经猜过这个单词了呢")
+    elif result == GuessResult.ILLEGAL:
+        await matcher.finish(f"你确定 {word} 是一个合法的单词吗？")
+
+    # WIN or LOSS
+    stop_game(session_id)
+
+    message = Message()
+    if result == GuessResult.WIN:
+        message += "恭喜"
+        user_segment = "你"
+        if isinstance(event, GroupMessageEvent):
+            user_segment = MessageSegment.at(session_id)
+        message += user_segment
+        message += "猜出了单词！"
+    else:
+        message += "很遗憾，没有人猜出来呢"
+    message += f"\n{game.result}\n"
+    message += MessageSegment.image(await run_sync(game.draw)())
+
+    await matcher.finish(message)
+
+
+@dictionaries.handle()
+async def _():
+    await dictionaries.finish("支持的词典：" + ", ".join(DIC_LIST))
+
+
+@hint.handle()
+async def _(matcher: Matcher, event: MessageEvent):
+    info = await extract_session_info(event)
+    session_id = info.session_id
+    game = games[session_id]
+    set_timeout(matcher, session_id)
+
+    hint = game.get_hint()
+    if not hint.replace("*", ""):
+        await matcher.finish("你还没有猜对过一个字母哦~再猜猜吧~")
+
+    await matcher.finish(MessageSegment.image(await run_sync(game.draw_hint)(hint)))
+
+
+@stop.handle()
+async def _(matcher: Matcher, event: MessageEvent):
+    info = await extract_session_info(event)
+    session_id = info.session_id
+    game = games[session_id]
+    stop_game(session_id)
+
+    msg = "游戏已结束"
+    if len(game.guessed_words) >= 1:
+        msg += f"\n{game.result}"
+    await matcher.finish(msg)

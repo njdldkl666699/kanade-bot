@@ -30,7 +30,8 @@
     "tavily",
     "unban",
     "Waifu",
-    "waifus"
+    "waifus",
+    "wordle"
   ],
   "conventionalCommits.scopes": [
     "summary",
@@ -43,6 +44,7 @@
     "api60s",
     "command_counter",
     "gallery",
-    "imgtool"
+    "imgtool",
+    "wordle"
   ]
 }
