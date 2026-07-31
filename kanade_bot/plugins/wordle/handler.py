@@ -9,9 +9,8 @@ from nonebot.params import CommandArg, RegexDict
 from nonebot.utils import run_sync
 
 from kanade_bot.utils.parse import parse_arg_message
-from kanade_bot.utils.session import extract_session_info
 
-from .matcher import dictionaries, games, hint, same_session, start_wordle, stop
+from .matcher import SessionId, dictionaries, games, hint, start_wordle, stop
 from .wordle import DIC_LIST, GuessResult, Wordle
 
 timers: dict[str, TimerHandle] = {}
@@ -46,10 +45,17 @@ def set_timeout(matcher: Matcher, session_id: str, timeout: float = 300):
     timers[session_id] = timer
 
 
+def same_session(game_session_id: str):
+    def _same_session(session_id: SessionId) -> bool:
+        return session_id in games and session_id == game_session_id
+
+    return _same_session
+
+
 @start_wordle.handle()
-async def _(matcher: Matcher, event: MessageEvent, message: Message = CommandArg()):
+async def _(matcher: Matcher, session_id: SessionId, arg_msg: Message = CommandArg()):
     args = parse_arg_message(
-        message.extract_plain_text().strip(), {"length": int, "dictionary": str}
+        arg_msg.extract_plain_text().strip(), {"length": int, "dictionary": str}
     )
     length: int = args["length"] or 5
     dictionary: str = args["dictionary"] or "CET4"
@@ -59,8 +65,6 @@ async def _(matcher: Matcher, event: MessageEvent, message: Message = CommandArg
         await matcher.finish("支持的词典：" + ", ".join(DIC_LIST))
 
     game = Wordle.random_wordle(dictionary, length)
-    info = await extract_session_info(event)
-    session_id = info.session_id
     games[session_id] = game
     set_timeout(matcher, session_id)
 
@@ -81,10 +85,9 @@ async def _(matcher: Matcher, event: MessageEvent, message: Message = CommandArg
 async def handle_word(
     matcher: Matcher,
     event: MessageEvent,
+    session_id: SessionId,
     matched: dict[str, Any] = RegexDict(),
 ):
-    info = await extract_session_info(event)
-    session_id = info.session_id
     game = games[session_id]
     set_timeout(matcher, session_id)
 
@@ -123,9 +126,7 @@ async def _():
 
 
 @hint.handle()
-async def _(matcher: Matcher, event: MessageEvent):
-    info = await extract_session_info(event)
-    session_id = info.session_id
+async def _(matcher: Matcher, session_id: SessionId):
     game = games[session_id]
     set_timeout(matcher, session_id)
 
@@ -137,9 +138,7 @@ async def _(matcher: Matcher, event: MessageEvent):
 
 
 @stop.handle()
-async def _(matcher: Matcher, event: MessageEvent):
-    info = await extract_session_info(event)
-    session_id = info.session_id
+async def _(matcher: Matcher, session_id: SessionId):
     game = games[session_id]
     stop_game(session_id)
 

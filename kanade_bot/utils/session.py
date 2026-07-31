@@ -1,3 +1,5 @@
+from typing import cast
+
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
@@ -24,8 +26,8 @@ class SessionInfo(BaseModel):
     """群聊ID"""
 
 
-async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionInfo:
-    """解析事件以提取会话信息"""
+def extract_session_info_sync(event: Event) -> SessionInfo:
+    """同步解析事件以提取会话信息"""
     info = SessionInfo(session_id=event.get_session_id())
     info.platform = get_platform_type(event)
 
@@ -40,9 +42,6 @@ async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionI
         info.session_id = f"qq-group-{gid}"
         info.nickname = event.sender.card or event.sender.nickname
         info.group_id = str(gid)
-        if isinstance(bot, OneBot):
-            group_info = await bot.get_group_info(group_id=gid)
-            info.group_name = group_info.get("group_name") if group_info else None
 
     # Console的消息事件
     if isinstance(event, ConsoleMessageEvent):
@@ -56,4 +55,13 @@ async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionI
         info.group_name = event.channel.name
         info.group_id = gid
 
+    return info
+
+
+async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionInfo:
+    """解析事件以提取会话信息"""
+    info = extract_session_info_sync(event)
+    if bot and isinstance(event, OneBotGroupMessageEvent):
+        group_info = await cast(OneBot, bot).get_group_info(group_id=event.group_id)
+        info.group_name = group_info.get("group_name") if group_info else None
     return info

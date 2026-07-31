@@ -17,7 +17,7 @@ from nonechat.model import Channel
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
-from kanade_bot.utils.session import extract_session_info
+from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
 from .config import Config
 from .matcher import summarize
@@ -41,7 +41,7 @@ cfg = get_plugin_config(Config).summary
 @event_postprocessor
 async def record_recv_msg(event: OneBotMessageEvent | ConsoleMessageEvent):
     message_str, _ = await parse_message_for_ai(event)
-    session_info = await extract_session_info(event)
+    session_info = extract_session_info_sync(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"$ {user_info}：{message_str}"
 

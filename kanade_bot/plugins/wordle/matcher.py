@@ -1,4 +1,10 @@
+from typing import Annotated
+
 from nonebot import on_command, require
+from nonebot.adapters.onebot.v11 import MessageEvent
+from nonebot.params import Depends
+
+from kanade_bot.utils.session import extract_session_info_sync
 
 from .wordle import Wordle
 
@@ -10,19 +16,19 @@ games: dict[str, Wordle] = {}
 """正在进行的wordle游戏，key为会话id"""
 
 
-def game_is_running(session_id: str) -> bool:
+def get_session_id(event: MessageEvent) -> str:
+    return extract_session_info_sync(event).session_id
+
+
+SessionId = Annotated[str, Depends(get_session_id)]
+
+
+def game_is_running(session_id: SessionId) -> bool:
     return session_id in games
 
 
-def game_not_running(session_id: str) -> bool:
+def game_not_running(session_id: SessionId) -> bool:
     return session_id not in games
-
-
-def same_session(game_session_id: str):
-    def _same_session(session_id: str) -> bool:
-        return session_id in games and session_id == game_session_id
-
-    return _same_session
 
 
 start_wordle = on_command(

@@ -21,7 +21,7 @@ def register_matcher(matcher: type[Matcher], name: str):
     注意：该函数应在 Matcher 注册后立即调用，本函数会在 Matcher 的
     handlers 追加一个 handler 用于计数调用次数。
     """
-    logger.debug(f"命令计数器注册 Matcher {name}: {matcher!r}")
+    logger.trace(f"命令计数器注册 Matcher {name}: {matcher!r}")
 
     @matcher.handle()
     def _():

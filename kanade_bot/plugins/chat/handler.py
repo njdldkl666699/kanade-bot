@@ -14,7 +14,7 @@ from nonebot.params import CommandArg, EventMessage
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
-from kanade_bot.utils.session import extract_session_info
+from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
 from .agent.copilot import copilot
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
@@ -46,7 +46,7 @@ async def handle_chat(
 
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
-    session_info = await extract_session_info(event)
+    session_info = extract_session_info_sync(event)
     await copilot.reset_session(session_info.session_id)
     await chat_reset.finish("会话已重置")
 
