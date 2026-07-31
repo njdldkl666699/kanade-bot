@@ -32,10 +32,17 @@ def save_png(frame: IMG) -> BytesIO:
     return output
 
 
-def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_font(size: int, *, bold=True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     font_names = (
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "NotoSansCJK-Regular.ttc",
+        (
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "NotoSansCJK-Bold.ttc",
+        )
+        if bold
+        else (
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "NotoSansCJK-Regular.ttc",
+        )
     )
     for font_name in font_names:
         try:
@@ -103,7 +110,7 @@ class Wordle:
         """边框宽度"""
         self.font_size = 20
         """字体大小"""
-        self.font = _load_font(self.font_size)
+        self.font = _load_font(self.font_size, bold=True)
 
         self.correct_color = (134, 163, 115)
         """存在且位置正确时的颜色"""
@@ -137,13 +144,18 @@ class Wordle:
         inner_h = self.block_size[1] - self.border_width * 2
         inner = Image.new("RGB", (inner_w, inner_h), color)
         block.paste(inner, (self.border_width, self.border_width))
+
         if letter:
             letter = letter.upper()
             draw = ImageDraw.Draw(block)
-            bbox = self.font.getbbox(letter)
-            x = (self.block_size[0] - bbox[2]) / 2
-            y = (self.block_size[1] - bbox[3]) / 2
-            draw.text((x, y), letter, font=self.font, fill=self.font_color)
+            # 使用 anchor='mm' 实现水平和垂直居中
+            draw.text(
+                (self.block_size[0] / 2, self.block_size[1] / 2),
+                letter,
+                font=self.font,
+                fill=self.font_color,
+                anchor="mm",  # 'm' = middle (both horizontal and vertical)
+            )
         return block
 
     def draw(self) -> BytesIO:

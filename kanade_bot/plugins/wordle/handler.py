@@ -91,7 +91,7 @@ async def handle_word(
     game = games[session_id]
     set_timeout(matcher, session_id)
 
-    word = str(matched["word"])
+    word = str(matched["word"]).strip()
     result = game.guess(word)
 
     if result is None:
@@ -109,7 +109,7 @@ async def handle_word(
         message += "恭喜"
         user_segment = "你"
         if isinstance(event, GroupMessageEvent):
-            user_segment = MessageSegment.at(session_id)
+            user_segment = MessageSegment.at(event.user_id)
         message += user_segment
         message += "猜出了单词！"
     else:
