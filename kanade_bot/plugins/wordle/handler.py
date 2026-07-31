@@ -111,7 +111,7 @@ async def handle_word(
         if isinstance(event, GroupMessageEvent):
             user_segment = MessageSegment.at(event.user_id)
         message += user_segment
-        message += "猜出了单词！"
+        message += " 猜出了单词！"
     else:
         message += "很遗憾，没有人猜出来呢"
     message += f"\n{game.result}\n"
