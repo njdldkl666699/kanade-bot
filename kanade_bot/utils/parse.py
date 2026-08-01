@@ -2,6 +2,7 @@ import base64
 from typing import Any, SupportsIndex
 
 from copilot.session import Attachment
+from httpx import HTTPError
 from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -10,6 +11,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.onebot.v11.event import Reply
+from nonebot.exception import NetworkError
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 
@@ -118,6 +120,22 @@ async def get_forward_message_events(
     return fwd_id, fwd_msg_events
 
 
+async def _get_image_attachment_from_url(url: str, display_name: str) -> Attachment | None:
+    """从URL获取图片附件"""
+    try:
+        r = await HTTPX_CLIENT.get(url)
+        r.raise_for_status()
+        return {
+            "type": "blob",
+            "data": base64.b64encode(r.content).decode(),
+            "mimeType": r.headers.get("Content-Type", "application/octet-stream"),
+            "displayName": display_name or "image.png",
+        }
+    except HTTPError as e:
+        logger.warning("获取图片失败: {}，错误: {}", url, e)
+        return None
+
+
 async def parse_onebot_message_for_ai(
     event_or_reply: OneBotMessageEvent | Reply,
     bot: OneBot | None = None,
@@ -166,25 +184,24 @@ async def parse_onebot_message_for_ai(
         if forward_image:
             # 转发消息中的图片，使用http client获取图片附件
             url = segment.data["url"]
-            r = await HTTPX_CLIENT.get(url)
-            if r.status_code != 200:
-                logger.warning("获取转发消息中的图片失败: {}", url)
+            if not (a := await _get_image_attachment_from_url(url, file)):
                 continue
-
-            attachment = {
-                "type": "blob",
-                "data": base64.b64encode(r.content).decode(),
-                "mimeType": r.headers.get("Content-Type", "application/octet-stream"),
-                "displayName": file or "image.png",
-            }
+            attachment = a
         elif bot:
             # 普通消息中的图片，使用bot.get_image获取图片附件
-            r = await bot.get_image(file=file)
-            attachment = {
-                "type": "file",
-                "path": r["file"],
-                "displayName": file or "image.png",
-            }
+            try:
+                r = await bot.get_image(file=file)
+                attachment = {
+                    "type": "file",
+                    "path": r["file"],
+                    "displayName": file or "image.png",
+                }
+            except NetworkError as e:
+                logger.warning("获取图片失败: {}", e)
+                # Fallback: 使用http client获取图片附件
+                if not (a := await _get_image_attachment_from_url(segment.data["url"], file)):
+                    continue
+                attachment = a
         else:
             # 没有bot实例，仅返回图片的displayName
             attachment = {
@@ -202,7 +219,7 @@ async def parse_onebot_message_for_ai(
         # 添加图片附件
         last_image_index = i
         attachments.append(attachment)
-        text_parts.append(f"[图片：{attachment['displayName']}]")
+        text_parts.append(f"[图片：{file}]")
 
     # 添加最后剩余的文本内容，没有图片则直接转换整个消息为文本
     # == -1 : 整个消息段列表都不是图片
