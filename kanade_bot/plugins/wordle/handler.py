@@ -2,7 +2,7 @@ import asyncio
 from asyncio import TimerHandle
 from typing import Any
 
-from nonebot import on_regex
+from nonebot import on_regex, require
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent, MessageSegment
 from nonebot.matcher import Matcher
 from nonebot.params import CommandArg, RegexDict
@@ -10,8 +10,14 @@ from nonebot.utils import run_sync
 
 from kanade_bot.utils.parse import parse_arg_message
 
+from .config import cfg
 from .matcher import SessionId, dictionaries, games, hint, start_wordle, stop
 from .wordle import DIC_LIST, GuessResult, Wordle
+
+increment_crystal = None
+if cfg.crystal_bonus_map:
+    require("crystal")
+    from kanade_bot.plugins.crystal import increment_crystal
 
 timers: dict[str, TimerHandle] = {}
 word_matchers: dict[str, type[Matcher]] = {}
@@ -57,10 +63,14 @@ async def _(matcher: Matcher, session_id: SessionId, arg_msg: Message = CommandA
     args = parse_arg_message(
         arg_msg.extract_plain_text().strip(), {"length": int, "dictionary": str}
     )
-    length: int = args["length"] or 5
-    dictionary: str = args["dictionary"] or "CET4"
-    if length < 3 or length > 8:
-        await matcher.finish("单词长度应在3~8之间")
+
+    length: int = args["length"] or cfg.default_length
+    mi = cfg.min_length
+    ma = cfg.max_length
+    if length < mi or length > ma:
+        await matcher.finish(f"单词长度应在{mi}~{ma}之间")
+
+    dictionary: str = args["dictionary"] or cfg.default_dictionary
     if dictionary not in DIC_LIST:
         await matcher.finish("支持的词典：" + ", ".join(DIC_LIST))
 
@@ -77,7 +87,11 @@ async def _(matcher: Matcher, session_id: SessionId, arg_msg: Message = CommandA
     word_matcher.append_handler(handle_word)
     word_matchers[session_id] = word_matcher
 
-    message = Message(f"你有{game.rows}次机会猜出单词，单词长度为{game.length}，请发送单词")
+    words_count = Wordle.count_words_by_length(dictionary, length)
+    message = Message(
+        f"词典：{dictionary}，单词长度为{game.length}，共{words_count}词。\n"
+        f"你有{game.rows}次机会猜出单词，请发送单词"
+    )
     message += MessageSegment.image(await run_sync(game.draw)())
     await matcher.finish(message)
 
@@ -106,12 +120,18 @@ async def handle_word(
 
     message = Message()
     if result == GuessResult.WIN:
+        user_id = event.get_user_id()
+
         message += "恭喜"
         user_segment = "你"
         if isinstance(event, GroupMessageEvent):
-            user_segment = MessageSegment.at(event.user_id)
+            user_segment = MessageSegment.at(user_id)
         message += user_segment
         message += " 猜出了单词！"
+
+        if increment_crystal and (crystal := cfg.crystal_bonus_map.get(game.length, 0)) > 0:
+            increment_crystal("onebot", user_id, crystal)
+            message += f"\n你获得了 {crystal} 水晶奖励~"
     else:
         message += "很遗憾，没有人猜出来呢"
     message += f"\n{game.result}\n"

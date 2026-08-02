@@ -10,6 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 from PIL.Image import Image as IMG
 from spellchecker import SpellChecker
 
+from .config import cfg
+
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_config_dir
@@ -63,36 +65,54 @@ class GuessResult(Enum):
     """单词不合法"""
 
 
+Meanings = dict[str, str]
+"""单词释义类型与释义的映射"""
+Words = dict[str, Meanings]
+"""词典数据，格式为 {单词: {释义类型: 释义}}"""
+
+
 class Wordle:
-    dict_words_cache: ClassVar[dict[Path, dict[int, list[tuple[str, str]]]]] = {}
-    """词典数据缓存，格式为 {词典路径: {单词长度: [(单词, 释义)]}}"""
+    dict_words_cache: ClassVar[dict[Path, dict[int, Words]]] = {}
+    """词典数据缓存，格式为 {词典路径: {单词长度: 词典数据}}"""
+
+    font = _load_font(20, bold=True)
+
+    @classmethod
+    def _load_and_cache_dict(cls, dict_name: str) -> dict[int, Words]:
+        dict_path = words_dir / f"{dict_name}.json"
+        if dict_path not in cls.dict_words_cache:
+            # 如果缓存中没有数据，则从文件中读取数据并缓存
+            json_data: Words = json.load(dict_path.open("r", encoding="utf-8"))
+            cls.dict_words_cache[dict_path] = {}
+            for word, info in json_data.items():
+                a_word_len = len(word)
+                if a_word_len not in cls.dict_words_cache[dict_path]:
+                    cls.dict_words_cache[dict_path][a_word_len] = {}
+                cls.dict_words_cache[dict_path][a_word_len][word] = info
+        return cls.dict_words_cache[dict_path]
 
     @classmethod
     def random_wordle(cls, dict_name: str = "CET4", word_length: int = 5) -> Self:
-        caches = cls.dict_words_cache
-        dict_path = words_dir / f"{dict_name}.json"
-        if dict_path not in caches:
-            # 如果缓存中没有数据，则从文件中读取数据并缓存
-            json_data = json.load(dict_path.open("r", encoding="utf-8"))
-            caches[dict_path] = {}
-            for word, info in json_data.items():
-                a_word_len = len(word)
-                if a_word_len not in caches[dict_path]:
-                    caches[dict_path][a_word_len] = []
-                caches[dict_path][a_word_len].append((word, info["中释"]))
+        data = cls._load_and_cache_dict(dict_name)
+        word, meanings = random.choice(list(data[word_length].items()))
+        return cls(word, meanings)
 
-        # 从缓存中获取随机单词
-        data = caches[dict_path]
-        word, meaning = random.choice(data[word_length])
-        return cls(word, meaning)
+    @classmethod
+    def count_words_by_length(cls, dict_name: str = "CET4", length: int = 5) -> int:
+        data = cls._load_and_cache_dict(dict_name)
+        return len(data[length])
 
-    def __init__(self, word: str, meaning: str):
-        self.word: str = word
-        """单词"""
-        self.meaning: str = meaning
-        """单词释义"""
-        self.result = f"【单词】：{self.word}\n【释义】：{self.meaning}"
-        self.word_lower: str = self.word.lower()
+    def __init__(self, word: str, meanings: Meanings):
+        """
+        :param word: 单词
+        :param meanings: 单词释义类型与释义的映射
+        """
+        self.result: str = f"【单词】：{word}"
+        for meaning in cfg.meanings:
+            if meaning in meanings:
+                self.result += f"\n【{meaning}】：{meanings[meaning]}"
+
+        self.word_lower: str = word.lower()
         self.length: int = len(word)
         """单词长度"""
         self.rows: int = self.length + 1
@@ -108,9 +128,7 @@ class Wordle:
         """边界间距"""
         self.border_width = 2
         """边框宽度"""
-        self.font_size = 20
-        """字体大小"""
-        self.font = _load_font(self.font_size, bold=True)
+        self.font = self.__class__.font
 
         self.correct_color = (134, 163, 115)
         """存在且位置正确时的颜色"""
