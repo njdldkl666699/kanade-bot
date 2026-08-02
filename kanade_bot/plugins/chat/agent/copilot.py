@@ -12,12 +12,8 @@ from kanade_bot.utils.parse import build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
-from .memory import MemoryContext, MemoryStore, build_memory_tools
-from .tool import (
-    get_image_caption,
-    list_memes,
-    view_image,
-)
+from .memory import MemoryContext, MemoryStore
+from .tool import build_memory_tools, get_image_caption, list_memes, view_image
 
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
