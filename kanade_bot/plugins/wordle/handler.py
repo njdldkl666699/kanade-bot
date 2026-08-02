@@ -79,7 +79,7 @@ async def _(matcher: Matcher, session_id: SessionId, arg_msg: Message = CommandA
     set_timeout(matcher, session_id)
 
     word_matcher = on_regex(
-        rf"^(?P<word>[a-zA-Z]{{{length}}})$",
+        rf"^\s*(?P<word>[a-zA-Z]{{{length}}})\s*$",
         rule=same_session(session_id),
         block=True,
         priority=2,
@@ -105,7 +105,7 @@ async def handle_word(
     game = games[session_id]
     set_timeout(matcher, session_id)
 
-    word = str(matched["word"]).strip()
+    word = str(matched["word"])
     result = game.guess(word)
 
     if result is None:
