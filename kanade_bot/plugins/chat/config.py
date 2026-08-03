@@ -93,8 +93,10 @@ class ScopedConfig(BaseModel):
     会将其替换为Kanade-wiki.md文件的内容
     """
 
-    session_prompt_buffer_max_size: int = 100
+    session_messages_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
+    session_messages_cache_file: str = "session_messages_cache.json"
+    """会话消息缓冲区缓存文件名，位于插件数据目录下"""
 
     configs_file: str = "chat_configs.json"
     """聊天配置文件名"""
@@ -112,6 +114,10 @@ class ScopedConfig(BaseModel):
     @property
     def system_prompt_extras_paths(self) -> dict[str, Path]:
         return {k: get_plugin_config_file(f) for k, f in self.system_prompt_extras.items()}
+
+    @property
+    def session_messages_cache_file_path(self) -> Path:
+        return get_plugin_data_file(self.session_messages_cache_file)
 
     @property
     def configs_file_path(self) -> Path:

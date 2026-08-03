@@ -5,7 +5,7 @@ from typing import ClassVar
 from copilot import CopilotSession
 from copilot.session import PermissionHandler, SystemMessageConfig
 from copilot.session_events import AssistantMessageData
-from nonebot import get_plugin_config, logger
+from nonebot import get_driver, get_plugin_config, logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT, asia_shanghai_now
 
@@ -45,6 +45,41 @@ class Summarizer:
         键为 session_id，值为该会话的消息历史
         """
 
+        driver = get_driver()
+        driver.on_startup(self._load_message_records)
+        driver.on_shutdown(self._save_message_records)
+
+    def _load_message_records(self):
+        """从缓存文件中加载历史消息记录到内存中"""
+        cache_path = cfg.message_records_file_path
+        if not cache_path.is_file():
+            logger.info(f"总结缓存文件不存在，路径: {cache_path.absolute()}")
+            return
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                data: dict[str, list[str]] = json.load(f)
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"加载总结缓存文件时发生错误: {e}")
+            return
+
+        for session_id, messages in data.items():
+            self._message_records[session_id] = deque(messages, maxlen=cfg.max_size)
+        logger.info(f"已加载{len(self._message_records)}个会话的历史消息记录")
+
+    def _save_message_records(self):
+        """将当前的消息记录缓存保存到文件中"""
+        cache_path = cfg.message_records_file_path
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {id: list(m) for id, m in self._message_records.items()}
+        try:
+            with cache_path.open("w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            logger.info(f"已保存{len(self._message_records)}个会话的历史消息记录到缓存文件")
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"保存总结缓存文件时发生错误: {e}")
+
     def add_message(self, session_id: str, message: str):
         """添加消息到指定会话的消息记录中
 
@@ -54,29 +89,6 @@ class Summarizer:
         if session_id not in self._message_records:
             self._message_records[session_id] = deque(maxlen=cfg.max_size)
         self._message_records[session_id].append(message)
-
-    def load_message_records(self):
-        """从缓存文件中加载历史消息记录到内存中"""
-        cache_path = cfg.message_records_file_path
-        if not cache_path.is_file():
-            logger.info(f"总结缓存文件不存在，路径: {cache_path.absolute()}")
-            return
-
-        with cache_path.open("r", encoding="utf-8") as f:
-            data: dict[str, list[str]] = json.load(f)
-        for session_id, messages in data.items():
-            self._message_records[session_id] = deque(messages, maxlen=cfg.max_size)
-
-    def save_message_records(self):
-        """将当前的消息记录缓存保存到文件中"""
-        cache_path = cfg.message_records_file_path
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-        data = {
-            session_id: list(messages) for session_id, messages in self._message_records.items()
-        }
-        with cache_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
 
     async def summarize(
         self,

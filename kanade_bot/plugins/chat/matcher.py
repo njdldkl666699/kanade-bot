@@ -1,10 +1,9 @@
 from nonebot import on_command, on_message, require
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
+from nonebot.params import EventToMe
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
-
-from kanade_bot.utils.common import not_to_me
 
 require("command_counter")
 
@@ -21,6 +20,12 @@ chat = on_message(
     priority=100000,
     block=True,
 )
+
+
+def not_to_me(to_me: bool = EventToMe()):
+    """匹配与机器人无关的消息"""
+    return not to_me
+
 
 # 用于监听非@消息并将其添加到会话缓冲区，以便在下一次@消息时一起发送给模型
 chat_monitor = on_message(

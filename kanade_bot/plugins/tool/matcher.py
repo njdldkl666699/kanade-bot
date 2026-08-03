@@ -1,5 +1,5 @@
 from nonebot import on_command, on_notice, require
-from nonebot.adapters.onebot.v11 import GROUP
+from nonebot.adapters.onebot.v11 import GROUP, PokeNotifyEvent
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
@@ -91,8 +91,13 @@ send_a_poke = on_command(
 )
 register_matcher(send_a_poke, "戳一戳")
 
+
+def is_poke_notify_event(event: PokeNotifyEvent):
+    return True
+
+
 receive_poke = on_notice(
-    rule=to_me(),
+    rule=to_me() & is_poke_notify_event,
     priority=100,
     block=True,
 )

@@ -1,11 +1,12 @@
 import asyncio
+import json
 from collections import deque
 from typing import Any
 
 from copilot import CopilotSession
 from copilot.session import Attachment, PermissionHandler
 from copilot.session_events import AssistantMessageData
-from nonebot import logger
+from nonebot import get_driver, logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
 from kanade_bot.utils.parse import build_sender_info
@@ -80,7 +81,7 @@ class CopilotSessionManager:
         self._sessions: dict[str, CopilotSession] = {}
         """会话对象缓存，键为会话ID，值为CopilotSession对象"""
 
-        self._sessions_prompt_buffer: dict[str, deque[str]] = {}
+        self._sessions_messages: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
 
         self._session_locks: dict[str, asyncio.Lock] = {}
@@ -88,6 +89,43 @@ class CopilotSessionManager:
 
         self._global_lock = asyncio.Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
+
+        driver = get_driver()
+        driver.on_startup(self._load_sessions_messages_cache)
+        driver.on_shutdown(self._save_sessions_messages_cache)
+
+    def _load_sessions_messages_cache(self):
+        """加载会话消息缓冲区缓存"""
+        cache_file = cfg.session_messages_cache_file_path
+        if not cache_file.is_file():
+            logger.info(f"会话消息缓冲区缓存文件不存在，路径: {cache_file.absolute()}")
+            return
+
+        try:
+            with cache_file.open("r", encoding="utf-8") as f:
+                data: dict[str, list[str]] = json.load(f)
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"加载会话消息缓冲区缓存时发生错误: {e}")
+            return
+
+        for session_id, messages in data.items():
+            self._sessions_messages[session_id] = deque(
+                messages, maxlen=cfg.session_messages_max_size
+            )
+        logger.info(f"已加载{len(self._sessions_messages)}个会话的消息缓冲区缓存")
+
+    def _save_sessions_messages_cache(self):
+        """保存会话消息缓冲区缓存"""
+        cache_file = cfg.session_messages_cache_file_path
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {id: list(m) for id, m in self._sessions_messages.items()}
+        try:
+            with cache_file.open("w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.info(f"已保存{len(self._sessions_messages)}个会话的消息缓冲区缓存")
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"保存会话消息缓冲区缓存时发生错误: {e}")
 
     async def _resume_or_create_session(
         self,
@@ -142,13 +180,13 @@ class CopilotSessionManager:
 
             async with self._global_lock:
                 if new_session:
-                    self._sessions_prompt_buffer[session_id] = deque(
-                        maxlen=cfg.session_prompt_buffer_max_size
+                    self._sessions_messages[session_id] = deque(
+                        maxlen=cfg.session_messages_max_size
                     )
 
                 # 将消息缓冲区中的消息添加到选项中
-                buffered_messages = self._sessions_prompt_buffer.get(session_id)
-                if not prompt and not buffered_messages and not reply_text:
+                messages = self._sessions_messages.get(session_id)
+                if not prompt and not messages and not reply_text:
                     # 没有任何新的消息可发送，直接返回
                     logger.info("发送给模型的消息为空，未触发生成")
                     return None
@@ -157,7 +195,7 @@ class CopilotSessionManager:
                 session_info,
                 prompt,
                 rag_docs=rag_docs,
-                buffered_messages=buffered_messages,
+                messages=messages,
                 reply_text=reply_text,
                 attachments=attachments,
             )
@@ -172,8 +210,8 @@ class CopilotSessionManager:
             finally:
                 async with self._global_lock:
                     # 清空消息缓冲区
-                    if session_id in self._sessions_prompt_buffer:
-                        self._sessions_prompt_buffer[session_id].clear()
+                    if session_id in self._sessions_messages:
+                        self._sessions_messages[session_id].clear()
 
             if not session_event:
                 return None
@@ -188,7 +226,7 @@ class CopilotSessionManager:
         prompt: str,
         *,
         rag_docs: list[str] | None = None,
-        buffered_messages: deque[str] | None = None,
+        messages: deque[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
     ) -> str:
@@ -198,9 +236,9 @@ class CopilotSessionManager:
         if rag_docs:
             prompt_parts.append("\n$ 检索到可能相关的文档：")
             prompt_parts.extend(rag_docs)
-        if buffered_messages:
+        if messages:
             prompt_parts.append("\n$ 下面是之前的消息缓冲区中的消息：")
-            prompt_parts.extend(buffered_messages)
+            prompt_parts.extend(messages)
         if reply_text:
             prompt_parts.append("\n$ 用户引用了之前的消息：")
             prompt_parts.append(reply_text)
@@ -234,19 +272,17 @@ class CopilotSessionManager:
                     self._session_locks[session_id] = asyncio.Lock()
         return self._session_locks[session_id]
 
-    def get_session_prompt_buffer_size(self, session_id: str) -> int:
+    def get_session_messages_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""
-        return len(self._sessions_prompt_buffer.get(session_id, []))
+        return len(self._sessions_messages.get(session_id, []))
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""
         async with await self._ensure_session_lock(session_id), self._global_lock:
-            if session_id not in self._sessions_prompt_buffer:
-                self._sessions_prompt_buffer[session_id] = deque(
-                    maxlen=cfg.session_prompt_buffer_max_size
-                )
+            if session_id not in self._sessions_messages:
+                self._sessions_messages[session_id] = deque(maxlen=cfg.session_messages_max_size)
             # deque(maxlen)会在溢出时自动丢弃最早的消息
-            self._sessions_prompt_buffer[session_id].append(prompt)
+            self._sessions_messages[session_id].append(prompt)
 
     async def reset_session(self, session_id: str):
         """删除会话，清空缓冲区。**此操作不可逆**"""
@@ -257,8 +293,8 @@ class CopilotSessionManager:
             async with self._global_lock:
                 session = self._sessions.pop(session_id, None)
                 self._memory_contexts.pop(session_id, None)
-                if session_id in self._sessions_prompt_buffer:
-                    del self._sessions_prompt_buffer[session_id]
+                if session_id in self._sessions_messages:
+                    del self._sessions_messages[session_id]
 
             # 断开并删除现有会话
             try:

@@ -75,7 +75,7 @@ class Wordle:
     dict_words_cache: ClassVar[dict[Path, dict[int, Words]]] = {}
     """词典数据缓存，格式为 {词典路径: {单词长度: 词典数据}}"""
 
-    font = _load_font(20, bold=True)
+    letter_font = _load_font(20, bold=True)
 
     @classmethod
     def _load_and_cache_dict(cls, dict_name: str) -> dict[int, Words]:
@@ -119,6 +119,8 @@ class Wordle:
         """可猜次数"""
         self.guessed_words: list[str] = []
         """记录已猜单词"""
+        self.crystal_bonus: int = cfg.crystal_bonus_map.get(self.length, 0)
+        """水晶奖励"""
 
         self.block_size = (40, 40)
         """文字块尺寸"""
@@ -128,7 +130,7 @@ class Wordle:
         """边界间距"""
         self.border_width = 2
         """边框宽度"""
-        self.font = self.__class__.font
+        self.font = self.letter_font
 
         self.correct_color = (134, 163, 115)
         """存在且位置正确时的颜色"""
@@ -243,3 +245,9 @@ class Wordle:
             y = self.padding[1]
             board.paste(self.draw_block(color, letter), (x, y))
         return save_png(board)
+
+    def set_hinted_crystal_bonus(self):
+        """设置使用提示后猜出单词的水晶奖励"""
+        if self.length in cfg.hinted_crystal_bonus_map:
+            self.crystal_bonus = cfg.hinted_crystal_bonus_map[self.length]
+        # 如果未配置使用提示后的水晶奖励，则保持原来的奖励不变

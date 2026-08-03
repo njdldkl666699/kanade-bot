@@ -129,7 +129,7 @@ async def handle_word(
         message += user_segment
         message += " 猜出了单词！"
 
-        if increment_crystal and (crystal := cfg.crystal_bonus_map.get(game.length, 0)) > 0:
+        if increment_crystal and (crystal := game.crystal_bonus) > 0:
             increment_crystal("onebot", user_id, crystal)
             message += f"\n你获得了 {crystal} 水晶奖励~"
     else:
@@ -154,6 +154,7 @@ async def _(matcher: Matcher, session_id: SessionId):
     if not hint.replace("*", ""):
         await matcher.finish("你还没有猜对过一个字母哦~再猜猜吧~")
 
+    game.set_hinted_crystal_bonus()
     await matcher.finish(MessageSegment.image(await run_sync(game.draw_hint)(hint)))
 
 
