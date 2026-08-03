@@ -63,7 +63,7 @@ class CopilotSessionManager:
             "provider": cfg.provider,
             "reasoning_effort": cfg.reasoning_effort,
             "tools": tools,
-            "available_tools": [t.name for t in tools] + cfg.available_tools,
+            "excluded_tools": cfg.excluded_tools,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,

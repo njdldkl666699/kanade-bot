@@ -70,8 +70,8 @@ class ScopedConfig(BaseModel):
     """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
     reasoning_effort: ReasoningEffort | None = None
     """推理努力程度"""
-    available_tools: list[str] = []
-    """允许的内置工具列表，如果为空则禁止所有内置工具"""
+    excluded_tools: list[str] = []
+    """排除的工具列表"""
     mcp_servers: dict[str, MCPServerConfig] | None = None
     """MCP服务器配置"""
 
