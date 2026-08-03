@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nonebot import require
+from nonebot.matcher import Matcher
 
-from kanade_bot.plugins.crystal import increment_crystal
+from kanade_bot.plugins.crystal import increment_crystal_maybe_init
 from kanade_bot.utils.common import PlatformType
 
 from .cache import harvest_power_cache
@@ -32,7 +33,8 @@ class HarvestResult:
     """材料转换为水晶的奖励数"""
 
 
-def harvest_once(
+async def harvest_once(
+    matcher: type[Matcher],
     platform: PlatformType,
     user_id: str,
     category_name: str | None = None,
@@ -100,7 +102,7 @@ def harvest_once(
             bonus_crystal += material.bonus_crystal * quantity
 
     # 增加水晶
-    increment_crystal(platform, user_id, bonus_crystal)
+    await increment_crystal_maybe_init(matcher, platform, user_id, bonus_crystal)
     # 扣除体力
     harvest_power_cache.set_by(platform, user_id, -category.power_cost)
 

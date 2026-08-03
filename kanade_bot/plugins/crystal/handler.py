@@ -9,7 +9,7 @@ from kanade_bot.utils.common import asia_shanghai_now, get_platform_type
 
 from .cache import check_in_cache, check_in_weekly_cache
 from .config import crystal_config, crystal_data
-from .crystal import get_crystal, increment_crystal
+from .crystal import get_crystal, increment_crystal, increment_crystal_maybe_init
 from .enum import DAYPART_TIME_RANGES, DaypartEnum
 from .matcher import check_in, check_ins, crystal_ranking, list_handler_consumes, my_crystal
 
@@ -46,13 +46,6 @@ for daypart, matcher in check_ins.items():
         platform = get_platform_type(event)
         user_id = event.get_user_id()
 
-        # 检查用户是否有水晶数据，如果没有，说明是首次使用此功能，赠送水晶并发送首次使用消息
-        if user_id not in crystal_data.instance.get_by_platform(platform):
-            increment_crystal(platform, user_id, cfg.first_use_bonus)
-            template = random.choice(cfg.first_use_templates)
-            message = template.format(first_use_bonus=cfg.first_use_bonus)
-            await matcher.send(message)
-
         # 检查当前时间段是否与命令对应的时间段匹配
         current_dayparts = get_current_dayparts()
         if daypart not in current_dayparts:
@@ -80,7 +73,7 @@ for daypart, matcher in check_ins.items():
 
         # 进行签到
         crystal_earned = random.randint(cfg.min_crystal, cfg.max_crystal)
-        increment_crystal(platform, user_id, crystal_earned)
+        await increment_crystal_maybe_init(matcher, platform, user_id, crystal_earned)
 
         check_in_dayparts.add(daypart)
         # 改的是引用，但是可能原来为None，所以都重新设置缓存

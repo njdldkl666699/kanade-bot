@@ -22,7 +22,9 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     if not category_name:
         category_name = None
 
-    result = harvest_once(get_platform_type(event), event.get_user_id(), category_name)
+    result = await harvest_once(
+        harvest, get_platform_type(event), event.get_user_id(), category_name
+    )
     if result is None:
         await harvest.finish("采集失败，体力不足或类别不存在。")
 
@@ -49,7 +51,7 @@ async def _(event: Event):
     results: list[HarvestResult] = []
 
     while True:
-        result = harvest_once(platform, user_id)
+        result = await harvest_once(harvest, platform, user_id)
         if result is None:
             break
         results.append(result)

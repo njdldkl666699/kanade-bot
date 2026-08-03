@@ -11,7 +11,29 @@ from .enum import HandlerKeyEnum
 def increment_crystal(platform: PlatformType, user_id: str, crystal: int) -> None:
     """增加用户积分"""
     data = crystal_data.instance.get_by_platform(platform)
-    data[user_id] = data.get(user_id, 0) + crystal
+    data[user_id] += crystal
+    crystal_data.save_to_file()
+
+
+async def increment_crystal_maybe_init(
+    matcher: type[Matcher] | Matcher,
+    platform: PlatformType,
+    user_id: str,
+    crystal: int,
+):
+    """增加用户积分，如果用户没有水晶数据，说明是首次使用此功能，赠送水晶并发送首次使用消息"""
+    data = crystal_data.instance.get_by_platform(platform)
+    if user_id not in data:
+        # 如果用户没有水晶数据，说明是首次使用此功能，赠送水晶并发送首次使用消息
+        cfg = crystal_config.instance
+        data[user_id] = cfg.first_use_bonus
+        crystal_data.save_to_file()
+
+        template = random.choice(cfg.first_use_templates)
+        message = template.format(first_use_bonus=cfg.first_use_bonus)
+        await matcher.send(message)
+
+    data[user_id] += crystal
     crystal_data.save_to_file()
 
 

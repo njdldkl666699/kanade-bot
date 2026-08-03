@@ -14,10 +14,10 @@ from .config import cfg
 from .matcher import SessionId, dictionaries, games, hint, start_wordle, stop
 from .wordle import DIC_LIST, GuessResult, Wordle
 
-increment_crystal = None
+increment_crystal_maybe_init = None
 if cfg.crystal_bonus_map:
     require("crystal")
-    from kanade_bot.plugins.crystal import increment_crystal
+    from kanade_bot.plugins.crystal import increment_crystal_maybe_init
 
 timers: dict[str, TimerHandle] = {}
 word_matchers: dict[str, type[Matcher]] = {}
@@ -129,8 +129,8 @@ async def handle_word(
         message += user_segment
         message += " 猜出了单词！"
 
-        if increment_crystal and (crystal := game.crystal_bonus) > 0:
-            increment_crystal("onebot", user_id, crystal)
+        if increment_crystal_maybe_init and (crystal := game.crystal_bonus) > 0:
+            await increment_crystal_maybe_init(matcher, "onebot", user_id, crystal)
             message += f"\n你获得了 {crystal} 水晶奖励~"
     else:
         message += "很遗憾，没有人猜出来呢"

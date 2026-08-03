@@ -12,7 +12,11 @@ from kanade_bot.utils.common import AttrDocModel, PlatformType, generate_schema
 require("nonebot_plugin_localstore")
 require("model_updater")
 
-from nonebot_plugin_localstore import get_plugin_config_file, get_plugin_data_file
+from nonebot_plugin_localstore import (
+    get_plugin_cache_file,
+    get_plugin_config_file,
+    get_plugin_data_file,
+)
 
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
@@ -117,7 +121,7 @@ class ScopedConfig(BaseModel):
 
     @property
     def session_messages_cache_file_path(self) -> Path:
-        return get_plugin_data_file(self.session_messages_cache_file)
+        return get_plugin_cache_file(self.session_messages_cache_file)
 
     @property
     def configs_file_path(self) -> Path:

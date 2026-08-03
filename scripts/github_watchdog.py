@@ -158,10 +158,6 @@ class CoreProcessManager:
             start_new_session=True,
         )
 
-    async def restart(self) -> None:
-        await self.stop()
-        await self.start()
-
     async def ensure_running(self) -> None:
         if self._process is None:
             await self.start()
@@ -382,9 +378,21 @@ class WatchdogService:
         if self._last_reported_sha != remote_sha:
             logger.info("发现新提交：{}（本地：{}）", remote_sha, local_sha)
 
-        if await self._git.pull_latest():
-            await self._core.restart()
+        await self._stop_pull_start()
         self._last_reported_sha = remote_sha
+
+    async def _stop_pull_start(self) -> None:
+        """停止主进程 → 拉取最新代码 → 重新启动主进程。
+
+        先等待主进程完全关闭后再执行 git pull，避免在主进程运行时更新代码，
+        确保代码更新的安全性和稳定性。
+        """
+        await self._core.stop()
+        if await self._git.pull_latest():
+            logger.info("代码更新成功，正在重新启动主进程")
+        else:
+            logger.warning("git pull 失败，将以现有代码重新启动主进程")
+        await self._core.start()
 
 
 async def main() -> None:

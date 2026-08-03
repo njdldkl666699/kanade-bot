@@ -103,16 +103,6 @@ class CheckInConfig(AttrDocModel):
     - `total_crystal`: `int` 当前水晶总数
     """
 
-    first_use_bonus: int = 500
-    """首次使用水晶系统的额外奖励水晶数"""
-    first_use_templates: list[str] = [
-        "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
-    ]
-    """首次使用水晶系统的消息模板列表。
-    
-    - `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数
-    """
-
     weekly_bonus: int = 700
     """每周签到满7天的额外奖励水晶数"""
     weekly_bonus_templates: list[str] = ["恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"]
@@ -128,9 +118,18 @@ class CrystalConfig(AttrDocModel):
     check_in: CheckInConfig = CheckInConfig()
     """每日签到配置"""
 
+    first_use_bonus: int = 500
+    """首次使用水晶系统的额外奖励水晶数"""
+    first_use_templates: list[str] = [
+        "欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"
+    ]
+    """首次使用水晶系统的消息模板列表。
+    
+    - `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数
+    """
+
     handler_consumes: dict[HandlerKeyEnum, int] = {}
     """每个命令的处理函数消耗的水晶，键为唯一ID，值为消耗的水晶数"""
-
     handler_consume_failed_templates: list[str] = [
         "嗯…水晶好像不够。需要 {consume} 水晶…还差一些。",
         "啊…不行。当前水晶有{crystal}，需要 {consume} 水晶…有点可惜。",
