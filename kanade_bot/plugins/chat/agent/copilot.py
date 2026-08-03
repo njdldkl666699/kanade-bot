@@ -122,7 +122,7 @@ class CopilotSessionManager:
         data = {id: list(m) for id, m in self._sessions_messages.items()}
         try:
             with cache_file.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump(data, f, ensure_ascii=False)
             logger.info(f"已保存{len(self._sessions_messages)}个会话的消息缓冲区缓存")
         except Exception as e:  # noqa: BLE001
             logger.exception(f"保存会话消息缓冲区缓存时发生错误: {e}")

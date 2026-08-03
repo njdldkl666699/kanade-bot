@@ -97,17 +97,11 @@ jobs:
             commit_range="$GITHUB_SHA"
           fi
 
-          commit_count="$(git rev-list --count "$commit_range")"
           {
             echo "## 提交记录"
             echo
-            if [[ -n "$previous_release_tag" ]]; then
-              echo "自上个 Release [$previous_release_tag](https://github.com/$GITHUB_REPOSITORY/releases/tag/$previous_release_tag) 以来的 $commit_count 条提交："
-            else
-              echo "首次发布，包含仓库中的全部 $commit_count 条提交："
-            fi
-            echo
-            git log "$commit_range" --format="- [\`%h\`](https://github.com/$GITHUB_REPOSITORY/commit/%H) %s — %an，%ad" --date=short
+            # %b 输出完整消息体并用 %w(0,4,4) 缩进 4 格，使其保持在列表项内
+            git log "$commit_range" --format="- [\`%h\`](https://github.com/$GITHUB_REPOSITORY/commit/%H) %s — %an，%ad%n%w(0,4,4)%b" --date=short
           } > "$notes_file"
 
           echo "path=$notes_file" >> "$GITHUB_OUTPUT"
