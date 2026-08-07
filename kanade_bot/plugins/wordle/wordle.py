@@ -115,7 +115,7 @@ class Wordle:
         self.word_lower: str = word.lower()
         self.length: int = len(word)
         """单词长度"""
-        self.rows: int = self.length + 1
+        self.rows: int = 6
         """可猜次数"""
         self.guessed_words: list[str] = []
         """记录已猜单词"""

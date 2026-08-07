@@ -1,5 +1,6 @@
 import random
 from asyncio import subprocess
+from email.header import Header
 
 from httpx import HTTPStatusError
 from nonebot import get_driver, get_plugin_config, logger
@@ -59,7 +60,7 @@ async def _(event: BotOfflineNoticeEvent):
     content = (
         f"你的Bot账号: {event.self_id} 掉线了，赶快去看看吧。\n`Message`: {event.message}".encode()
     )
-    headers = {"Title": title}
+    headers = {"Title": Header(title, "utf-8").encode()}
 
     path = cfg.login_qrcode_file_path
     if path and path.is_file():
