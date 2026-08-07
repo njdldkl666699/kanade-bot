@@ -60,7 +60,7 @@ class CopilotSessionManager:
         return {
             "on_permission_request": PermissionHandler.approve_all,
             "model": cfg.model,
-            "provider": cfg.provider,
+            "provider": cfg.provider.model_dump() if cfg.provider else None,
             "reasoning_effort": cfg.reasoning_effort,
             "tools": tools,
             "excluded_tools": cfg.excluded_tools,

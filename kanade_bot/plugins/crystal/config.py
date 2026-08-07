@@ -1,10 +1,10 @@
-# ruff: noqa: RUF012
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import AttrDocModel, PlatformType, generate_schema
+from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 from .enum import HandlerKeyEnum
 
@@ -20,7 +20,7 @@ from nonebot_plugin_localstore import (
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     config_file: str = "crystal_config.json"
     """水晶配置文件名"""
     data_file: str = "userdata.json"
@@ -50,6 +50,8 @@ class ScopedConfig(BaseModel):
 class Config(BaseModel):
     crystal: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).crystal
 

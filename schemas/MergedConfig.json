@@ -1,0 +1,2103 @@
+{
+  "$defs": {
+    "AzureProviderOptions": {
+      "description": "Azure-specific provider configuration",
+      "properties": {
+        "api_version": {
+          "title": "Api Version",
+          "type": "string"
+        }
+      },
+      "title": "AzureProviderOptions",
+      "type": "object"
+    },
+    "CompConfig": {
+      "properties": {
+        "tab": {
+          "title": "Tab",
+          "type": "string"
+        },
+        "enter": {
+          "title": "Enter",
+          "type": "string"
+        },
+        "exit": {
+          "title": "Exit",
+          "type": "string"
+        },
+        "timeout": {
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "hide_tabs": {
+          "title": "Hide Tabs",
+          "type": "boolean"
+        },
+        "hides": {
+          "items": {
+            "enum": [
+              "tab",
+              "enter",
+              "exit"
+            ],
+            "type": "string"
+          },
+          "title": "Hides",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "disables": {
+          "items": {
+            "enum": [
+              "tab",
+              "enter",
+              "exit"
+            ],
+            "type": "string"
+          },
+          "title": "Disables",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "lite": {
+          "title": "Lite",
+          "type": "boolean"
+        },
+        "block": {
+          "title": "Block",
+          "type": "boolean"
+        }
+      },
+      "title": "CompConfig",
+      "type": "object"
+    },
+    "MCPHTTPServerConfig": {
+      "description": "Configuration for a remote MCP server (HTTP or SSE).",
+      "properties": {
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        },
+        "type": {
+          "enum": [
+            "http",
+            "sse"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "timeout": {
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        }
+      },
+      "title": "MCPHTTPServerConfig",
+      "type": "object"
+    },
+    "MCPStdioServerConfig": {
+      "description": "Configuration for a local/stdio MCP server.",
+      "properties": {
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        },
+        "type": {
+          "enum": [
+            "local",
+            "stdio"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "timeout": {
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "working_directory": {
+          "title": "Working Directory",
+          "type": "string"
+        }
+      },
+      "title": "MCPStdioServerConfig",
+      "type": "object"
+    },
+    "ProviderConfig": {
+      "description": "自定义API提供商配置\n\n此模型用于Pydantic校验，运行时通过`.model_dump()`方法获取字典形式的配置。\n\n修改自`copilot.session.ProviderConfig`，仅保留了可生成schema的字段。",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "openai",
+                "azure",
+                "anthropic"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "wire_api": {
+          "anyOf": [
+            {
+              "enum": [
+                "completions",
+                "responses"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wire Api"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "enum": [
+                "http",
+                "websockets"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Transport for OpenAI Responses requests. Defaults to \"http\". Set \n\"websockets\" to deliver Responses API requests over a persistent WebSocket\nconnection instead of HTTP. Applies to OpenAI-compatible providers using\nwire_api \"responses\".",
+          "title": "Transport"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
+        },
+        "bearer_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bearer token for authentication. Sets the Authorization header directly.\nUse this for services requiring bearer token auth instead of API key.\nTakes precedence over api_key when both are set.",
+          "title": "Bearer Token"
+        },
+        "azure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AzureProviderOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Azure-specific options"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Headers"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Well-known model name used by the runtime to look up agent configuration\n(tools, prompts, reasoning behavior) and default token limits. Also used\nas the wire model when wire_model is not set.\nFalls back to SessionConfig.model.",
+          "title": "Model Id"
+        },
+        "wire_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model name sent to the provider API for inference. Use this when the\nprovider's model name (e.g. an Azure deployment name or a custom\nfine-tune name) differs from model_id.\nFalls back to model_id, then SessionConfig.model.",
+          "title": "Wire Model"
+        },
+        "max_prompt_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides the resolved model's default max prompt tokens. The runtime\ntriggers conversation compaction before sending a request when the prompt\n(system message, history, tool definitions, user message) would exceed\nthis limit.",
+          "title": "Max Prompt Tokens"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Overrides the resolved model's default max output tokens. When hit, the\nmodel stops generating and returns a truncated response.",
+          "title": "Max Output Tokens"
+        }
+      },
+      "title": "ProviderConfig",
+      "type": "object"
+    },
+    "RAGConfig": {
+      "description": "RAG相关配置",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "是否启用RAG功能",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "query_n_results": {
+          "default": 3,
+          "description": "查询返回的相关文档数量",
+          "title": "Query N Results",
+          "type": "integer"
+        },
+        "distance_threshold": {
+          "default": 0.65,
+          "description": "相关文档的距离阈值，数值越小表示越相关",
+          "title": "Distance Threshold",
+          "type": "number"
+        },
+        "db_dir": {
+          "default": "rag_db/",
+          "description": "向量数据库的存储目录名",
+          "title": "Db Dir",
+          "type": "string"
+        },
+        "collection_name": {
+          "default": "kanade_wiki_collection",
+          "description": "向量数据库中集合的名称",
+          "title": "Collection Name",
+          "type": "string"
+        },
+        "document_file": {
+          "default": "kanade_wiki.json",
+          "description": "初始文档文件名，位于插件配置目录下，格式为JSON，每个文档包含id、text和metadata字段",
+          "title": "Document File",
+          "type": "string"
+        },
+        "embedding_type": {
+          "default": "sentence_transformer",
+          "description": "RAG使用的向量化方法\n- `sentence_transformer`需要指定model_name_or_path参数\n- `openai`需要指定openai开头的参数",
+          "enum": [
+            "sentence_transformer",
+            "openai"
+          ],
+          "title": "Embedding Type",
+          "type": "string"
+        },
+        "model_name_or_path": {
+          "default": "BAAI/bge-small-zh-v1.5",
+          "description": "RAG使用的模型名称或路径，支持从Hugging Face下载",
+          "title": "Model Name Or Path",
+          "type": "string"
+        },
+        "openai_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenAI API密钥",
+          "title": "Openai Api Key"
+        },
+        "openai_base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenAI API Base URL，可选，用于自定义端点",
+          "title": "Openai Base Url"
+        },
+        "openai_model": {
+          "default": "text-embedding-3-small",
+          "description": "OpenAI嵌入模型名称",
+          "title": "Openai Model",
+          "type": "string"
+        }
+      },
+      "title": "RAGConfig",
+      "type": "object"
+    },
+    "TestSiteCfg": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "use_proxy": {
+          "default": false,
+          "title": "Use Proxy",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ],
+      "title": "TestSiteCfg",
+      "type": "object"
+    },
+    "kanade_bot__plugins__chat__config__ScopedConfig": {
+      "properties": {
+        "model": {
+          "default": "gpt-5-mini",
+          "description": "模型ID",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型提供商配置，如果为None则使用Copilot内置模型的默认值"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度",
+          "title": "Reasoning Effort"
+        },
+        "excluded_tools": {
+          "default": [],
+          "description": "排除的工具列表",
+          "items": {
+            "type": "string"
+          },
+          "title": "Excluded Tools",
+          "type": "array"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MCPStdioServerConfig"
+                  },
+                  {
+                    "$ref": "#/$defs/MCPHTTPServerConfig"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置",
+          "title": "Mcp Servers"
+        },
+        "memory_database_file": {
+          "default": "memories.sqlite3",
+          "description": "持久化记忆数据库文件名，位于插件数据目录下",
+          "title": "Memory Database File",
+          "type": "string"
+        },
+        "memory_max_records_per_scope": {
+          "default": 256,
+          "description": "每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录",
+          "exclusiveMinimum": 0,
+          "title": "Memory Max Records Per Scope",
+          "type": "integer"
+        },
+        "image_caption_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图片转述模型，如果为None则不使用\n\n如果不使用图片转述，且主模型不支持图片输入，则无法处理图片消息",
+          "title": "Image Caption Model"
+        },
+        "image_caption_provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图片转述模型提供商配置，如果为None则使用Copilot内置模型"
+        },
+        "system_prompt_file": {
+          "default": "Kanade-v4.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
+        },
+        "system_prompt_extras": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "系统提示词额外内容，键为占位符，值为替换内容的文件名\n\n例如：{\"kanade_wiki\": \"Kanade-wiki.md\"}表示在系统提示词中遇到{{kanade_wiki}}时，\n会将其替换为Kanade-wiki.md文件的内容",
+          "title": "System Prompt Extras",
+          "type": "object"
+        },
+        "session_messages_max_size": {
+          "default": 100,
+          "description": "会话消息缓冲区最大条数，超出后会丢弃最早的消息",
+          "title": "Session Messages Max Size",
+          "type": "integer"
+        },
+        "session_messages_cache_file": {
+          "default": "session_messages_cache.json",
+          "description": "会话消息缓冲区缓存文件名，位于插件数据目录下",
+          "title": "Session Messages Cache File",
+          "type": "string"
+        },
+        "configs_file": {
+          "default": "chat_configs.json",
+          "description": "聊天配置文件名",
+          "title": "Configs File",
+          "type": "string"
+        },
+        "fail_image_file": {
+          "default": "chat_fail.jpg",
+          "description": "聊天失败时发送的图片名，不存在则返回默认的文本消息",
+          "title": "Fail Image File",
+          "type": "string"
+        },
+        "memes_dir": {
+          "default": "memes/",
+          "description": "表情包存储目录名",
+          "title": "Memes Dir",
+          "type": "string"
+        },
+        "rag": {
+          "$ref": "#/$defs/RAGConfig",
+          "default": {
+            "enabled": false,
+            "query_n_results": 3,
+            "distance_threshold": 0.65,
+            "db_dir": "rag_db/",
+            "collection_name": "kanade_wiki_collection",
+            "document_file": "kanade_wiki.json",
+            "embedding_type": "sentence_transformer",
+            "model_name_or_path": "BAAI/bge-small-zh-v1.5",
+            "openai_api_key": null,
+            "openai_base_url": null,
+            "openai_model": "text-embedding-3-small"
+          }
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__crystal__config__ScopedConfig": {
+      "properties": {
+        "config_file": {
+          "default": "crystal_config.json",
+          "description": "水晶配置文件名",
+          "title": "Config File",
+          "type": "string"
+        },
+        "data_file": {
+          "default": "userdata.json",
+          "description": "用户数据文件名",
+          "title": "Data File",
+          "type": "string"
+        },
+        "cache_file": {
+          "default": "cache.json",
+          "description": "缓存数据文件名",
+          "title": "Cache File",
+          "type": "string"
+        },
+        "weekly_check_in_file": {
+          "default": "weekly_check_in.json",
+          "description": "每周签到数据文件名",
+          "title": "Weekly Check In File",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig": {
+      "description": "抽卡环境配置",
+      "properties": {
+        "config_file": {
+          "default": "gacha_config.json",
+          "description": "抽卡配置文件名",
+          "title": "Config File",
+          "type": "string"
+        },
+        "member_small_dir": {
+          "default": "member_small/",
+          "description": "卡牌资源目录名\n\n一般路径为 `cn-assets/character/member_small/resxxx_noxxx/card_xxxxx.png`\n\n图片尺寸：940x530",
+          "title": "Member Small Dir",
+          "type": "string"
+        },
+        "cards_assets_dir": {
+          "default": "cards_assets/",
+          "description": "卡牌图标资源目录名",
+          "title": "Cards Assets Dir",
+          "type": "string"
+        },
+        "card_info_file": {
+          "default": "cards.json",
+          "description": "卡牌信息文件名",
+          "title": "Card Info File",
+          "type": "string"
+        },
+        "show_trained": {
+          "default": true,
+          "description": "显示特训后卡牌图片",
+          "title": "Show Trained",
+          "type": "boolean"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig": {
+      "description": "采集环境配置",
+      "properties": {
+        "config_file": {
+          "default": "harvest_config.json",
+          "description": "采集配置文件名",
+          "title": "Config File",
+          "type": "string"
+        },
+        "assets_dir": {
+          "default": "harvest_assets/",
+          "description": "采集物品资源目录名\n\n一般路径为 `cn-assets/mysekai/thumbnail/material/item_xxx_x.png`",
+          "title": "Assets Dir",
+          "type": "string"
+        },
+        "power_cache_file": {
+          "default": "harvest_power_cache.json",
+          "description": "采集体力缓存文件名",
+          "title": "Power Cache File",
+          "type": "string"
+        },
+        "crystal_power_cache_file": {
+          "default": "harvest_crystal_power_cache.json",
+          "description": "水晶恢复的体力数据文件名（不会被每日清除）",
+          "title": "Crystal Power Cache File",
+          "type": "string"
+        },
+        "result_template_file": {
+          "default": "harvest_result_template.html",
+          "description": "一次采集结果HTML模板文件名",
+          "title": "Result Template File",
+          "type": "string"
+        },
+        "results_template_file": {
+          "default": "harvest_results_template.html",
+          "description": "多次采集结果HTML模板文件名",
+          "title": "Results Template File",
+          "type": "string"
+        },
+        "crystal_image_name": {
+          "default": "jewel.png",
+          "description": "水晶图片文件名",
+          "title": "Crystal Image Name",
+          "type": "string"
+        },
+        "daily_power": {
+          "default": 10,
+          "description": "每日采集体力上限",
+          "title": "Daily Power",
+          "type": "number"
+        },
+        "power_crystal_cost": {
+          "default": 10,
+          "description": "每点采集体力消耗的水晶数",
+          "title": "Power Crystal Cost",
+          "type": "number"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__fun__config__ScopedConfig": {
+      "properties": {
+        "ciallo_image_file": {
+          "default": "宵崎奏Ciallo.webp",
+          "description": "Ciallo表情图片名",
+          "title": "Ciallo Image File",
+          "type": "string"
+        },
+        "plus_one_threshold": {
+          "default": 0,
+          "description": "+1功能的触发阈值，单位为条消息，小于等于0表示禁用",
+          "title": "Plus One Threshold",
+          "type": "integer"
+        },
+        "duanzi_list_file": {
+          "default": "duanzi.json",
+          "description": "段子(史)JSON列表文件名",
+          "title": "Duanzi List File",
+          "type": "string"
+        },
+        "lolicon_proxy": {
+          "default": "i.yuki.sh",
+          "description": "Lolicon API 图片代理",
+          "title": "Lolicon Proxy",
+          "type": "string"
+        },
+        "cache_file": {
+          "default": "cache.json",
+          "description": "缓存数据文件路径",
+          "title": "Cache File",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__gallery__config__ScopedConfig": {
+      "properties": {
+        "name_data_file": {
+          "default": "gallery_name_indices.json",
+          "description": "画廊的名称数据文件名",
+          "title": "Name Data File",
+          "type": "string"
+        },
+        "send_pic_limit": {
+          "default": 10,
+          "description": "每次发送图片的数量限制",
+          "title": "Send Pic Limit",
+          "type": "integer"
+        },
+        "send_pic_as_meme": {
+          "default": true,
+          "description": "是否将发送的图片作为表情包发送",
+          "title": "Send Pic As Meme",
+          "type": "boolean"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__help__config__ScopedConfig": {
+      "properties": {
+        "online_notice_group_ids": {
+          "default": [],
+          "description": "Bot上线通知的群聊ID列表，配置后会在Bot上线时发送通知到这些群聊",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Online Notice Group Ids",
+          "type": "array"
+        },
+        "ntfy_topic_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ntfy的topic的完整URL，配置后会在Bot掉线时发送通知到这个topic，不配置则禁用掉线通知",
+          "title": "Ntfy Topic Url"
+        },
+        "login_qrcode_file_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "登录二维码的文件路径，配置后会在掉线推送中附带",
+          "title": "Login Qrcode File Path"
+        },
+        "welcome_message_templates": {
+          "default": [
+            "嗯…欢迎{nickname} 。我是K，请多指教。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+            "…{nickname} ，欢迎你。这里不吵，但如果你需要说话，我会在的。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+            "欢迎{nickname} 。我刚好在泡面…有点失礼，不过很高兴认识你。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+            "啊，{nickname} 来了。不用太拘束，安静待着也可以。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+            "欢迎{nickname} 。我可能话不多，但会一直听着。\n如果有什么不清楚的地方…输入 /help 可以看说明。"
+          ],
+          "description": "欢迎新成员入群的消息模板列表，{nickname}会被替换为新成员的昵称",
+          "items": {
+            "type": "string"
+          },
+          "title": "Welcome Message Templates",
+          "type": "array"
+        },
+        "welcome_image_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "欢迎新成员入群的图片文件名，未配置则不发送图片",
+          "title": "Welcome Image File"
+        },
+        "leave_notice_disabled_group_ids": {
+          "default": [],
+          "description": "群成员离开群聊的通知禁用的群聊ID列表，配置后在这些群聊中群成员离开时Bot不会发送通知",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Leave Notice Disabled Group Ids",
+          "type": "array"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__music__config__ScopedConfig": {
+      "properties": {
+        "playlist_file": {
+          "default": "lx_list",
+          "description": "音乐列表文件名，LX Music playList_v2格式的JSON文件",
+          "title": "Playlist File",
+          "type": "string"
+        },
+        "playlist_link": {
+          "default": "",
+          "description": "完整音乐列表链接，仅展示用",
+          "title": "Playlist Link",
+          "type": "string"
+        },
+        "audios_dir": {
+          "default": "audios/",
+          "description": "唱歌功能的歌曲目录名，目录下是每首歌的MP3文件",
+          "title": "Audios Dir",
+          "type": "string"
+        },
+        "audio_page_size": {
+          "default": 10,
+          "description": "唱歌功能的歌曲列表分页大小，每页显示多少首歌",
+          "title": "Audio Page Size",
+          "type": "integer"
+        },
+        "lyrics_dir": {
+          "default": "lyrics/",
+          "description": "歌词列表目录名，目录下是每首歌的.lrc文件",
+          "title": "Lyrics Dir",
+          "type": "string"
+        },
+        "lyric_default_length": {
+          "default": 4,
+          "description": "歌词功能默认返回的歌词行数，一行包含原文、翻译和罗马音（如有）",
+          "title": "Lyric Default Length",
+          "type": "integer"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__summary__config__ScopedConfig": {
+      "properties": {
+        "model": {
+          "default": "gpt-5-mini",
+          "description": "模型ID",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型提供商配置，如果为None则使用Copilot内置模型"
+        },
+        "system_prompt_file": {
+          "default": "Summarizer.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
+        },
+        "bot_name": {
+          "default": "宵崎奏",
+          "description": "总结中AI的名称，用于区分用户和AI的发言",
+          "title": "Bot Name",
+          "type": "string"
+        },
+        "min_size": {
+          "default": 10,
+          "description": "最小消息条数",
+          "title": "Min Size",
+          "type": "integer"
+        },
+        "max_size": {
+          "default": 2048,
+          "description": "最大条数，同时也是消息记录的最大条数，超过后会丢弃最早的消息",
+          "title": "Max Size",
+          "type": "integer"
+        },
+        "message_records_file": {
+          "default": "summary_message_records.json",
+          "description": "消息记录的缓存文件名",
+          "title": "Message Records File",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__tool__config__ScopedConfig": {
+      "properties": {
+        "fallback_icon_file": {
+          "default": "grass_block.png",
+          "description": "服务器图标加载失败时的替代图标名，支持PNG格式。",
+          "title": "Fallback Icon File",
+          "type": "string"
+        },
+        "template_file": {
+          "default": "mcstatus_template.html",
+          "description": "服务器状态渲染使用的HTML模板文件名，支持HTML格式。",
+          "title": "Template File",
+          "type": "string"
+        },
+        "schedule_configs_file": {
+          "default": "schedule_configs.json",
+          "description": "定时任务配置文件名。暂仅支持OneBot v11群聊。",
+          "title": "Schedule Configs File",
+          "type": "string"
+        },
+        "preset_reaction_config_file": {
+          "default": "preset_reaction_config.json",
+          "description": "预设反应配置文件名",
+          "title": "Preset Reaction Config File",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
+    "kanade_bot__plugins__wordle__config__ScopedConfig": {
+      "properties": {
+        "default_length": {
+          "default": 5,
+          "description": "默认单词长度",
+          "title": "Default Length",
+          "type": "integer"
+        },
+        "default_dictionary": {
+          "default": "CET4",
+          "description": "默认词典",
+          "title": "Default Dictionary",
+          "type": "string"
+        },
+        "min_length": {
+          "default": 3,
+          "description": "单词最小长度",
+          "title": "Min Length",
+          "type": "integer"
+        },
+        "max_length": {
+          "default": 13,
+          "description": "单词最大长度",
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "meanings": {
+          "default": [
+            "中释"
+          ],
+          "description": "单词释义类型，根据数据源可以选择多种释义类型",
+          "items": {
+            "type": "string"
+          },
+          "title": "Meanings",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "crystal_bonus_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "description": "猜出单词后获得的水晶奖励，key为单词长度，value为奖励水晶数。\n\n如果未配置或配置为空字典，则不启用水晶奖励功能。",
+          "title": "Crystal Bonus Map",
+          "type": "object"
+        },
+        "hinted_crystal_bonus_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "description": "使用提示后猜出单词获得的水晶奖励",
+          "title": "Hinted Crystal Bonus Map",
+          "type": "object"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "driver": {
+      "default": "~fastapi",
+      "description": "NoneBot 运行所使用的 `Driver` 。继承自 {ref}`nonebot.drivers.Driver` 。\n\n    配置格式为 `<module>[:<Driver>][+<module>[:<Mixin>]]*`。\n\n    `~` 为 `nonebot.drivers.` 的缩写。\n\n    配置方法参考: [配置驱动器](https://nonebot.dev/docs/advanced/driver#%E9%85%8D%E7%BD%AE%E9%A9%B1%E5%8A%A8%E5%99%A8)",
+      "title": "Driver",
+      "type": "string"
+    },
+    "host": {
+      "default": "127.0.0.1",
+      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的 IP/主机名。",
+      "format": "ipvanyaddress",
+      "title": "Host",
+      "type": "string"
+    },
+    "port": {
+      "default": 8080,
+      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的端口。",
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "log_level": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": "INFO",
+      "description": "NoneBot 日志输出等级，可以为 `int` 类型等级或等级名称。\n\n    参考 [记录日志](https://nonebot.dev/docs/appendices/log)，[loguru 日志等级](https://loguru.readthedocs.io/en/stable/api/logger.html#levels)。\n\n    :::tip 提示\n    日志等级名称应为大写，如 `INFO`。\n    :::\n\n    用法:\n        ```conf\n        LOG_LEVEL=25\n        LOG_LEVEL=INFO\n        ```",
+      "title": "Log Level"
+    },
+    "api_timeout": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 30.0,
+      "description": "API 请求超时时间，单位: 秒。",
+      "title": "Api Timeout"
+    },
+    "superusers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Superusers",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "nickname": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Nickname",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "command_start": {
+      "default": [
+        "/"
+      ],
+      "description": "命令的起始标记，用于判断一条消息是不是命令。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_START=[\"/\", \"\"]\n        ```",
+      "items": {
+        "type": "string"
+      },
+      "title": "Command Start",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "command_sep": {
+      "default": [
+        "."
+      ],
+      "description": "命令的分隔标记，用于将文本形式的命令切分为元组（实际的命令名）。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_SEP=[\".\"]\n        ```",
+      "items": {
+        "type": "string"
+      },
+      "title": "Command Sep",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "session_expire_timeout": {
+      "default": "PT2M",
+      "description": "等待用户回复的超时时间。\n\n    用法:\n        ```conf\n        SESSION_EXPIRE_TIMEOUT=[-][DD]D[,][HH:MM:]SS[.ffffff]\n        SESSION_EXPIRE_TIMEOUT=[±]P[DD]DT[HH]H[MM]M[SS]S  # ISO 8601\n        ```",
+      "format": "duration",
+      "title": "Session Expire Timeout",
+      "type": "string"
+    },
+    "wordle": {
+      "$ref": "#/$defs/kanade_bot__plugins__wordle__config__ScopedConfig",
+      "default": {
+        "default_length": 5,
+        "default_dictionary": "CET4",
+        "min_length": 3,
+        "max_length": 13,
+        "meanings": [
+          "中释"
+        ],
+        "crystal_bonus_map": {},
+        "hinted_crystal_bonus_map": {}
+      }
+    },
+    "command_counter_data_file": {
+      "default": "command_counter_data.json",
+      "description": "命令计数器保存的数据文件名",
+      "title": "Command Counter Data File",
+      "type": "string"
+    },
+    "model_updater_template_file": {
+      "default": "template.html",
+      "description": "模型更新器使用的HTML模板文件名，支持HTML格式。",
+      "title": "Model Updater Template File",
+      "type": "string"
+    },
+    "crystal": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__config__ScopedConfig",
+      "default": {
+        "config_file": "crystal_config.json",
+        "data_file": "userdata.json",
+        "cache_file": "cache.json",
+        "weekly_check_in_file": "weekly_check_in.json"
+      }
+    },
+    "gacha": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig",
+      "default": {
+        "config_file": "gacha_config.json",
+        "member_small_dir": "member_small/",
+        "cards_assets_dir": "cards_assets/",
+        "card_info_file": "cards.json",
+        "show_trained": true
+      }
+    },
+    "harvest": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig",
+      "default": {
+        "config_file": "harvest_config.json",
+        "assets_dir": "harvest_assets/",
+        "power_cache_file": "harvest_power_cache.json",
+        "crystal_power_cache_file": "harvest_crystal_power_cache.json",
+        "result_template_file": "harvest_result_template.html",
+        "results_template_file": "harvest_results_template.html",
+        "crystal_image_name": "jewel.png",
+        "daily_power": 10.0,
+        "power_crystal_cost": 10.0
+      }
+    },
+    "fun": {
+      "$ref": "#/$defs/kanade_bot__plugins__fun__config__ScopedConfig",
+      "default": {
+        "ciallo_image_file": "宵崎奏Ciallo.webp",
+        "plus_one_threshold": 0,
+        "duanzi_list_file": "duanzi.json",
+        "lolicon_proxy": "i.yuki.sh",
+        "cache_file": "cache.json"
+      }
+    },
+    "help": {
+      "$ref": "#/$defs/kanade_bot__plugins__help__config__ScopedConfig",
+      "default": {
+        "online_notice_group_ids": [],
+        "ntfy_topic_url": null,
+        "login_qrcode_file_path": null,
+        "welcome_message_templates": [
+          "嗯…欢迎{nickname} 。我是K，请多指教。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "…{nickname} ，欢迎你。这里不吵，但如果你需要说话，我会在的。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "欢迎{nickname} 。我刚好在泡面…有点失礼，不过很高兴认识你。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "啊，{nickname} 来了。不用太拘束，安静待着也可以。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "欢迎{nickname} 。我可能话不多，但会一直听着。\n如果有什么不清楚的地方…输入 /help 可以看说明。"
+        ],
+        "welcome_image_file": null,
+        "leave_notice_disabled_group_ids": []
+      }
+    },
+    "music": {
+      "$ref": "#/$defs/kanade_bot__plugins__music__config__ScopedConfig",
+      "default": {
+        "playlist_file": "lx_list",
+        "playlist_link": "",
+        "audios_dir": "audios/",
+        "audio_page_size": 10,
+        "lyrics_dir": "lyrics/",
+        "lyric_default_length": 4
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/kanade_bot__plugins__summary__config__ScopedConfig",
+      "default": {
+        "model": "gpt-5-mini",
+        "provider": null,
+        "system_prompt_file": "Summarizer.md",
+        "bot_name": "宵崎奏",
+        "min_size": 10,
+        "max_size": 2048,
+        "message_records_file": "summary_message_records.json"
+      }
+    },
+    "chat": {
+      "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
+      "default": {
+        "model": "gpt-5-mini",
+        "provider": null,
+        "reasoning_effort": null,
+        "excluded_tools": [],
+        "mcp_servers": null,
+        "memory_database_file": "memories.sqlite3",
+        "memory_max_records_per_scope": 256,
+        "image_caption_model": null,
+        "image_caption_provider": null,
+        "system_prompt_file": "Kanade-v4.md",
+        "system_prompt_extras": {},
+        "session_messages_max_size": 100,
+        "session_messages_cache_file": "session_messages_cache.json",
+        "configs_file": "chat_configs.json",
+        "fail_image_file": "chat_fail.jpg",
+        "memes_dir": "memes/",
+        "rag": {
+          "collection_name": "kanade_wiki_collection",
+          "db_dir": "rag_db/",
+          "distance_threshold": 0.65,
+          "document_file": "kanade_wiki.json",
+          "embedding_type": "sentence_transformer",
+          "enabled": false,
+          "model_name_or_path": "BAAI/bge-small-zh-v1.5",
+          "openai_api_key": null,
+          "openai_base_url": null,
+          "openai_model": "text-embedding-3-small",
+          "query_n_results": 3
+        }
+      }
+    },
+    "tool": {
+      "$ref": "#/$defs/kanade_bot__plugins__tool__config__ScopedConfig",
+      "default": {
+        "fallback_icon_file": "grass_block.png",
+        "template_file": "mcstatus_template.html",
+        "schedule_configs_file": "schedule_configs.json",
+        "preset_reaction_config_file": "preset_reaction_config.json"
+      }
+    },
+    "gallery": {
+      "$ref": "#/$defs/kanade_bot__plugins__gallery__config__ScopedConfig",
+      "default": {
+        "name_data_file": "gallery_name_indices.json",
+        "send_pic_limit": 10,
+        "send_pic_as_meme": true
+      }
+    },
+    "api60s_base_url": {
+      "default": "https://60s.viki.moe",
+      "description": "60s API Base URL",
+      "title": "Api60S Base Url",
+      "type": "string"
+    },
+    "api60s_fun_cache_file": {
+      "default": "cache.json",
+      "description": "Fun插件缓存数据文件路径",
+      "title": "Api60S Fun Cache File",
+      "type": "string"
+    },
+    "console_headless_mode": {
+      "default": false,
+      "title": "Console Headless Mode",
+      "type": "boolean"
+    },
+    "console_bot_id": {
+      "default": "robot",
+      "title": "Console Bot Id",
+      "type": "string"
+    },
+    "console_bot_name": {
+      "default": "Bot",
+      "title": "Console Bot Name",
+      "type": "string"
+    },
+    "console_strict_tome": {
+      "default": false,
+      "title": "Console Strict Tome",
+      "type": "boolean"
+    },
+    "onebot_v11_access_token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "OneBot 协议授权令牌",
+      "title": "Onebot V11 Access Token"
+    },
+    "onebot_v11_secret": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "OneBot HTTP 上报数据签名口令",
+      "title": "Onebot V11 Secret"
+    },
+    "onebot_v11_ws_urls": {
+      "description": "OneBot 正向 Websocket 连接目标 URL 集合",
+      "items": {
+        "format": "uri",
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Onebot V11 Ws Urls",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "onebot_v11_api_roots": {
+      "additionalProperties": {
+        "format": "uri",
+        "minLength": 1,
+        "type": "string"
+      },
+      "description": "OneBot HTTP API 请求地址字典",
+      "title": "Onebot V11 Api Roots",
+      "type": "object"
+    },
+    "alconna_auto_send_output": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "是否全局启用输出信息自动发送",
+      "title": "Alconna Auto Send Output"
+    },
+    "alconna_use_command_start": {
+      "default": false,
+      "description": "是否将 COMMAND_START 作为全局命令前缀",
+      "title": "Alconna Use Command Start",
+      "type": "boolean"
+    },
+    "alconna_global_completion": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CompConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "全局的补全会话配置 (不代表全局启用补全会话)"
+    },
+    "alconna_use_origin": {
+      "default": false,
+      "description": "是否全局使用原始消息 (即未经过 to_me 等处理的)",
+      "title": "Alconna Use Origin",
+      "type": "boolean"
+    },
+    "alconna_use_command_sep": {
+      "default": false,
+      "description": "是否将 COMMAND_SEP 作为全局命令分隔符",
+      "title": "Alconna Use Command Sep",
+      "type": "boolean"
+    },
+    "alconna_global_extensions": {
+      "description": "全局加载的扩展, 路径以 . 分隔, 如 foo.bar.baz:DemoExtension",
+      "items": {
+        "type": "string"
+      },
+      "title": "Alconna Global Extensions",
+      "type": "array"
+    },
+    "alconna_context_style": {
+      "anyOf": [
+        {
+          "enum": [
+            "bracket",
+            "parentheses"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "全局命令上下文插值的风格，None 为关闭，bracket 为 {...}，parentheses 为 $(...)",
+      "title": "Alconna Context Style"
+    },
+    "alconna_enable_saa_patch": {
+      "default": false,
+      "description": "是否启用 SAA 补丁",
+      "title": "Alconna Enable Saa Patch",
+      "type": "boolean"
+    },
+    "alconna_apply_filehost": {
+      "default": false,
+      "description": "是否启用文件托管",
+      "title": "Alconna Apply Filehost",
+      "type": "boolean"
+    },
+    "alconna_apply_fetch_targets": {
+      "default": false,
+      "description": "是否启动时拉取一次发送对象列表",
+      "title": "Alconna Apply Fetch Targets",
+      "type": "boolean"
+    },
+    "alconna_builtin_plugins": {
+      "description": "需要加载的alc内置插件集合",
+      "items": {
+        "type": "string"
+      },
+      "title": "Alconna Builtin Plugins",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "alconna_conflict_resolver": {
+      "default": "default",
+      "description": "命令冲突解决策略，default 为保留两个命令，raise 为抛出异常，ignore 为忽略新命令，replace 为替换旧命令",
+      "enum": [
+        "raise",
+        "default",
+        "ignore",
+        "replace"
+      ],
+      "title": "Alconna Conflict Resolver",
+      "type": "string"
+    },
+    "alconna_response_self": {
+      "default": false,
+      "description": "是否响应自身发送的消息",
+      "title": "Alconna Response Self",
+      "type": "boolean"
+    },
+    "alconna_cache_message": {
+      "default": true,
+      "description": "是否缓存已解析的消息",
+      "title": "Alconna Cache Message",
+      "type": "boolean"
+    },
+    "apscheduler_autostart": {
+      "default": true,
+      "title": "Apscheduler Autostart",
+      "type": "boolean"
+    },
+    "apscheduler_log_level": {
+      "default": 30,
+      "title": "Apscheduler Log Level",
+      "type": "integer"
+    },
+    "apscheduler_config": {
+      "additionalProperties": true,
+      "title": "Apscheduler Config",
+      "type": "object"
+    },
+    "chatrecorder_record_send_msg": {
+      "default": true,
+      "title": "Chatrecorder Record Send Msg",
+      "type": "boolean"
+    },
+    "htmlrender_browser": {
+      "default": "chromium",
+      "description": "Playwright浏览器引擎类型，默认值为 'chromium'。",
+      "title": "Htmlrender Browser",
+      "type": "string"
+    },
+    "htmlrender_download_host": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "下载Playwright浏览器时的主机地址。",
+      "title": "Htmlrender Download Host"
+    },
+    "htmlrender_download_proxy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "下载Playwright浏览器时的代理设置。",
+      "title": "Htmlrender Download Proxy"
+    },
+    "htmlrender_proxy_host": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器使用的代理主机地址。",
+      "title": "Htmlrender Proxy Host"
+    },
+    "htmlrender_proxy_host_bypass": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器代理的绕过地址。",
+      "title": "Htmlrender Proxy Host Bypass"
+    },
+    "htmlrender_browser_channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器通道类型。",
+      "title": "Htmlrender Browser Channel"
+    },
+    "htmlrender_browser_executable_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器可执行文件的路径。",
+      "title": "Htmlrender Browser Executable Path"
+    },
+    "htmlrender_connect_over_cdp": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "通过 CDP 连接Playwright浏览器的端点地址。",
+      "title": "Htmlrender Connect Over Cdp"
+    },
+    "htmlrender_connect": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "通过Playwright协议连接Playwright浏览器的端点地址。",
+      "title": "Htmlrender Connect"
+    },
+    "htmlrender_browser_args": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright 浏览器启动参数。",
+      "title": "Htmlrender Browser Args"
+    },
+    "localstore_use_cwd": {
+      "default": false,
+      "title": "Localstore Use Cwd",
+      "type": "boolean"
+    },
+    "localstore_cache_dir": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Localstore Cache Dir"
+    },
+    "localstore_config_dir": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Localstore Config Dir"
+    },
+    "localstore_data_dir": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Localstore Data Dir"
+    },
+    "localstore_plugin_cache_dir": {
+      "additionalProperties": {
+        "format": "path",
+        "type": "string"
+      },
+      "title": "Localstore Plugin Cache Dir",
+      "type": "object"
+    },
+    "localstore_plugin_config_dir": {
+      "additionalProperties": {
+        "format": "path",
+        "type": "string"
+      },
+      "title": "Localstore Plugin Config Dir",
+      "type": "object"
+    },
+    "localstore_plugin_data_dir": {
+      "additionalProperties": {
+        "format": "path",
+        "type": "string"
+      },
+      "title": "Localstore Plugin Data Dir",
+      "type": "object"
+    },
+    "permission_load_command": {
+      "default": true,
+      "description": "是否加载权限命令",
+      "title": "Permission Load Command",
+      "type": "boolean"
+    },
+    "permission_superusers": {
+      "default": [],
+      "description": "超级用户列表，以 `user` 插件绑定的用户id为准",
+      "items": {
+        "type": "string"
+      },
+      "title": "Permission Superusers",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "proxy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Proxy"
+    },
+    "ps_template": {
+      "default": "default",
+      "title": "Ps Template",
+      "type": "string"
+    },
+    "ps_command": {
+      "default": [
+        "运行状态",
+        "状态",
+        "zt",
+        "yxzt",
+        "status"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Command",
+      "type": "array"
+    },
+    "ps_only_su": {
+      "default": false,
+      "title": "Ps Only Su",
+      "type": "boolean"
+    },
+    "ps_need_at": {
+      "default": false,
+      "title": "Ps Need At",
+      "type": "boolean"
+    },
+    "ps_reply_target": {
+      "default": true,
+      "title": "Ps Reply Target",
+      "type": "boolean"
+    },
+    "ps_req_timeout": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 10,
+      "title": "Ps Req Timeout"
+    },
+    "ps_bg_provider": {
+      "default": "loli",
+      "title": "Ps Bg Provider",
+      "type": "string"
+    },
+    "ps_bg_preload_count": {
+      "default": 2,
+      "title": "Ps Bg Preload Count",
+      "type": "integer"
+    },
+    "ps_bg_lolicon_r18_type": {
+      "default": 0,
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "title": "Ps Bg Lolicon R18 Type",
+      "type": "integer"
+    },
+    "ps_bg_local_path": {
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_bg.webp",
+      "format": "path",
+      "title": "Ps Bg Local Path",
+      "type": "string"
+    },
+    "ps_default_avatar": {
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_avatar.webp",
+      "format": "path",
+      "title": "Ps Default Avatar",
+      "type": "string"
+    },
+    "ps_collect_interval": {
+      "default": 5,
+      "title": "Ps Collect Interval",
+      "type": "integer"
+    },
+    "ps_default_collect_cache_size": {
+      "default": 1,
+      "title": "Ps Default Collect Cache Size",
+      "type": "integer"
+    },
+    "ps_collect_cache_size": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Ps Collect Cache Size",
+      "type": "object"
+    },
+    "ps_use_env_nick": {
+      "default": false,
+      "title": "Ps Use Env Nick",
+      "type": "boolean"
+    },
+    "ps_show_current_bot_only": {
+      "default": false,
+      "title": "Ps Show Current Bot Only",
+      "type": "boolean"
+    },
+    "ps_ob_v11_use_get_status": {
+      "default": true,
+      "title": "Ps Ob V11 Use Get Status",
+      "type": "boolean"
+    },
+    "ps_count_message_sent_event": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      ],
+      "default": false,
+      "title": "Ps Count Message Sent Event"
+    },
+    "ps_disconnect_reset_counter": {
+      "default": true,
+      "title": "Ps Disconnect Reset Counter",
+      "type": "boolean"
+    },
+    "ps_ignore_parts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Parts",
+      "type": "array"
+    },
+    "ps_ignore_bad_parts": {
+      "default": false,
+      "title": "Ps Ignore Bad Parts",
+      "type": "boolean"
+    },
+    "ps_sort_parts": {
+      "default": true,
+      "title": "Ps Sort Parts",
+      "type": "boolean"
+    },
+    "ps_sort_parts_reverse": {
+      "default": false,
+      "title": "Ps Sort Parts Reverse",
+      "type": "boolean"
+    },
+    "ps_ignore_disk_ios": {
+      "default": [
+        "^(loop|zram)\\d*$"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Disk Ios",
+      "type": "array"
+    },
+    "ps_ignore_no_io_disk": {
+      "default": false,
+      "title": "Ps Ignore No Io Disk",
+      "type": "boolean"
+    },
+    "ps_sort_disk_ios": {
+      "default": true,
+      "title": "Ps Sort Disk Ios",
+      "type": "boolean"
+    },
+    "ps_ignore_nets": {
+      "default": [
+        "^lo(op)?\\d*$|^(Loopback|本地连接)"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Nets",
+      "type": "array"
+    },
+    "ps_ignore_0b_net": {
+      "default": false,
+      "title": "Ps Ignore 0B Net",
+      "type": "boolean"
+    },
+    "ps_sort_nets": {
+      "default": true,
+      "title": "Ps Sort Nets",
+      "type": "boolean"
+    },
+    "ps_test_sites": {
+      "default": [
+        {
+          "name": "百度",
+          "url": "https://www.baidu.com/",
+          "use_proxy": false
+        },
+        {
+          "name": "Google",
+          "url": "https://www.google.com/",
+          "use_proxy": true
+        }
+      ],
+      "items": {
+        "$ref": "#/$defs/TestSiteCfg"
+      },
+      "title": "Ps Test Sites",
+      "type": "array"
+    },
+    "ps_sort_sites": {
+      "default": true,
+      "title": "Ps Sort Sites",
+      "type": "boolean"
+    },
+    "ps_test_timeout": {
+      "default": 5,
+      "title": "Ps Test Timeout",
+      "type": "integer"
+    },
+    "ps_proc_len": {
+      "default": 5,
+      "title": "Ps Proc Len",
+      "type": "integer"
+    },
+    "ps_ignore_procs": {
+      "default": [
+        "^System Idle Process$"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Procs",
+      "type": "array"
+    },
+    "ps_proc_sort_by": {
+      "default": "cpu",
+      "enum": [
+        "cpu",
+        "mem"
+      ],
+      "title": "Ps Proc Sort By",
+      "type": "string"
+    },
+    "ps_proc_cpu_max_100p": {
+      "default": false,
+      "title": "Ps Proc Cpu Max 100P",
+      "type": "boolean"
+    },
+    "uninfo_cache": {
+      "default": true,
+      "description": "是否启用缓存",
+      "title": "Uninfo Cache",
+      "type": "boolean"
+    },
+    "uninfo_cache_expire": {
+      "default": 300,
+      "description": "缓存过期时间",
+      "title": "Uninfo Cache Expire",
+      "type": "integer"
+    },
+    "user_token_prefix": {
+      "default": "nonebot/",
+      "description": "生成令牌的前缀",
+      "title": "User Token Prefix",
+      "type": "string"
+    },
+    "waiter_timeout": {
+      "default": 120,
+      "description": "默认等待超时时间",
+      "title": "Waiter Timeout",
+      "type": "number"
+    },
+    "waiter_retry_prompt": {
+      "default": "输入错误，请重新输入。剩余次数：{count}",
+      "description": "默认重试时的提示信息",
+      "title": "Waiter Retry Prompt",
+      "type": "string"
+    },
+    "waiter_timeout_prompt": {
+      "default": "等待超时。",
+      "description": "默认超时时的提示信息",
+      "title": "Waiter Timeout Prompt",
+      "type": "string"
+    },
+    "waiter_limited_prompt": {
+      "default": "重试次数已用完，输入失败。",
+      "description": "默认重试次数用完时的提示信息",
+      "title": "Waiter Limited Prompt",
+      "type": "string"
+    },
+    "waiter_suggest_hint": {
+      "default": "- {suggest}",
+      "description": "默认建议信息的提示",
+      "title": "Waiter Suggest Hint",
+      "type": "string"
+    },
+    "waiter_suggest_sep": {
+      "default": "\n",
+      "description": "默认建议信息的分隔符",
+      "title": "Waiter Suggest Sep",
+      "type": "string"
+    },
+    "waiter_suggest_not_in_hint": {
+      "default": "以下为非候选项",
+      "description": "默认非候选项前的提示信息",
+      "title": "Waiter Suggest Not In Hint",
+      "type": "string"
+    },
+    "whateat_cd": {
+      "default": 10,
+      "title": "Whateat Cd",
+      "type": "integer"
+    },
+    "whateat_max": {
+      "default": 0,
+      "title": "Whateat Max",
+      "type": "integer"
+    },
+    "whatpic_res_path": {
+      "default": "/home/cola/Projects/Python/kanade-bot/cache/nonebot_plugin_whateat_pic",
+      "title": "Whatpic Res Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "superusers",
+    "nickname"
+  ],
+  "title": "MergedConfig",
+  "type": "object"
+}

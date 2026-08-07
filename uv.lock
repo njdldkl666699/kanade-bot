@@ -159,6 +159,15 @@ wheels = [
 ]
 
 [[package]]
+name = "anyconfig"
+version = "0.15.1"
+source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/64/5d/658ea9f34bc368f3df2afc4bb4a81890dd45ae47c4a6ad97a4135319bbb4/anyconfig-0.15.1.tar.gz", hash = "sha256:a84b8c82b43edf9bb7396fa950dc3884a079b2d4b268916844526e65e657cd05", size = 244803, upload-time = "2026-02-16T13:50:48.264Z" }
+wheels = [
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/56/f7/72353359c7e92f4fc1c832cca68e83e8d5b08c94c738194f3ea415f050cd/anyconfig-0.15.1-py3-none-any.whl", hash = "sha256:c2d528484ad886253330173aee8a80cd578ac0b5043abf4e7fbe6a7054b3d11a", size = 106951, upload-time = "2026-02-16T13:50:45.797Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.14.2"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
@@ -1399,9 +1408,10 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "4.13.7"
+version = "5.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anyconfig" },
     { name = "audioop-lts" },
     { name = "chromadb" },
     { name = "emoji" },
@@ -1433,6 +1443,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyconfig", specifier = ">=0.15.1" },
     { name = "audioop-lts", specifier = ">=0.2.2" },
     { name = "chromadb", specifier = ">=1.5.6" },
     { name = "emoji", specifier = ">=2.15.0" },
@@ -3135,16 +3146,16 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.14.2"
+version = "2.15.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
 ]
 
 [[package]]

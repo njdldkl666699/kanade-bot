@@ -1,8 +1,10 @@
 from nonebot import get_plugin_config
 from pydantic import BaseModel
 
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
-class ScopedConfig(BaseModel):
+
+class ScopedConfig(AttrDocModel):
     default_length: int = 5
     """默认单词长度"""
     default_dictionary: str = "CET4"
@@ -28,5 +30,7 @@ class ScopedConfig(BaseModel):
 class Config(BaseModel):
     wordle: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).wordle

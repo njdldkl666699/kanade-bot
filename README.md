@@ -10,9 +10,18 @@
 
 1. 克隆仓库到本地；
 2. 安装依赖：`uv sync`；
-3. 参考各个插件的配置类，补全或修改`.env`和`.env.prod`中的配置项；
-4. 配置RAG功能（可选）：在`.env`或`.env.prod`中设置`CHAT__RAG_ENABLED=true`（默认为false），配置`scripts/rag_server.py`中所需配置项，并使用`uv run -m scripts.rag_server`来启动RAG RPC服务端；
-5. 运行机器人：`nb run`。
+3. 补全配置项；
+4. 运行机器人：`nb run`。
+
+### 配置
+
+`config.yaml` 顶部已声明 `$schema: ./schemas/MergedConfig.json`，在支持 YAML Schema 的编辑器（如 VS Code + YAML 插件）中可自动补全全部配置项。
+
+也支持NoneBot原本的DotEnv环境变量配置方式，**且`environment`仅支持从`.env`中读取**；`environment` 字段决定加载哪个环境文件（`environment: prod` -> `config-prod.yaml`），环境文件会深度覆盖基础文件；
+
+`yaml` 配置优先级高于 `.env` 配置，若两者同时存在，则以 `yaml` 配置为准。
+
+本项目配置加载使用`anyconfig`，支持多种格式（YAML、JSON、TOML、INI等），可自行扩展。
 
 ## Watchdog（自动更新与重启）
 
@@ -20,16 +29,21 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
 
 使用方式：
 
-1. 在`.env`或`.env.prod`中设置：
-   - `WATCHDOG__GITHUB_REPO=owner/repo`
-   - `WATCHDOG__GITHUB_BRANCH=main`
-   - `WATCHDOG__GITHUB_TOKEN=...`（可选，用于提高 API 限额）
-   - `WATCHDOG__POLL_INTERVAL=30`
+1. 配置 Watchdog（二选一，YAML 优先级更高）：
+   - YAML：在`config.yaml`或`config-{环境}.yaml`中设置`watchdog:`段：
+     ```yaml
+     watchdog:
+       github_repo: owner/repo
+       github_branch: main
+       github_token: "..."   # 可选，用于提高 API 限额
+       poll_interval: 30
+     ```
+   - 环境变量：在`.env`中设置 `WATCHDOG__GITHUB_REPO=owner/repo` 等；
 2. 启动 Watchdog：`uv run -m scripts.watchdog`
 
 ## 生成JSON Schema
 
-本Bot使用了很多配置类来管理插件的配置项，它们通过读取`config/`目录下的一些JSON文件来加载配置。为了在编写时获得更好的类型提示和自动补全，可以配置`.env`或`.env.prod`中的配置项`GENERATE_SCHEMAS=true`，然后运行Bot，这次运行就会在`schemas/generated/`目录下生成对应的JSON Schema文件。
+本Bot使用了很多配置类来管理插件的配置项，它们通过读取`config/`目录下的一些JSON文件来加载配置。为了在编写时获得更好的类型提示和自动补全，可以设置`config.yaml`或`config-{环境}.yaml`中的配置项`generate_schemas: true`（或`.env`中的`GENERATE_SCHEMAS=true`），然后运行Bot，这次运行就会在`schemas/`目录下生成对应的JSON Schema文件（包括合并了全部配置的`MergedConfig.json`）。生成完毕后建议改回`false`。
 
 ## 常见问题
 

@@ -3,6 +3,8 @@ from pathlib import Path
 from nonebot import require
 from pydantic import BaseModel
 
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
+
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import (
@@ -12,7 +14,7 @@ from nonebot_plugin_localstore import (
 )
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     ciallo_image_file: str = "宵崎奏Ciallo.webp"
     """Ciallo表情图片名"""
     plus_one_threshold: int = 0
@@ -42,3 +44,6 @@ class ScopedConfig(BaseModel):
 
 class Config(BaseModel):
     fun: ScopedConfig = ScopedConfig()
+
+
+ConfigRegistry.register_config_types(Config)

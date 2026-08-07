@@ -1,10 +1,9 @@
-# ruff: noqa: RUF012
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel, field_validator
 
-from kanade_bot.utils.common import AttrDocModel, generate_schema
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 require("nonebot_plugin_localstore")
 require("model_updater")
@@ -19,7 +18,7 @@ from nonebot_plugin_localstore import (
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     """采集环境配置"""
 
     config_file: str = "harvest_config.json"
@@ -78,6 +77,8 @@ class ScopedConfig(BaseModel):
 class Config(BaseModel):
     harvest: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).harvest
 

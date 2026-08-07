@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v4.13.7"
+version = "v5.0.0"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13, <4.0"
@@ -27,6 +27,7 @@ dependencies = [
     "openai>=2.41.0",
     "send2trash>=2.1.0",
     "pyspellchecker>=0.9.0",
+    "anyconfig>=0.15.1",
 ]
 
 [tool.nonebot]
@@ -56,4 +57,4 @@ nonebot-plugin-permission = ["nonebot_plugin_permission"]
 dev = ["check-requirements-txt>=1.4.2"]
 
 [tool.ruff.lint]
-ignore = ["B008"]
+ignore = ["B008", "RUF012"]

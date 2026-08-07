@@ -3,6 +3,8 @@ from pathlib import Path
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
+
 require("nonebot_plugin_localstore")
 require("model_updater")
 
@@ -15,7 +17,7 @@ from nonebot_plugin_localstore import (
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     name_data_file: str = "gallery_name_indices.json"
     """画廊的名称数据文件名"""
 
@@ -42,6 +44,8 @@ class ScopedConfig(BaseModel):
 class Config(BaseModel):
     gallery: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).gallery
 

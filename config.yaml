@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=./schemas/MergedConfig.json
+log_level: INFO
+
+driver: ~fastapi
+host: 127.0.0.1
+port: 39210
+
+command_start: ["/"]
+command_sep: [" "]
+
+nickname: ["宵崎奏"]
+
+superusers: ["user"]
+
+console_strict_tome: true
+
+localstore_use_cwd: true
+
+chat:
+  model: gpt-5-mini
+  reasoning_effort: medium
+  memory_max_records_per_scope: 256
+  system_prompt_file: Kanade-v4.md
+  system_prompt_extras:
+    kanade_wiki: Kanade-wiki.md
+  session_messages_max_size: 256
+  rag:
+    enabled: false
+    query_n_results: 3
+    distance_threshold: 0.65
+    db_dir: rag_db/
+    collection_name: kanade_wiki_collection
+    document_file: kanade_wiki.json
+
+gacha:
+  show_trained: true
+
+harvest:
+  daily_power: 10
+  power_crystal_cost: 10
+
+fun:
+  plus_one_threshold: 4
+
+gallery:
+  send_pic_limit: 10
+  send_pic_as_meme: true
+
+music:
+  playlist_link: "https://blog.njdldkl666699.dpdns.org/playlists/"
+  audio_page_size: 10
+  lyric_default_length: 4
+
+summary:
+  model: gpt-5-mini
+  system_prompt_file: Summarizer.md
+  bot_name: 宵崎奏
+  min_size: 10
+  max_size: 2048
+
+wordle:
+  default_length: 5
+  default_dictionary: CET4
+  min_length: 3
+  max_length: 13
+  meanings: ["中释"]
+  crystal_bonus_map:
+    3: 5
+    4: 7
+    5: 10
+    6: 15
+    7: 20
+    8: 25
+    9: 30
+    10: 35
+    11: 40
+    12: 45
+    13: 50
+  hinted_crystal_bonus_map:
+    3: 2
+    4: 3
+    5: 5
+    6: 7
+    7: 10
+    8: 12
+    9: 15
+    10: 17
+    11: 20
+    12: 22
+    13: 25
+
+ps_command: ["状态", "status"]
+ps_reply_target: false
+ps_ignore_parts: ["snap"]
+ps_test_sites:
+  - name: "百度"
+    url: "https://www.baidu.com"
+
+whateat_cd: 0
+
+wordcloud_background_color: black
+
+generate_schemas: false
+schema_output_dir: ./schemas
+
+watchdog:
+  github_repo: njdldkl666699/kanade-bot
+  github_branch: main
+  poll_interval: 30
+  core_command: "uv sync && nb run"
+  user_agent: "kanade-watchdog"

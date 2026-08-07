@@ -33,7 +33,7 @@ async def get_image_caption(attachment: Attachment) -> str | None:
     """使用图片转述模型获取图片的文字描述"""
     session = await COPILOT_CLIENT.create_session(
         model=cfg.image_caption_model,
-        provider=cfg.image_caption_provider,
+        provider=cfg.image_caption_provider.model_dump() if cfg.image_caption_provider else None,  # pyright: ignore[reportArgumentType]
         system_message={
             "mode": "replace",
             "content": IMAGE_CAPTION_SYSTEM_PROMPT,

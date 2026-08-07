@@ -1,13 +1,13 @@
-# ruff: noqa: RUF012
 from pathlib import Path
 from typing import Literal
 
-from copilot import MCPServerConfig, ProviderConfig
+from copilot import MCPServerConfig
 from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel, PositiveInt
 
-from kanade_bot.utils.common import AttrDocModel, PlatformType, generate_schema
+from kanade_bot.utils.common import PlatformType, ProviderConfig
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 require("nonebot_plugin_localstore")
 require("model_updater")
@@ -21,7 +21,7 @@ from nonebot_plugin_localstore import (
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
-class RAGConfig(BaseModel):
+class RAGConfig(AttrDocModel):
     """RAG相关配置"""
 
     enabled: bool = False
@@ -63,7 +63,7 @@ class RAGConfig(BaseModel):
         return get_plugin_config_file(self.document_file)
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     model: str = "gpt-5-mini"
     """模型ID"""
     provider: ProviderConfig | None = None
@@ -88,7 +88,7 @@ class ScopedConfig(BaseModel):
     image_caption_provider: ProviderConfig | None = None
     """图片转述模型提供商配置，如果为None则使用Copilot内置模型"""
 
-    system_prompt_file: str = "Kanade-v3.md"
+    system_prompt_file: str = "Kanade-v4.md"
     """系统提示词文件名"""
     system_prompt_extras: dict[str, str] = {}
     """系统提示词额外内容，键为占位符，值为替换内容的文件名
@@ -141,8 +141,10 @@ class ScopedConfig(BaseModel):
 
 
 class Config(BaseModel):
-    chat: ScopedConfig
+    chat: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).chat
 

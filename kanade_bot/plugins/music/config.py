@@ -3,12 +3,14 @@ from pathlib import Path
 from nonebot import require
 from pydantic import BaseModel
 
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
+
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_data_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     playlist_file: str = "lx_list"
     """音乐列表文件名，LX Music playList_v2格式的JSON文件"""
     playlist_link: str = ""
@@ -42,3 +44,6 @@ class ScopedConfig(BaseModel):
 
 class Config(BaseModel):
     music: ScopedConfig = ScopedConfig()
+
+
+ConfigRegistry.register_config_types(Config)

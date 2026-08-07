@@ -1,16 +1,52 @@
 import re
+from pathlib import Path
+from typing import Any
 
+import anyconfig
 import nonebot
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+from nonebot.config import Env
+from nonebot.utils import deep_update
 
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
 
-def init_nonebot():
-    # 初始化 NoneBot
-    nonebot.init()
+def load_configs(stem: str = "config", suffix: str = ".yaml"):
+    """加载配置文件，并根据environment字段加载对应的环境配置
+
+    :param stem: 配置文件名的前缀，默认为"config"
+    :param suffix: 配置文件名的后缀，默认为".yaml"
+    :return: 合并后的配置字典
+    """
+    WORKING_DIR = Path(__file__).parent
+    path = WORKING_DIR / f"{stem}{suffix}"
+    if not path.exists():
+        raise FileNotFoundError(f"配置文件 {path} 不存在")
+
+    configs = anyconfig.load(path)
+    if not isinstance(configs, dict):
+        raise TypeError(f"配置文件 {path} 解析结果不是字典类型: {type(configs)}")
+
+    # env = configs.get("environment", "prod")
+    # 为了兼容NoneBot的日志配置，使用NoneBot的Env类来获取环境信息
+    env = Env()
+    env_config_path = WORKING_DIR / f"{stem}-{env.environment}{suffix}"
+    env_configs = anyconfig.load(env_config_path)
+    if not isinstance(env_configs, dict):
+        raise TypeError(f"环境配置文件 {env_config_path} 解析结果不是字典类型: {type(env_configs)}")
+
+    # 递归（深度）合并字典
+    return deep_update(configs, env_configs)
+
+
+def init_nonebot(configs: dict[str, Any]):
+    """初始化 NoneBot 框架，注册适配器和插件
+
+    :param configs: 配置项，将会存储到 {ref}`nonebot.drivers.Driver.config` 对象里
+    """
+    nonebot.init(**configs)
 
     # 注册适配器
     driver = nonebot.get_driver()
@@ -25,6 +61,7 @@ def init_nonebot():
 
 
 def patch_foreign_plugins():
+    """对第三方插件进行必要的修补"""
     ## echo
     from nonebot.plugins.echo import echo
     from nonebot.rule import ToMeRule
@@ -100,8 +137,58 @@ def patch_foreign_plugins():
     stat_matcher.priority = 2
 
 
+def register_other_configs_and_generate_schema():
+    """注册适配器和第三方插件的配置类，并生成合并后的配置Schema"""
+    from nonebot.adapters.console.config import Config as ConsoleAdapterConfig
+    from nonebot.adapters.onebot.v11.config import Config as OneBotV11AdapterConfig
+
+    from kanade_bot.utils.schema import ConfigRegistry
+
+    ConfigRegistry.register_config_types(ConsoleAdapterConfig, OneBotV11AdapterConfig)
+
+    from nonebot_plugin_alconna.config import Config as AlconnaConfig
+    from nonebot_plugin_apscheduler.config import Config as APSchedulerConfig
+    from nonebot_plugin_chatrecorder.config import Config as ChatRecorderConfig
+
+    # from nonebot_plugin_datastore.config import Config as DataStoreConfig
+    from nonebot_plugin_htmlrender.config import Config as HTMLRenderConfig
+    from nonebot_plugin_localstore.config import Config as LocalStoreConfig
+
+    # from nonebot_plugin_orm.config import Config as ORMConfig
+    from nonebot_plugin_permission.config import Config as PermissionConfig
+    from nonebot_plugin_picstatus_ng.config import ConfigModel as PicStatusConfig
+    from nonebot_plugin_uninfo.config import Config as UninfoConfig
+    from nonebot_plugin_user.config import Config as UserConfig
+    from nonebot_plugin_waiter.config import Config as WaiterConfig
+    from nonebot_plugin_whateat_pic.config import Config as WhateatPicConfig
+    # from nonebot_plugin_wordcloud.config import Config as WordCloudConfig
+
+    ConfigRegistry.register_config_types(
+        ConsoleAdapterConfig,
+        OneBotV11AdapterConfig,
+        AlconnaConfig,
+        APSchedulerConfig,
+        ChatRecorderConfig,
+        # DataStoreConfig,
+        HTMLRenderConfig,
+        LocalStoreConfig,
+        # ORMConfig,
+        PermissionConfig,
+        PicStatusConfig,
+        UninfoConfig,
+        UserConfig,
+        WaiterConfig,
+        WhateatPicConfig,
+        # WordCloudConfig,
+    )
+
+    ConfigRegistry.generate_merged_config_schema()
+
+
 if __name__ == "__main__":
     print(get_kanade())
-    init_nonebot()
+    configs = load_configs()
+    init_nonebot(configs)
     patch_foreign_plugins()
+    register_other_configs_and_generate_schema()
     nonebot.run()

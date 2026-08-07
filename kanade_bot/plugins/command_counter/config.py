@@ -2,14 +2,16 @@ from datetime import date
 from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger, require
-from pydantic import BaseModel, RootModel
+from pydantic import RootModel
+
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_data_file
 
 
-class Config(BaseModel):
+class Config(AttrDocModel):
     command_counter_data_file: str = "command_counter_data.json"
     """命令计数器保存的数据文件名"""
 
@@ -17,6 +19,8 @@ class Config(BaseModel):
     def command_counter_data_file_path(self) -> Path:
         return get_plugin_data_file(self.command_counter_data_file)
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config)
 

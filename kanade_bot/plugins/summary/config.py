@@ -1,15 +1,17 @@
 from pathlib import Path
 
-from copilot import ProviderConfig
 from nonebot import require
 from pydantic import BaseModel
+
+from kanade_bot.utils.common import ProviderConfig
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_cache_file, get_plugin_config_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     model: str = "gpt-5-mini"
     """模型ID"""
     provider: ProviderConfig | None = None
@@ -38,3 +40,6 @@ class ScopedConfig(BaseModel):
 
 class Config(BaseModel):
     summary: ScopedConfig = ScopedConfig()
+
+
+ConfigRegistry.register_config_types(Config)

@@ -3,6 +3,8 @@ from pathlib import Path
 from nonebot import require
 from pydantic import BaseModel
 
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
+
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import (
@@ -20,7 +22,7 @@ DEFAULT_WELCOME_MESSAGE_TEMPLATES = [
 ]
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     online_notice_group_ids: list[int] = []
     """Bot上线通知的群聊ID列表，配置后会在Bot上线时发送通知到这些群聊"""
 
@@ -60,3 +62,6 @@ class ScopedConfig(BaseModel):
 
 class Config(BaseModel):
     help: ScopedConfig = ScopedConfig()
+
+
+ConfigRegistry.register_config_types(Config)

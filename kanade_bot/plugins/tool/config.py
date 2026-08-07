@@ -1,11 +1,10 @@
-# ruff: noqa: RUF012
 from pathlib import Path
 
 from nonebot import get_plugin_config, require
 from nonebot.adapters.onebot.v11 import Message
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import AttrDocModel, generate_schema
+from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 require("nonebot_plugin_localstore")
 require("model_updater")
@@ -15,7 +14,7 @@ from nonebot_plugin_localstore import get_plugin_config_file
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
-class ScopedConfig(BaseModel):
+class ScopedConfig(AttrDocModel):
     fallback_icon_file: str = "grass_block.png"
     """服务器图标加载失败时的替代图标名，支持PNG格式。"""
     template_file: str = "mcstatus_template.html"
@@ -49,6 +48,8 @@ class ScopedConfig(BaseModel):
 class Config(BaseModel):
     tool: ScopedConfig = ScopedConfig()
 
+
+ConfigRegistry.register_config_types(Config)
 
 cfg = get_plugin_config(Config).tool
 

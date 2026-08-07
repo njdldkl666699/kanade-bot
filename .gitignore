@@ -12,6 +12,7 @@ wheels/
 # 配置文件
 .env.*
 !.env.example
+config-*.yaml
 
 # LocalStore
 cache/
