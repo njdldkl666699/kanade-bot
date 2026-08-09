@@ -30,6 +30,11 @@ class ScopedConfig(AttrDocModel):
     """ntfy的topic的完整URL，配置后会在Bot掉线时发送通知到这个topic，不配置则禁用掉线通知"""
     login_qrcode_file_path: Path | None = None
     """登录二维码的文件路径，配置后会在掉线推送中附带"""
+    ntfy_message: str = "你的Bot账号: {self_id} 掉线了，赶快去看看吧。\n`Message`: {message}"
+    """掉线通知的消息内容，支持{self_id}和{message}两个占位符
+    
+    如果配置了login_qrcode_file_path，则会附带二维码图片，消息内容会被忽略
+    """
 
     welcome_message_templates: list[str] = [
         m + "\n如果有什么不清楚的地方…输入 /help 可以看说明。"

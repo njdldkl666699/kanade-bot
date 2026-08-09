@@ -4,6 +4,7 @@ from nonebot.adapters.onebot.v11 import (
     GroupIncreaseNoticeEvent,
     PrivateMessageEvent,
 )
+from nonebot.permission import SUPERUSER
 
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
@@ -66,3 +67,12 @@ leave_notice = on_notice(
     priority=1,
     block=False,
 )
+
+recall_message = on_command(
+    "撤回消息",
+    aliases={"recall", "撤回"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(recall_message, "撤回消息")

@@ -4,7 +4,7 @@ from typing import Literal
 from copilot import MCPServerConfig
 from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
-from pydantic import BaseModel, PositiveInt, SecretStr
+from pydantic import BaseModel, PositiveInt
 
 from kanade_bot.utils.common import PlatformType, ProviderConfig
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema

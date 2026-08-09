@@ -10,7 +10,9 @@ from nonebot.adapters.console import MessageSegment as ConsoleMessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupDecreaseNoticeEvent, GroupIncreaseNoticeEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
+from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg
 
 from kanade_bot.utils.common import HTTPX_CLIENT
@@ -19,7 +21,14 @@ from kanade_bot.utils.parse import build_sender_info
 
 from .config import Config
 from .help import DOC_NAMES, ensure_help_image, get_help_md
-from .matcher import execute_command, help_command, leave_notice, offline_notice, welcome
+from .matcher import (
+    execute_command,
+    help_command,
+    leave_notice,
+    offline_notice,
+    recall_message,
+    welcome,
+)
 
 cfg = get_plugin_config(Config).help
 
@@ -57,9 +66,7 @@ async def _(event: BotOfflineNoticeEvent):
 
     # 构建消息主体
     title = f"{event.tag} 你的Bot掉线了"
-    content = (
-        f"你的Bot账号: {event.self_id} 掉线了，赶快去看看吧。\n`Message`: {event.message}".encode()
-    )
+    content = cfg.ntfy_message.format(self_id=event.self_id, message=event.message)
     headers = {"Title": Header(title, "utf-8").encode()}
 
     path = cfg.login_qrcode_file_path
@@ -125,6 +132,17 @@ async def _(bot: OneBot, event: GroupDecreaseNoticeEvent):
     r = await bot.get_stranger_info(user_id=user_id)
     user_info_str = build_sender_info(r["nickname"], str(user_id))
     await leave_notice.finish(f"{user_info_str} 离开了群聊...")
+
+
+@recall_message.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent):
+    if not (reply := event.reply):
+        await recall_message.finish("请引用要撤回的消息")
+    try:
+        await bot.delete_msg(message_id=reply.message_id)
+    except ActionFailed as e:
+        logger.warning(f"撤回消息失败: {e}")
+        await recall_message.finish("撤回消息失败，已被撤回、权限不足或超时")
 
 
 driver = get_driver()
