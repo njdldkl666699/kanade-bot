@@ -4,7 +4,7 @@ from typing import Literal
 from copilot import MCPServerConfig
 from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
-from pydantic import BaseModel, PositiveInt
+from pydantic import BaseModel, PositiveInt, SecretStr
 
 from kanade_bot.utils.common import PlatformType, ProviderConfig
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
@@ -63,6 +63,33 @@ class RAGConfig(AttrDocModel):
         return get_plugin_config_file(self.document_file)
 
 
+class ImageCaptionConfig(AttrDocModel):
+    """图片转述模型配置"""
+
+    model: str = "gpt-5-mini"
+    """图片转述模型ID"""
+    provider: ProviderConfig | None = None
+    """图片转述模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
+    reasoning_effort: ReasoningEffort | None = None
+    """推理努力程度"""
+    system_prompt_file: str = "ImageCaption.md"
+    """系统提示词文件名"""
+
+    available_tools: list[str] | None = None
+    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
+    未指定的Copilot CLI内置工具和MCP工具将被排除。
+    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
+    excluded_tools: list[str] | None = None
+    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
+    mcp_servers: dict[str, MCPServerConfig] | None = None
+    """MCP服务器配置"""
+
+    @property
+    def system_prompt_file_path(self) -> Path:
+        """系统提示词文件的路径"""
+        return get_plugin_config_file(self.system_prompt_file)
+
+
 class ScopedConfig(AttrDocModel):
     model: str = "gpt-5-mini"
     """模型ID"""
@@ -70,23 +97,15 @@ class ScopedConfig(AttrDocModel):
     """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
     reasoning_effort: ReasoningEffort | None = None
     """推理努力程度"""
-    excluded_tools: list[str] = []
-    """排除的工具列表"""
+
+    available_tools: list[str] | None = None
+    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
+    未指定的Copilot CLI内置工具和MCP工具将被排除。
+    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
+    excluded_tools: list[str] | None = None
+    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
     mcp_servers: dict[str, MCPServerConfig] | None = None
     """MCP服务器配置"""
-
-    memory_database_file: str = "memories.sqlite3"
-    """持久化记忆数据库文件名，位于插件数据目录下"""
-    memory_max_records_per_scope: PositiveInt = 256
-    """每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录"""
-
-    image_caption_model: str | None = None
-    """图片转述模型，如果为None则不使用
-    
-    如果不使用图片转述，且主模型不支持图片输入，则无法处理图片消息
-    """
-    image_caption_provider: ProviderConfig | None = None
-    """图片转述模型提供商配置，如果为None则使用Copilot内置模型"""
 
     system_prompt_file: str = "Kanade-v4.md"
     """系统提示词文件名"""
@@ -97,10 +116,22 @@ class ScopedConfig(AttrDocModel):
     会将其替换为Kanade-wiki.md文件的内容
     """
 
+    memory_database_file: str = "memories.sqlite3"
+    """持久化记忆数据库文件名，位于插件数据目录下"""
+    memory_max_records_per_scope: PositiveInt = 256
+    """每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录"""
+
     session_messages_max_size: int = 100
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
     session_messages_cache_file: str = "session_messages_cache.json"
     """会话消息缓冲区缓存文件名，位于插件数据目录下"""
+
+    image_caption: ImageCaptionConfig | None = None
+    """图片转述模型配置，如果为None则不启用图片转述。
+
+    不启用且主模型不支持图片输入，则无法处理图片消息。
+    """
+    rag: RAGConfig = RAGConfig()
 
     configs_file: str = "chat_configs.json"
     """聊天配置文件名"""
@@ -108,8 +139,6 @@ class ScopedConfig(AttrDocModel):
     """聊天失败时发送的图片名，不存在则返回默认的文本消息"""
     memes_dir: str = "memes/"
     """表情包存储目录名"""
-
-    rag: RAGConfig = RAGConfig()
 
     @property
     def system_prompt_file_path(self) -> Path:

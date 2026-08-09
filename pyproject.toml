@@ -51,7 +51,6 @@ nonebot-plugin-picstatus-ng = ["nonebot_plugin_picstatus_ng"]
 nonebot-plugin-localstore = ["nonebot_plugin_localstore"]
 nonebot-plugin-whateat-pic = ["nonebot_plugin_whateat_pic"]
 nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
-nonebot-plugin-permission = ["nonebot_plugin_permission"]
 
 [dependency-groups]
 dev = ["check-requirements-txt>=1.4.2"]

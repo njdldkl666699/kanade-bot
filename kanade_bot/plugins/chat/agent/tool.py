@@ -1,15 +1,14 @@
 import base64
 
 from copilot import define_tool
-from copilot.session import Attachment
-from copilot.session_events import AssistantMessageData
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from nonebot import logger
 from pydantic import BaseModel, Field, PositiveInt
 
-from kanade_bot.utils.common import COPILOT_CLIENT, HTTPX_CLIENT
+from kanade_bot.utils.common import HTTPX_CLIENT
 
 from ..config import cfg, chat_configs
+from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryScopeType, MemoryStore
 
 
@@ -23,40 +22,8 @@ def list_memes():
     return chat_configs.instance.memes
 
 
-IMAGE_CAPTION_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内容转述为文字描述。
-请充分查看、分析和理解图片内容，详细地描述图片内容中的场景、元素等信息，避免遗漏重要信息。
-输出要求：直接输出图片的文字描述，不要包含任何额外的解释或说明。
-"""
-
-
-async def get_image_caption(attachment: Attachment) -> str | None:
-    """使用图片转述模型获取图片的文字描述"""
-    session = await COPILOT_CLIENT.create_session(
-        model=cfg.image_caption_model,
-        provider=cfg.image_caption_provider.model_dump() if cfg.image_caption_provider else None,  # pyright: ignore[reportArgumentType]
-        system_message={
-            "mode": "replace",
-            "content": IMAGE_CAPTION_SYSTEM_PROMPT,
-        },
-    )
-    try:
-        async with session:
-            event = await session.send_and_wait(
-                prompt="请描述这张图片的内容。",
-                attachments=[attachment],
-                timeout=180,
-            )
-    except Exception as e:  # noqa: BLE001
-        logger.exception("获取图片转述时发生错误: {}", e)
-        return
-
-    if not event:
-        logger.warning(f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}")
-        return
-
-    match event.data:
-        case AssistantMessageData() as data:
-            return data.content.strip()
+class ViewImageParams(BaseModel):
+    url: str = Field(description="图片URL，必须是可访问的网络地址。")
 
 
 @define_tool(
@@ -65,20 +32,16 @@ async def get_image_caption(attachment: Attachment) -> str | None:
     skip_permission=True,
     defer="never",
 )
-async def view_image(url: str) -> ToolResult | str:
+async def view_image(params: ViewImageParams):
+    url = params.url
     r = await HTTPX_CLIENT.get(url)
-    logger.info(
-        "调用工具{}，查看图片：{}，返回了结果，状态码：{}",
-        view_image.name,
-        url,
-        r.status_code,
-    )
+    logger.info(f"调用工具查看图片：{url}，返回了结果，状态码：{r.status_code}")
     if r.status_code != 200:
         return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
 
     data = base64.b64encode(r.content).decode()
     mine_type = r.headers.get("Content-Type", "application/octet-stream")
-    if cfg.image_caption_model:
+    if cfg.image_caption:
         caption = await get_image_caption(
             {
                 "type": "blob",

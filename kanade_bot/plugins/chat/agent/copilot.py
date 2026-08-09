@@ -59,16 +59,19 @@ class CopilotSessionManager:
 
         return {
             "on_permission_request": PermissionHandler.approve_all,
+            "client_name": "kanade-bot",
             "model": cfg.model,
-            "provider": cfg.provider.model_dump() if cfg.provider else None,
+            "provider": cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,
             "reasoning_effort": cfg.reasoning_effort,
-            "tools": tools,
-            "excluded_tools": cfg.excluded_tools,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,
             },
+            "tools": tools,
+            "available_tools": cfg.available_tools,
+            "excluded_tools": cfg.excluded_tools,
             "mcp_servers": cfg.mcp_servers,
+            "large_output": {"enabled": False},
         }
 
     def __init__(self):
@@ -204,7 +207,7 @@ class CopilotSessionManager:
             try:
                 session_event = await session.send_and_wait(
                     send_prompt,
-                    attachments=attachments if cfg.image_caption_model is None else None,
+                    attachments=attachments if cfg.image_caption else None,
                     timeout=timeout,
                 )
             finally:
@@ -243,7 +246,7 @@ class CopilotSessionManager:
             prompt_parts.append("\n$ 用户引用了之前的消息：")
             prompt_parts.append(reply_text)
 
-        if cfg.image_caption_model and attachments:
+        if cfg.image_caption and attachments:
             image_caption_tasks = [get_image_caption(att) for att in attachments]
             # 并发获取图片转述，避免排队获取太慢
             image_captions = await asyncio.gather(*image_caption_tasks)

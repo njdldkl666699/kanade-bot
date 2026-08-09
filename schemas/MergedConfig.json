@@ -71,6 +71,112 @@
       "title": "CompConfig",
       "type": "object"
     },
+    "ImageCaptionConfig": {
+      "description": "图片转述模型配置",
+      "properties": {
+        "model": {
+          "default": "gpt-5-mini",
+          "description": "图片转述模型ID",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图片转述模型提供商配置，如果为None则使用Copilot内置模型的默认值"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度",
+          "title": "Reasoning Effort"
+        },
+        "system_prompt_file": {
+          "default": "ImageCaption.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
+        },
+        "available_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，\n未指定的Copilot CLI内置工具和MCP工具将被排除。\n此选项优先级高于 `excluded_tools`（排除工具列表）。",
+          "title": "Available Tools"
+        },
+        "excluded_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。",
+          "title": "Excluded Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MCPStdioServerConfig"
+                  },
+                  {
+                    "$ref": "#/$defs/MCPHTTPServerConfig"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置",
+          "title": "Mcp Servers"
+        }
+      },
+      "title": "ImageCaptionConfig",
+      "type": "object"
+    },
     "MCPHTTPServerConfig": {
       "description": "Configuration for a remote MCP server (HTTP or SSE).",
       "properties": {
@@ -485,14 +591,37 @@
           "description": "推理努力程度",
           "title": "Reasoning Effort"
         },
+        "available_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，\n未指定的Copilot CLI内置工具和MCP工具将被排除。\n此选项优先级高于 `excluded_tools`（排除工具列表）。",
+          "title": "Available Tools"
+        },
         "excluded_tools": {
-          "default": [],
-          "description": "排除的工具列表",
-          "items": {
-            "type": "string"
-          },
-          "title": "Excluded Tools",
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。",
+          "title": "Excluded Tools"
         },
         "mcp_servers": {
           "anyOf": [
@@ -517,44 +646,6 @@
           "description": "MCP服务器配置",
           "title": "Mcp Servers"
         },
-        "memory_database_file": {
-          "default": "memories.sqlite3",
-          "description": "持久化记忆数据库文件名，位于插件数据目录下",
-          "title": "Memory Database File",
-          "type": "string"
-        },
-        "memory_max_records_per_scope": {
-          "default": 256,
-          "description": "每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录",
-          "exclusiveMinimum": 0,
-          "title": "Memory Max Records Per Scope",
-          "type": "integer"
-        },
-        "image_caption_model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "图片转述模型，如果为None则不使用\n\n如果不使用图片转述，且主模型不支持图片输入，则无法处理图片消息",
-          "title": "Image Caption Model"
-        },
-        "image_caption_provider": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProviderConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "图片转述模型提供商配置，如果为None则使用Copilot内置模型"
-        },
         "system_prompt_file": {
           "default": "Kanade-v4.md",
           "description": "系统提示词文件名",
@@ -570,6 +661,19 @@
           "title": "System Prompt Extras",
           "type": "object"
         },
+        "memory_database_file": {
+          "default": "memories.sqlite3",
+          "description": "持久化记忆数据库文件名，位于插件数据目录下",
+          "title": "Memory Database File",
+          "type": "string"
+        },
+        "memory_max_records_per_scope": {
+          "default": 256,
+          "description": "每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录",
+          "exclusiveMinimum": 0,
+          "title": "Memory Max Records Per Scope",
+          "type": "integer"
+        },
         "session_messages_max_size": {
           "default": 100,
           "description": "会话消息缓冲区最大条数，超出后会丢弃最早的消息",
@@ -581,6 +685,34 @@
           "description": "会话消息缓冲区缓存文件名，位于插件数据目录下",
           "title": "Session Messages Cache File",
           "type": "string"
+        },
+        "image_caption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageCaptionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图片转述模型配置，如果为None则不启用图片转述。\n\n不启用且主模型不支持图片输入，则无法处理图片消息。"
+        },
+        "rag": {
+          "$ref": "#/$defs/RAGConfig",
+          "default": {
+            "enabled": false,
+            "query_n_results": 3,
+            "distance_threshold": 0.65,
+            "db_dir": "rag_db/",
+            "collection_name": "kanade_wiki_collection",
+            "document_file": "kanade_wiki.json",
+            "embedding_type": "sentence_transformer",
+            "model_name_or_path": "BAAI/bge-small-zh-v1.5",
+            "openai_api_key": null,
+            "openai_base_url": null,
+            "openai_model": "text-embedding-3-small"
+          }
         },
         "configs_file": {
           "default": "chat_configs.json",
@@ -599,22 +731,6 @@
           "description": "表情包存储目录名",
           "title": "Memes Dir",
           "type": "string"
-        },
-        "rag": {
-          "$ref": "#/$defs/RAGConfig",
-          "default": {
-            "enabled": false,
-            "query_n_results": 3,
-            "distance_threshold": 0.65,
-            "db_dir": "rag_db/",
-            "collection_name": "kanade_wiki_collection",
-            "document_file": "kanade_wiki.json",
-            "embedding_type": "sentence_transformer",
-            "model_name_or_path": "BAAI/bge-small-zh-v1.5",
-            "openai_api_key": null,
-            "openai_base_url": null,
-            "openai_model": "text-embedding-3-small"
-          }
         }
       },
       "title": "ScopedConfig",
@@ -1072,6 +1188,49 @@
       },
       "title": "ScopedConfig",
       "type": "object"
+    },
+    "scripts__github_watchdog__ScopedConfig": {
+      "description": "Watchdog 配置模型，用于描述服务启动所需的环境参数。",
+      "properties": {
+        "github_repo": {
+          "default": "njdldkl666699/kanade-bot",
+          "description": "GitHub 仓库，格式为 owner/repo",
+          "title": "Github Repo",
+          "type": "string"
+        },
+        "github_branch": {
+          "default": "main",
+          "description": "GitHub 分支名称",
+          "title": "Github Branch",
+          "type": "string"
+        },
+        "github_token": {
+          "default": "",
+          "description": "GitHub 访问令牌，建议使用具有 repo 访问权限的个人访问令牌（PAT），以避免 API 速率限制",
+          "title": "Github Token",
+          "type": "string"
+        },
+        "poll_interval": {
+          "default": 30,
+          "description": "轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0",
+          "title": "Poll Interval",
+          "type": "integer"
+        },
+        "core_command": {
+          "default": "uv sync && nb run",
+          "description": "要作为 core process 启动的命令，可包含参数",
+          "title": "Core Command",
+          "type": "string"
+        },
+        "user_agent": {
+          "default": "kanade-watchdog",
+          "description": "User-Agent 字段，用于标识请求来源",
+          "title": "User Agent",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
     }
   },
   "properties": {
@@ -1169,6 +1328,21 @@
       "title": "Session Expire Timeout",
       "type": "string"
     },
+    "watchdog": {
+      "$ref": "#/$defs/scripts__github_watchdog__ScopedConfig"
+    },
+    "generate_schemas": {
+      "default": false,
+      "description": "是否生成JSON Schema文件",
+      "title": "Generate Schemas",
+      "type": "boolean"
+    },
+    "schema_output_dir": {
+      "default": "schemas/",
+      "description": "JSON Schema输出目录，默认为`schemas/`",
+      "title": "Schema Output Dir",
+      "type": "string"
+    },
     "wordle": {
       "$ref": "#/$defs/kanade_bot__plugins__wordle__config__ScopedConfig",
       "default": {
@@ -1204,16 +1378,6 @@
         "weekly_check_in_file": "weekly_check_in.json"
       }
     },
-    "gacha": {
-      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig",
-      "default": {
-        "config_file": "gacha_config.json",
-        "member_small_dir": "member_small/",
-        "cards_assets_dir": "cards_assets/",
-        "card_info_file": "cards.json",
-        "show_trained": true
-      }
-    },
     "harvest": {
       "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig",
       "default": {
@@ -1228,6 +1392,59 @@
         "power_crystal_cost": 10.0
       }
     },
+    "gacha": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig",
+      "default": {
+        "config_file": "gacha_config.json",
+        "member_small_dir": "member_small/",
+        "cards_assets_dir": "cards_assets/",
+        "card_info_file": "cards.json",
+        "show_trained": true
+      }
+    },
+    "tool": {
+      "$ref": "#/$defs/kanade_bot__plugins__tool__config__ScopedConfig",
+      "default": {
+        "fallback_icon_file": "grass_block.png",
+        "template_file": "mcstatus_template.html",
+        "schedule_configs_file": "schedule_configs.json",
+        "preset_reaction_config_file": "preset_reaction_config.json"
+      }
+    },
+    "chat": {
+      "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
+      "default": {
+        "model": "gpt-5-mini",
+        "provider": null,
+        "reasoning_effort": null,
+        "available_tools": null,
+        "excluded_tools": null,
+        "mcp_servers": null,
+        "system_prompt_file": "Kanade-v4.md",
+        "system_prompt_extras": {},
+        "memory_database_file": "memories.sqlite3",
+        "memory_max_records_per_scope": 256,
+        "session_messages_max_size": 100,
+        "session_messages_cache_file": "session_messages_cache.json",
+        "image_caption": null,
+        "rag": {
+          "collection_name": "kanade_wiki_collection",
+          "db_dir": "rag_db/",
+          "distance_threshold": 0.65,
+          "document_file": "kanade_wiki.json",
+          "embedding_type": "sentence_transformer",
+          "enabled": false,
+          "model_name_or_path": "BAAI/bge-small-zh-v1.5",
+          "openai_api_key": null,
+          "openai_base_url": null,
+          "openai_model": "text-embedding-3-small",
+          "query_n_results": 3
+        },
+        "configs_file": "chat_configs.json",
+        "fail_image_file": "chat_fail.jpg",
+        "memes_dir": "memes/"
+      }
+    },
     "fun": {
       "$ref": "#/$defs/kanade_bot__plugins__fun__config__ScopedConfig",
       "default": {
@@ -1237,6 +1454,26 @@
         "lolicon_proxy": "i.yuki.sh",
         "cache_file": "cache.json"
       }
+    },
+    "gallery": {
+      "$ref": "#/$defs/kanade_bot__plugins__gallery__config__ScopedConfig",
+      "default": {
+        "name_data_file": "gallery_name_indices.json",
+        "send_pic_limit": 10,
+        "send_pic_as_meme": true
+      }
+    },
+    "api60s_base_url": {
+      "default": "https://60s.viki.moe",
+      "description": "60s API Base URL",
+      "title": "Api60S Base Url",
+      "type": "string"
+    },
+    "api60s_fun_cache_file": {
+      "default": "cache.json",
+      "description": "Fun插件缓存数据文件路径",
+      "title": "Api60S Fun Cache File",
+      "type": "string"
     },
     "help": {
       "$ref": "#/$defs/kanade_bot__plugins__help__config__ScopedConfig",
@@ -1277,69 +1514,6 @@
         "max_size": 2048,
         "message_records_file": "summary_message_records.json"
       }
-    },
-    "chat": {
-      "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
-      "default": {
-        "model": "gpt-5-mini",
-        "provider": null,
-        "reasoning_effort": null,
-        "excluded_tools": [],
-        "mcp_servers": null,
-        "memory_database_file": "memories.sqlite3",
-        "memory_max_records_per_scope": 256,
-        "image_caption_model": null,
-        "image_caption_provider": null,
-        "system_prompt_file": "Kanade-v4.md",
-        "system_prompt_extras": {},
-        "session_messages_max_size": 100,
-        "session_messages_cache_file": "session_messages_cache.json",
-        "configs_file": "chat_configs.json",
-        "fail_image_file": "chat_fail.jpg",
-        "memes_dir": "memes/",
-        "rag": {
-          "collection_name": "kanade_wiki_collection",
-          "db_dir": "rag_db/",
-          "distance_threshold": 0.65,
-          "document_file": "kanade_wiki.json",
-          "embedding_type": "sentence_transformer",
-          "enabled": false,
-          "model_name_or_path": "BAAI/bge-small-zh-v1.5",
-          "openai_api_key": null,
-          "openai_base_url": null,
-          "openai_model": "text-embedding-3-small",
-          "query_n_results": 3
-        }
-      }
-    },
-    "tool": {
-      "$ref": "#/$defs/kanade_bot__plugins__tool__config__ScopedConfig",
-      "default": {
-        "fallback_icon_file": "grass_block.png",
-        "template_file": "mcstatus_template.html",
-        "schedule_configs_file": "schedule_configs.json",
-        "preset_reaction_config_file": "preset_reaction_config.json"
-      }
-    },
-    "gallery": {
-      "$ref": "#/$defs/kanade_bot__plugins__gallery__config__ScopedConfig",
-      "default": {
-        "name_data_file": "gallery_name_indices.json",
-        "send_pic_limit": 10,
-        "send_pic_as_meme": true
-      }
-    },
-    "api60s_base_url": {
-      "default": "https://60s.viki.moe",
-      "description": "60s API Base URL",
-      "title": "Api60S Base Url",
-      "type": "string"
-    },
-    "api60s_fun_cache_file": {
-      "default": "cache.json",
-      "description": "Fun插件缓存数据文件路径",
-      "title": "Api60S Fun Cache File",
-      "type": "string"
     },
     "console_headless_mode": {
       "default": false,
@@ -2096,7 +2270,8 @@
   },
   "required": [
     "superusers",
-    "nickname"
+    "nickname",
+    "watchdog"
   ],
   "title": "MergedConfig",
   "type": "object"

@@ -4,29 +4,43 @@ import json
 from pathlib import Path
 from typing import ClassVar
 
-from nonebot import get_driver, logger
-from nonebot.config import Config
+from nonebot import get_driver, get_plugin_config, logger
+from nonebot.config import Config as NoneBotConfig
 from pydantic import BaseModel, create_model
+
+from scripts.github_watchdog import Config as WatchdogConfig
 
 
 class AttrDocModel(BaseModel):
     """带有属性docstring的Pydantic模型基类"""
 
-    model_config = {
-        "use_attribute_docstrings": True,
-    }
+    model_config = {"use_attribute_docstrings": True}
+
+
+class SchemaConfig(AttrDocModel):
+    """JSON Schema生成配置"""
+
+    generate_schemas: bool = False
+    """是否生成JSON Schema文件"""
+    schema_output_dir: str = "schemas/"
+    """JSON Schema输出目录，默认为`schemas/`"""
+
+    @property
+    def schema_output_dir_path(self) -> Path:
+        """JSON Schema输出目录路径"""
+        return Path(self.schema_output_dir)
 
 
 def generate_schema[T: BaseModel](cls: type[T]):
     """生成JSON Schema文件"""
-    cfg = get_driver().config
+    cfg = get_plugin_config(SchemaConfig)
     if not cfg.generate_schemas:
         return
 
-    schema_file_name = f"{cls.__name__}.json"
-    logger.info(f"正在生成JSON Schema文件: {schema_file_name}")
-    schema_output_dir = Path(cfg.schema_output_dir or "schemas")
-    schema_file = schema_output_dir / schema_file_name
+    schema_filename = f"{cls.__name__}.json"
+    logger.info(f"正在生成JSON Schema文件: {schema_filename}")
+    output_dir_path = cfg.schema_output_dir_path
+    schema_file = output_dir_path / schema_filename
     schema_file.parent.mkdir(parents=True, exist_ok=True)
     json_schema = json.dumps(cls.model_json_schema(), indent=2, ensure_ascii=False)
     schema_file.write_text(json_schema, encoding="utf-8")
@@ -65,7 +79,7 @@ def _extract_docstrings(cls: type[BaseModel]) -> dict[str, str]:
 
 
 class ConfigRegistry:
-    config_types: ClassVar[list[type[BaseModel]]] = [Config]
+    config_types: ClassVar[list[type[BaseModel]]] = [NoneBotConfig, WatchdogConfig, SchemaConfig]
     """插件配置类型注册表"""
 
     @classmethod

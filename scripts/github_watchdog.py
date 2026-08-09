@@ -31,6 +31,8 @@ class ScopedConfig(BaseModel):
     user_agent: str = "kanade-watchdog"
     """User-Agent 字段，用于标识请求来源"""
 
+    model_config = {"use_attribute_docstrings": True}
+
 
 class Config(BaseModel):
     watchdog: ScopedConfig
