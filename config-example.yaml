@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=./schemas/MergedConfig.json
+superusers:
+  - "user"
+log_level: DEBUG
+nickname:
+  - 宵崎奏
+
+# 是否启用无头模式，如果为true，则不会启动TUI界面。
+console_headless_mode: true
+
+# 模型配置
+openrouter:
+  base_url: &openrouter-base_url https://openrouter.ai/api/v1
+  api_key: &openrouter-api_key sk-or-v1-xxxxxxxxxxx
+agnes-ai:
+  base_url: &agnes-ai-base_url https://apihub.agnes-ai.cn/v1
+  api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxx
+opencode:
+  model: &opencode-model deepseek-v4-flash-free
+  base_url: &opencode-base_url https://opencode.ai/zen/v1/
+siliconflow:
+  base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
+  api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxx
+
+chat:
+  model: *opencode-model
+  provider:
+    type: openai
+    base_url: *opencode-base_url
+  reasoning_effort: high
+  mcp_servers: &mcp_servers
+    tavily:
+      type: http
+      tools: ["*"]
+      url: https://mcp.tavily.com/mcp
+      headers:
+        Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
+    anysearch:
+      type: http
+      tools: ["*"]
+      url: https://api.anysearch.com/mcp
+  excluded_tools: &excluded_tools
+    - bash
+    - list_bash
+    - read_bash
+    - stop_bash
+    - write_bash
+    - apply_patch
+    - create
+    - edit
+    - view
+    - list_agents
+    - read_agent
+    - task
+    - write_agent
+    - ask_user
+    - glob
+    - grep
+    - skill
+  image_caption:
+    model: agnes-2.5-flash
+    provider:
+      type: openai
+      api_key: *agnes-ai-api_key
+      base_url: *agnes-ai-base_url
+    reasoning_effort: high
+    mcp_servers: *mcp_servers
+    excluded_tools: *excluded_tools
+  rag:
+    embedding_type: openai
+    openai_base_url: *siliconflow-base_url
+    openai_api_key: *siliconflow-api_key
+    openai_model: BAAI/bge-m3
+
+fun:
+  lolicon_proxy: example.com
+
+help:
+  online_notice_group_ids: [1145141919]
+  ntfy_topic_url: https://ntfy.sh/your_personal_topic
+  ntfy_message: |
+    你的Bot账号: {self_id} 掉线了，去重新登录吧。
+    `Message`: {message}
+
+summary:
+  model: *opencode-model
+  provider:
+    type: openai
+    base_url: *opencode-base_url
+
+watchdog:
+  github_token: github_pat_xxxxxxxxxxxxxxxxxxxxxxx
+
+generate_schemas: false

@@ -1,6 +1,12 @@
-# 宵崎奏Bot（Kanade Bot）
-
-<img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em"/>
+<div align="center">
+  <img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em;"/>
+  <h1>宵崎奏Bot (Kanade Bot)</h1>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/njdldkl666699/kanade-bot.svg" alt="license">
+  </a>
+  <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="python">
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/njdldkl666699/kanade-bot">
+</div>
 
 ## 简介
 
@@ -49,10 +55,26 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
 
 ## 常见问题
 
-1. 服务器查询返回的图片字体不好看：支持Unifont，可以下载Unifont字体并安装到系统中。
-2. 终端打印的Banner错乱：
-   1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
-   2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。
-3. 程序长久不启动，或运行到`COPILOT_CLIENT = CopilotClient()`时报错：
-   1. 检查网络连接是否正常，确保可以访问GitHub Releases；
-   2. 参考`.env`关于Copilot SDK的配置项，在启动程序时传入需要的环境变量；
+### MC服务器状态查询返回的字体问题
+
+仓库中编写的模板文件添加了Unifont字体，如果字体不美观，可以下载它并安装到系统中。
+
+### 终端打印的Banner错乱
+
+1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
+2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。
+
+### 程序长久不启动，或运行到`COPILOT_CLIENT = CopilotClient()`时报错
+
+1. 检查网络连接是否正常，确保可以访问GitHub Releases；
+2. 参考如下环境变量配置，在启动程序时或为终端设置环境变量：
+   ```bash
+   # Copilot SDK 的 CLI 路径，如果为空，则会下载CLI
+   COPILOT_CLI_PATH=
+   # Override the cache directory (binary placed directly here).
+   COPILOT_CLI_EXTRACT_DIR=
+   # Set to "1" or "true" to disable auto-download.
+   COPILOT_SKIP_CLI_DOWNLOAD=
+   # Override the GitHub Releases base URL.
+   COPILOT_CLI_DOWNLOAD_BASE_URL="https://gh-proxy.com/https://github.com/github/copilot-cli/releases/download"
+   ```

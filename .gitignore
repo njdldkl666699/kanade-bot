@@ -13,6 +13,7 @@ wheels/
 .env.*
 !.env.example
 config-*.yaml
+!config-example.yaml
 
 # LocalStore
 cache/
