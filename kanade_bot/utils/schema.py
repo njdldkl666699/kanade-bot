@@ -2,11 +2,13 @@ import ast
 import inspect
 import json
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
+from nonebot.config import Env
 from pydantic import BaseModel, create_model
+from pydantic.fields import FieldInfo
 
 from scripts.github_watchdog import Config as WatchdogConfig
 
@@ -79,7 +81,12 @@ def _extract_docstrings(cls: type[BaseModel]) -> dict[str, str]:
 
 
 class ConfigRegistry:
-    config_types: ClassVar[list[type[BaseModel]]] = [NoneBotConfig, WatchdogConfig, SchemaConfig]
+    config_types: ClassVar[list[type[BaseModel]]] = [
+        Env,
+        NoneBotConfig,
+        SchemaConfig,
+        WatchdogConfig,
+    ]
     """插件配置类型注册表"""
 
     @classmethod
@@ -94,20 +101,31 @@ class ConfigRegistry:
         if not cfg.generate_schemas:
             return
 
-        fields = {}
+        fields: dict[str, tuple[type[Any] | None, FieldInfo]] = {}
         for config_type in cls.config_types:
-            # 检查是否设置了use_attribute_docstrings，未设置则从源码提取字段的文档字符串
             use_doc = config_type.model_config.get("use_attribute_docstrings", False)
             doc_map = _extract_docstrings(config_type) if not use_doc else {}
 
             for field_name, field_info in config_type.model_fields.items():
+                # 准备 field_info（可能补充 docstring）
                 if not use_doc and field_info.description is None and field_name in doc_map:
-                    # 复制一份，避免修改原模型
                     new_field_info = field_info._copy()
                     new_field_info.description = doc_map[field_name]
                 else:
                     new_field_info = field_info
-                fields[field_name] = (field_info.annotation, new_field_info)
 
-        MergedConfig = create_model(name, __config__=AttrDocModel.model_config, **fields)
+                # 若字段已存在，合并描述（保留非空）
+                if field_name in fields:
+                    existing_anno, existing_info = fields[field_name]
+                    # 只有当现有描述为空，且新描述非空时，才更新描述
+                    if existing_info.description is None and new_field_info.description is not None:
+                        updated_info = existing_info._copy()
+                        updated_info.description = new_field_info.description
+                        fields[field_name] = (existing_anno, updated_info)
+                    # 否则保留原字段（已有描述或新描述为空）
+                else:
+                    fields[field_name] = (field_info.annotation, new_field_info)
+
+        sorted_fields = dict(sorted(fields.items()))
+        MergedConfig = create_model(name, __config__=AttrDocModel.model_config, **sorted_fields)  # type: ignore
         generate_schema(MergedConfig)

@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=./schemas/MergedConfig.json
+environment: prod
 log_level: INFO
 
 driver: ~fastapi

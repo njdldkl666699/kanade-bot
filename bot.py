@@ -1,24 +1,35 @@
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 import anyconfig
 import nonebot
+from nonebot import logger
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
-from nonebot.config import Env
-from nonebot.utils import deep_update
+from nonebot.compat import model_dump
+from nonebot.config import DOTENV_TYPE, Config, Env
+from nonebot.utils import deep_update, escape_tag
 
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
 
-def load_configs(stem: str = "config", suffix: str = ".yaml"):
+def load_configs(stem: str = "config", suffix: str = ".yaml") -> tuple[Env, dict[str, Any]]:
     """加载配置文件，并根据environment字段加载对应的环境配置
 
-    :param stem: 配置文件名的前缀，默认为"config"
-    :param suffix: 配置文件名的后缀，默认为".yaml"
-    :return: 合并后的配置字典
+    Args:
+        stem: 配置文件名的前缀，默认为"config"
+        suffix: 配置文件名的后缀，默认为".yaml"
+
+    Returns:
+        env: 环境对象
+        configs: 合并后的配置字典
+
+    Raises:
+        FileNotFoundError: 配置文件不存在
+        TypeError: 配置文件解析结果不是字典类型
     """
     WORKING_DIR = Path(__file__).parent
     path = WORKING_DIR / f"{stem}{suffix}"
@@ -29,25 +40,61 @@ def load_configs(stem: str = "config", suffix: str = ".yaml"):
     if not isinstance(configs, dict):
         raise TypeError(f"配置文件 {path} 解析结果不是字典类型: {type(configs)}")
 
-    # env = configs.get("environment", "prod")
-    # 为了兼容NoneBot的日志配置，使用NoneBot的Env类来获取环境信息
-    env = Env()
+    if environment := configs.get("environment"):
+        env = Env(environment=environment)
+    else:
+        env = Env()
+
     env_config_path = WORKING_DIR / f"{stem}-{env.environment}{suffix}"
     env_configs = anyconfig.load(env_config_path)
     if not isinstance(env_configs, dict):
         raise TypeError(f"环境配置文件 {env_config_path} 解析结果不是字典类型: {type(env_configs)}")
 
     # 递归（深度）合并字典
-    return deep_update(configs, env_configs)
+    return env, deep_update(configs, env_configs)
 
 
-def init_nonebot(configs: dict[str, Any]):
-    """初始化 NoneBot 框架，注册适配器和插件
+def init_nonebot(
+    *,
+    env: Env = Env(),
+    _env_file: DOTENV_TYPE | None = None,
+    **kwargs: Any,
+):
+    """初始化 NoneBot 以及 全局 {ref}`nonebot.drivers.Driver` 对象。
 
-    :param configs: 配置项，将会存储到 {ref}`nonebot.drivers.Driver.config` 对象里
+    NoneBot 将会从 .env 文件中读取环境信息，并使用相应的 env 文件配置。
+
+    也可以传入自定义的 `_env_file` 来指定 NoneBot 从该文件读取配置。
+
+    Args:
+        _env_file: 配置文件名，默认从 `.env.{env_name}` 中读取配置
+        kwargs: 任意变量，将会存储到 {ref}`nonebot.drivers.Driver.config` 对象里
+
+    Examples:
+        ```python
+        init_nonebot(database=Database(...))
+        ```
     """
-    nonebot.init(**configs)
+    logger.success("NoneBot is initializing...")
 
+    _env_file = _env_file or f".env.{env.environment}"
+    config = Config(
+        **kwargs,
+        _env_file=((".env", _env_file) if isinstance(_env_file, (str, os.PathLike)) else _env_file),
+    )
+
+    logger.configure(extra={"nonebot_log_level": config.log_level}, patcher=nonebot._log_patcher)
+    logger.opt(colors=True).info(f"Current <y><b>Env: {escape_tag(env.environment)}</b></y>")
+    logger.opt(colors=True).debug(
+        f"Loaded <y><b>Config</b></y>: {escape_tag(str(model_dump(config)))}"
+    )
+
+    DriverClass = nonebot._resolve_combine_expr(config.driver)
+    nonebot._driver = DriverClass(env, config)
+
+
+def register_adapters_and_load_plugins():
+    """注册适配器和加载插件"""
     # 注册适配器
     driver = nonebot.get_driver()
     driver.register_adapter(ConsoleAdapter)
@@ -187,8 +234,9 @@ def register_other_configs_and_generate_schema():
 
 if __name__ == "__main__":
     print(get_kanade())
-    configs = load_configs()
-    init_nonebot(configs)
+    env, configs = load_configs()
+    init_nonebot(env=env, **configs)
+    register_adapters_and_load_plugins()
     patch_foreign_plugins()
     register_other_configs_and_generate_schema()
     nonebot.run()

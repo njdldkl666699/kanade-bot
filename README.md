@@ -10,18 +10,20 @@
 
 1. 克隆仓库到本地；
 2. 安装依赖：`uv sync`；
-3. 补全配置项；
+3. 创建`config-{环境}.yaml`配置文件，补全`config.yaml`和`config-{环境}.yaml`中的配置项；
 4. 运行机器人：`nb run`。
 
 ### 配置
 
 `config.yaml` 顶部已声明 `$schema: ./schemas/MergedConfig.json`，在支持 YAML Schema 的编辑器（如 VS Code + YAML 插件）中可自动补全全部配置项。
 
-也支持NoneBot原本的DotEnv环境变量配置方式，**且`environment`仅支持从`.env`中读取**；`environment` 字段决定加载哪个环境文件（`environment: prod` -> `config-prod.yaml`），环境文件会深度覆盖基础文件；
+`config-{环境}.yaml`被`.gitignore`忽略，适合存放敏感信息（如API Key、Token等），也可用于不同环境的配置覆盖。
 
-`yaml` 配置优先级高于 `.env` 配置，若两者同时存在，则以 `yaml` 配置为准。
+同时，也支持NoneBot原本的DotEnv环境变量配置方式，仍可使用`.env` `.env.{环境}`文件来配置。
 
-本项目配置加载使用`anyconfig`，支持多种格式（YAML、JSON、TOML、INI等），可自行扩展。
+优先级请参考NoneBot官方文档，yaml通过直接传入的方式，优先级最高，yaml环境配置高于yaml基础配置。
+
+此外，本项目配置加载使用`anyconfig`，支持多种格式（YAML、JSON、TOML、INI等），可自行扩展。
 
 ## Watchdog（自动更新与重启）
 

@@ -962,6 +962,12 @@
           "description": "登录二维码的文件路径，配置后会在掉线推送中附带",
           "title": "Login Qrcode File Path"
         },
+        "ntfy_message": {
+          "default": "你的Bot账号: {self_id} 掉线了，赶快去看看吧。\n`Message`: {message}",
+          "description": "掉线通知的消息内容，支持{self_id}和{message}两个占位符\n\n如果配置了login_qrcode_file_path，则会附带二维码图片，消息内容会被忽略",
+          "title": "Ntfy Message",
+          "type": "string"
+        },
         "welcome_message_templates": {
           "default": [
             "嗯…欢迎{nickname} 。我是K，请多指教。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
@@ -1234,39 +1240,136 @@
     }
   },
   "properties": {
-    "driver": {
-      "default": "~fastapi",
-      "description": "NoneBot 运行所使用的 `Driver` 。继承自 {ref}`nonebot.drivers.Driver` 。\n\n    配置格式为 `<module>[:<Driver>][+<module>[:<Mixin>]]*`。\n\n    `~` 为 `nonebot.drivers.` 的缩写。\n\n    配置方法参考: [配置驱动器](https://nonebot.dev/docs/advanced/driver#%E9%85%8D%E7%BD%AE%E9%A9%B1%E5%8A%A8%E5%99%A8)",
-      "title": "Driver",
-      "type": "string"
+    "alconna_apply_fetch_targets": {
+      "default": false,
+      "description": "是否启动时拉取一次发送对象列表",
+      "title": "Alconna Apply Fetch Targets",
+      "type": "boolean"
     },
-    "host": {
-      "default": "127.0.0.1",
-      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的 IP/主机名。",
-      "format": "ipvanyaddress",
-      "title": "Host",
-      "type": "string"
+    "alconna_apply_filehost": {
+      "default": false,
+      "description": "是否启用文件托管",
+      "title": "Alconna Apply Filehost",
+      "type": "boolean"
     },
-    "port": {
-      "default": 8080,
-      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的端口。",
-      "maximum": 65535,
-      "minimum": 1,
-      "title": "Port",
-      "type": "integer"
-    },
-    "log_level": {
+    "alconna_auto_send_output": {
       "anyOf": [
         {
-          "type": "integer"
+          "type": "boolean"
         },
         {
-          "type": "string"
+          "type": "null"
         }
       ],
-      "default": "INFO",
-      "description": "NoneBot 日志输出等级，可以为 `int` 类型等级或等级名称。\n\n    参考 [记录日志](https://nonebot.dev/docs/appendices/log)，[loguru 日志等级](https://loguru.readthedocs.io/en/stable/api/logger.html#levels)。\n\n    :::tip 提示\n    日志等级名称应为大写，如 `INFO`。\n    :::\n\n    用法:\n        ```conf\n        LOG_LEVEL=25\n        LOG_LEVEL=INFO\n        ```",
-      "title": "Log Level"
+      "default": null,
+      "description": "是否全局启用输出信息自动发送",
+      "title": "Alconna Auto Send Output"
+    },
+    "alconna_builtin_plugins": {
+      "description": "需要加载的alc内置插件集合",
+      "items": {
+        "type": "string"
+      },
+      "title": "Alconna Builtin Plugins",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "alconna_cache_message": {
+      "default": true,
+      "description": "是否缓存已解析的消息",
+      "title": "Alconna Cache Message",
+      "type": "boolean"
+    },
+    "alconna_conflict_resolver": {
+      "default": "default",
+      "description": "命令冲突解决策略，default 为保留两个命令，raise 为抛出异常，ignore 为忽略新命令，replace 为替换旧命令",
+      "enum": [
+        "raise",
+        "default",
+        "ignore",
+        "replace"
+      ],
+      "title": "Alconna Conflict Resolver",
+      "type": "string"
+    },
+    "alconna_context_style": {
+      "anyOf": [
+        {
+          "enum": [
+            "bracket",
+            "parentheses"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "全局命令上下文插值的风格，None 为关闭，bracket 为 {...}，parentheses 为 $(...)",
+      "title": "Alconna Context Style"
+    },
+    "alconna_enable_saa_patch": {
+      "default": false,
+      "description": "是否启用 SAA 补丁",
+      "title": "Alconna Enable Saa Patch",
+      "type": "boolean"
+    },
+    "alconna_global_completion": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CompConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "全局的补全会话配置 (不代表全局启用补全会话)"
+    },
+    "alconna_global_extensions": {
+      "description": "全局加载的扩展, 路径以 . 分隔, 如 foo.bar.baz:DemoExtension",
+      "items": {
+        "type": "string"
+      },
+      "title": "Alconna Global Extensions",
+      "type": "array"
+    },
+    "alconna_response_self": {
+      "default": false,
+      "description": "是否响应自身发送的消息",
+      "title": "Alconna Response Self",
+      "type": "boolean"
+    },
+    "alconna_use_command_sep": {
+      "default": false,
+      "description": "是否将 COMMAND_SEP 作为全局命令分隔符",
+      "title": "Alconna Use Command Sep",
+      "type": "boolean"
+    },
+    "alconna_use_command_start": {
+      "default": false,
+      "description": "是否将 COMMAND_START 作为全局命令前缀",
+      "title": "Alconna Use Command Start",
+      "type": "boolean"
+    },
+    "alconna_use_origin": {
+      "default": false,
+      "description": "是否全局使用原始消息 (即未经过 to_me 等处理的)",
+      "title": "Alconna Use Origin",
+      "type": "boolean"
+    },
+    "api60s_base_url": {
+      "default": "https://60s.viki.moe",
+      "description": "60s API Base URL",
+      "title": "Api60S Base Url",
+      "type": "string"
+    },
+    "api60s_fun_cache_file": {
+      "default": "cache.json",
+      "description": "Fun插件缓存数据文件路径",
+      "title": "Api60S Fun Cache File",
+      "type": "string"
     },
     "api_timeout": {
       "anyOf": [
@@ -1281,135 +1384,20 @@
       "description": "API 请求超时时间，单位: 秒。",
       "title": "Api Timeout"
     },
-    "superusers": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Superusers",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "nickname": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Nickname",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "command_start": {
-      "default": [
-        "/"
-      ],
-      "description": "命令的起始标记，用于判断一条消息是不是命令。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_START=[\"/\", \"\"]\n        ```",
-      "items": {
-        "type": "string"
-      },
-      "title": "Command Start",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "command_sep": {
-      "default": [
-        "."
-      ],
-      "description": "命令的分隔标记，用于将文本形式的命令切分为元组（实际的命令名）。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_SEP=[\".\"]\n        ```",
-      "items": {
-        "type": "string"
-      },
-      "title": "Command Sep",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "session_expire_timeout": {
-      "default": "PT2M",
-      "description": "等待用户回复的超时时间。\n\n    用法:\n        ```conf\n        SESSION_EXPIRE_TIMEOUT=[-][DD]D[,][HH:MM:]SS[.ffffff]\n        SESSION_EXPIRE_TIMEOUT=[±]P[DD]DT[HH]H[MM]M[SS]S  # ISO 8601\n        ```",
-      "format": "duration",
-      "title": "Session Expire Timeout",
-      "type": "string"
-    },
-    "watchdog": {
-      "$ref": "#/$defs/scripts__github_watchdog__ScopedConfig"
-    },
-    "generate_schemas": {
-      "default": false,
-      "description": "是否生成JSON Schema文件",
-      "title": "Generate Schemas",
+    "apscheduler_autostart": {
+      "default": true,
+      "title": "Apscheduler Autostart",
       "type": "boolean"
     },
-    "schema_output_dir": {
-      "default": "schemas/",
-      "description": "JSON Schema输出目录，默认为`schemas/`",
-      "title": "Schema Output Dir",
-      "type": "string"
+    "apscheduler_config": {
+      "additionalProperties": true,
+      "title": "Apscheduler Config",
+      "type": "object"
     },
-    "wordle": {
-      "$ref": "#/$defs/kanade_bot__plugins__wordle__config__ScopedConfig",
-      "default": {
-        "default_length": 5,
-        "default_dictionary": "CET4",
-        "min_length": 3,
-        "max_length": 13,
-        "meanings": [
-          "中释"
-        ],
-        "crystal_bonus_map": {},
-        "hinted_crystal_bonus_map": {}
-      }
-    },
-    "command_counter_data_file": {
-      "default": "command_counter_data.json",
-      "description": "命令计数器保存的数据文件名",
-      "title": "Command Counter Data File",
-      "type": "string"
-    },
-    "model_updater_template_file": {
-      "default": "template.html",
-      "description": "模型更新器使用的HTML模板文件名，支持HTML格式。",
-      "title": "Model Updater Template File",
-      "type": "string"
-    },
-    "crystal": {
-      "$ref": "#/$defs/kanade_bot__plugins__crystal__config__ScopedConfig",
-      "default": {
-        "config_file": "crystal_config.json",
-        "data_file": "userdata.json",
-        "cache_file": "cache.json",
-        "weekly_check_in_file": "weekly_check_in.json"
-      }
-    },
-    "harvest": {
-      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig",
-      "default": {
-        "config_file": "harvest_config.json",
-        "assets_dir": "harvest_assets/",
-        "power_cache_file": "harvest_power_cache.json",
-        "crystal_power_cache_file": "harvest_crystal_power_cache.json",
-        "result_template_file": "harvest_result_template.html",
-        "results_template_file": "harvest_results_template.html",
-        "crystal_image_name": "jewel.png",
-        "daily_power": 10.0,
-        "power_crystal_cost": 10.0
-      }
-    },
-    "gacha": {
-      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig",
-      "default": {
-        "config_file": "gacha_config.json",
-        "member_small_dir": "member_small/",
-        "cards_assets_dir": "cards_assets/",
-        "card_info_file": "cards.json",
-        "show_trained": true
-      }
-    },
-    "tool": {
-      "$ref": "#/$defs/kanade_bot__plugins__tool__config__ScopedConfig",
-      "default": {
-        "fallback_icon_file": "grass_block.png",
-        "template_file": "mcstatus_template.html",
-        "schedule_configs_file": "schedule_configs.json",
-        "preset_reaction_config_file": "preset_reaction_config.json"
-      }
+    "apscheduler_log_level": {
+      "default": 30,
+      "title": "Apscheduler Log Level",
+      "type": "integer"
     },
     "chat": {
       "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
@@ -1445,80 +1433,40 @@
         "memes_dir": "memes/"
       }
     },
-    "fun": {
-      "$ref": "#/$defs/kanade_bot__plugins__fun__config__ScopedConfig",
-      "default": {
-        "ciallo_image_file": "宵崎奏Ciallo.webp",
-        "plus_one_threshold": 0,
-        "duanzi_list_file": "duanzi.json",
-        "lolicon_proxy": "i.yuki.sh",
-        "cache_file": "cache.json"
-      }
-    },
-    "gallery": {
-      "$ref": "#/$defs/kanade_bot__plugins__gallery__config__ScopedConfig",
-      "default": {
-        "name_data_file": "gallery_name_indices.json",
-        "send_pic_limit": 10,
-        "send_pic_as_meme": true
-      }
-    },
-    "api60s_base_url": {
-      "default": "https://60s.viki.moe",
-      "description": "60s API Base URL",
-      "title": "Api60S Base Url",
-      "type": "string"
-    },
-    "api60s_fun_cache_file": {
-      "default": "cache.json",
-      "description": "Fun插件缓存数据文件路径",
-      "title": "Api60S Fun Cache File",
-      "type": "string"
-    },
-    "help": {
-      "$ref": "#/$defs/kanade_bot__plugins__help__config__ScopedConfig",
-      "default": {
-        "online_notice_group_ids": [],
-        "ntfy_topic_url": null,
-        "login_qrcode_file_path": null,
-        "welcome_message_templates": [
-          "嗯…欢迎{nickname} 。我是K，请多指教。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
-          "…{nickname} ，欢迎你。这里不吵，但如果你需要说话，我会在的。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
-          "欢迎{nickname} 。我刚好在泡面…有点失礼，不过很高兴认识你。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
-          "啊，{nickname} 来了。不用太拘束，安静待着也可以。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
-          "欢迎{nickname} 。我可能话不多，但会一直听着。\n如果有什么不清楚的地方…输入 /help 可以看说明。"
-        ],
-        "welcome_image_file": null,
-        "leave_notice_disabled_group_ids": []
-      }
-    },
-    "music": {
-      "$ref": "#/$defs/kanade_bot__plugins__music__config__ScopedConfig",
-      "default": {
-        "playlist_file": "lx_list",
-        "playlist_link": "",
-        "audios_dir": "audios/",
-        "audio_page_size": 10,
-        "lyrics_dir": "lyrics/",
-        "lyric_default_length": 4
-      }
-    },
-    "summary": {
-      "$ref": "#/$defs/kanade_bot__plugins__summary__config__ScopedConfig",
-      "default": {
-        "model": "gpt-5-mini",
-        "provider": null,
-        "system_prompt_file": "Summarizer.md",
-        "bot_name": "宵崎奏",
-        "min_size": 10,
-        "max_size": 2048,
-        "message_records_file": "summary_message_records.json"
-      }
-    },
-    "console_headless_mode": {
-      "default": false,
-      "title": "Console Headless Mode",
+    "chatrecorder_record_send_msg": {
+      "default": true,
+      "title": "Chatrecorder Record Send Msg",
       "type": "boolean"
+    },
+    "command_counter_data_file": {
+      "default": "command_counter_data.json",
+      "description": "命令计数器保存的数据文件名",
+      "title": "Command Counter Data File",
+      "type": "string"
+    },
+    "command_sep": {
+      "default": [
+        "."
+      ],
+      "description": "命令的分隔标记，用于将文本形式的命令切分为元组（实际的命令名）。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_SEP=[\".\"]\n        ```",
+      "items": {
+        "type": "string"
+      },
+      "title": "Command Sep",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "command_start": {
+      "default": [
+        "/"
+      ],
+      "description": "命令的起始标记，用于判断一条消息是不是命令。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_START=[\"/\", \"\"]\n        ```",
+      "items": {
+        "type": "string"
+      },
+      "title": "Command Start",
+      "type": "array",
+      "uniqueItems": true
     },
     "console_bot_id": {
       "default": "robot",
@@ -1530,202 +1478,180 @@
       "title": "Console Bot Name",
       "type": "string"
     },
+    "console_headless_mode": {
+      "default": false,
+      "title": "Console Headless Mode",
+      "type": "boolean"
+    },
     "console_strict_tome": {
       "default": false,
       "title": "Console Strict Tome",
       "type": "boolean"
     },
-    "onebot_v11_access_token": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "OneBot 协议授权令牌",
-      "title": "Onebot V11 Access Token"
+    "crystal": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__config__ScopedConfig",
+      "default": {
+        "config_file": "crystal_config.json",
+        "data_file": "userdata.json",
+        "cache_file": "cache.json",
+        "weekly_check_in_file": "weekly_check_in.json"
+      }
     },
-    "onebot_v11_secret": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "OneBot HTTP 上报数据签名口令",
-      "title": "Onebot V11 Secret"
-    },
-    "onebot_v11_ws_urls": {
-      "description": "OneBot 正向 Websocket 连接目标 URL 集合",
-      "items": {
-        "format": "uri",
-        "minLength": 1,
-        "type": "string"
-      },
-      "title": "Onebot V11 Ws Urls",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "onebot_v11_api_roots": {
-      "additionalProperties": {
-        "format": "uri",
-        "minLength": 1,
-        "type": "string"
-      },
-      "description": "OneBot HTTP API 请求地址字典",
-      "title": "Onebot V11 Api Roots",
-      "type": "object"
-    },
-    "alconna_auto_send_output": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "是否全局启用输出信息自动发送",
-      "title": "Alconna Auto Send Output"
-    },
-    "alconna_use_command_start": {
-      "default": false,
-      "description": "是否将 COMMAND_START 作为全局命令前缀",
-      "title": "Alconna Use Command Start",
-      "type": "boolean"
-    },
-    "alconna_global_completion": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/CompConfig"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "全局的补全会话配置 (不代表全局启用补全会话)"
-    },
-    "alconna_use_origin": {
-      "default": false,
-      "description": "是否全局使用原始消息 (即未经过 to_me 等处理的)",
-      "title": "Alconna Use Origin",
-      "type": "boolean"
-    },
-    "alconna_use_command_sep": {
-      "default": false,
-      "description": "是否将 COMMAND_SEP 作为全局命令分隔符",
-      "title": "Alconna Use Command Sep",
-      "type": "boolean"
-    },
-    "alconna_global_extensions": {
-      "description": "全局加载的扩展, 路径以 . 分隔, 如 foo.bar.baz:DemoExtension",
-      "items": {
-        "type": "string"
-      },
-      "title": "Alconna Global Extensions",
-      "type": "array"
-    },
-    "alconna_context_style": {
-      "anyOf": [
-        {
-          "enum": [
-            "bracket",
-            "parentheses"
-          ],
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "全局命令上下文插值的风格，None 为关闭，bracket 为 {...}，parentheses 为 $(...)",
-      "title": "Alconna Context Style"
-    },
-    "alconna_enable_saa_patch": {
-      "default": false,
-      "description": "是否启用 SAA 补丁",
-      "title": "Alconna Enable Saa Patch",
-      "type": "boolean"
-    },
-    "alconna_apply_filehost": {
-      "default": false,
-      "description": "是否启用文件托管",
-      "title": "Alconna Apply Filehost",
-      "type": "boolean"
-    },
-    "alconna_apply_fetch_targets": {
-      "default": false,
-      "description": "是否启动时拉取一次发送对象列表",
-      "title": "Alconna Apply Fetch Targets",
-      "type": "boolean"
-    },
-    "alconna_builtin_plugins": {
-      "description": "需要加载的alc内置插件集合",
-      "items": {
-        "type": "string"
-      },
-      "title": "Alconna Builtin Plugins",
-      "type": "array",
-      "uniqueItems": true
-    },
-    "alconna_conflict_resolver": {
-      "default": "default",
-      "description": "命令冲突解决策略，default 为保留两个命令，raise 为抛出异常，ignore 为忽略新命令，replace 为替换旧命令",
-      "enum": [
-        "raise",
-        "default",
-        "ignore",
-        "replace"
-      ],
-      "title": "Alconna Conflict Resolver",
+    "driver": {
+      "default": "~fastapi",
+      "description": "NoneBot 运行所使用的 `Driver` 。继承自 {ref}`nonebot.drivers.Driver` 。\n\n    配置格式为 `<module>[:<Driver>][+<module>[:<Mixin>]]*`。\n\n    `~` 为 `nonebot.drivers.` 的缩写。\n\n    配置方法参考: [配置驱动器](https://nonebot.dev/docs/advanced/driver#%E9%85%8D%E7%BD%AE%E9%A9%B1%E5%8A%A8%E5%99%A8)",
+      "title": "Driver",
       "type": "string"
     },
-    "alconna_response_self": {
+    "environment": {
+      "default": "prod",
+      "description": "当前环境名。\n\n    NoneBot 将从 `.env.{environment}` 文件中加载配置。",
+      "title": "Environment",
+      "type": "string"
+    },
+    "fun": {
+      "$ref": "#/$defs/kanade_bot__plugins__fun__config__ScopedConfig",
+      "default": {
+        "ciallo_image_file": "宵崎奏Ciallo.webp",
+        "plus_one_threshold": 0,
+        "duanzi_list_file": "duanzi.json",
+        "lolicon_proxy": "i.yuki.sh",
+        "cache_file": "cache.json"
+      }
+    },
+    "gacha": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__gacha__config__ScopedConfig",
+      "default": {
+        "config_file": "gacha_config.json",
+        "member_small_dir": "member_small/",
+        "cards_assets_dir": "cards_assets/",
+        "card_info_file": "cards.json",
+        "show_trained": true
+      }
+    },
+    "gallery": {
+      "$ref": "#/$defs/kanade_bot__plugins__gallery__config__ScopedConfig",
+      "default": {
+        "name_data_file": "gallery_name_indices.json",
+        "send_pic_limit": 10,
+        "send_pic_as_meme": true
+      }
+    },
+    "generate_schemas": {
       "default": false,
-      "description": "是否响应自身发送的消息",
-      "title": "Alconna Response Self",
+      "description": "是否生成JSON Schema文件",
+      "title": "Generate Schemas",
       "type": "boolean"
     },
-    "alconna_cache_message": {
-      "default": true,
-      "description": "是否缓存已解析的消息",
-      "title": "Alconna Cache Message",
-      "type": "boolean"
+    "harvest": {
+      "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig",
+      "default": {
+        "config_file": "harvest_config.json",
+        "assets_dir": "harvest_assets/",
+        "power_cache_file": "harvest_power_cache.json",
+        "crystal_power_cache_file": "harvest_crystal_power_cache.json",
+        "result_template_file": "harvest_result_template.html",
+        "results_template_file": "harvest_results_template.html",
+        "crystal_image_name": "jewel.png",
+        "daily_power": 10.0,
+        "power_crystal_cost": 10.0
+      }
     },
-    "apscheduler_autostart": {
-      "default": true,
-      "title": "Apscheduler Autostart",
-      "type": "boolean"
+    "help": {
+      "$ref": "#/$defs/kanade_bot__plugins__help__config__ScopedConfig",
+      "default": {
+        "online_notice_group_ids": [],
+        "ntfy_topic_url": null,
+        "login_qrcode_file_path": null,
+        "ntfy_message": "你的Bot账号: {self_id} 掉线了，赶快去看看吧。\n`Message`: {message}",
+        "welcome_message_templates": [
+          "嗯…欢迎{nickname} 。我是K，请多指教。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "…{nickname} ，欢迎你。这里不吵，但如果你需要说话，我会在的。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "欢迎{nickname} 。我刚好在泡面…有点失礼，不过很高兴认识你。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "啊，{nickname} 来了。不用太拘束，安静待着也可以。\n如果有什么不清楚的地方…输入 /help 可以看说明。",
+          "欢迎{nickname} 。我可能话不多，但会一直听着。\n如果有什么不清楚的地方…输入 /help 可以看说明。"
+        ],
+        "welcome_image_file": null,
+        "leave_notice_disabled_group_ids": []
+      }
     },
-    "apscheduler_log_level": {
-      "default": 30,
-      "title": "Apscheduler Log Level",
-      "type": "integer"
-    },
-    "apscheduler_config": {
-      "additionalProperties": true,
-      "title": "Apscheduler Config",
-      "type": "object"
-    },
-    "chatrecorder_record_send_msg": {
-      "default": true,
-      "title": "Chatrecorder Record Send Msg",
-      "type": "boolean"
+    "host": {
+      "default": "127.0.0.1",
+      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的 IP/主机名。",
+      "format": "ipvanyaddress",
+      "title": "Host",
+      "type": "string"
     },
     "htmlrender_browser": {
       "default": "chromium",
       "description": "Playwright浏览器引擎类型，默认值为 'chromium'。",
       "title": "Htmlrender Browser",
       "type": "string"
+    },
+    "htmlrender_browser_args": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright 浏览器启动参数。",
+      "title": "Htmlrender Browser Args"
+    },
+    "htmlrender_browser_channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器通道类型。",
+      "title": "Htmlrender Browser Channel"
+    },
+    "htmlrender_browser_executable_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Playwright浏览器可执行文件的路径。",
+      "title": "Htmlrender Browser Executable Path"
+    },
+    "htmlrender_connect": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "通过Playwright协议连接Playwright浏览器的端点地址。",
+      "title": "Htmlrender Connect"
+    },
+    "htmlrender_connect_over_cdp": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "通过 CDP 连接Playwright浏览器的端点地址。",
+      "title": "Htmlrender Connect Over Cdp"
     },
     "htmlrender_download_host": {
       "anyOf": [
@@ -1778,76 +1704,6 @@
       "default": null,
       "description": "Playwright浏览器代理的绕过地址。",
       "title": "Htmlrender Proxy Host Bypass"
-    },
-    "htmlrender_browser_channel": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器通道类型。",
-      "title": "Htmlrender Browser Channel"
-    },
-    "htmlrender_browser_executable_path": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器可执行文件的路径。",
-      "title": "Htmlrender Browser Executable Path"
-    },
-    "htmlrender_connect_over_cdp": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "通过 CDP 连接Playwright浏览器的端点地址。",
-      "title": "Htmlrender Connect Over Cdp"
-    },
-    "htmlrender_connect": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "通过Playwright协议连接Playwright浏览器的端点地址。",
-      "title": "Htmlrender Connect"
-    },
-    "htmlrender_browser_args": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright 浏览器启动参数。",
-      "title": "Htmlrender Browser Args"
-    },
-    "localstore_use_cwd": {
-      "default": false,
-      "title": "Localstore Use Cwd",
-      "type": "boolean"
     },
     "localstore_cache_dir": {
       "anyOf": [
@@ -1912,6 +1768,98 @@
       "title": "Localstore Plugin Data Dir",
       "type": "object"
     },
+    "localstore_use_cwd": {
+      "default": false,
+      "title": "Localstore Use Cwd",
+      "type": "boolean"
+    },
+    "log_level": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": "INFO",
+      "description": "NoneBot 日志输出等级，可以为 `int` 类型等级或等级名称。\n\n    参考 [记录日志](https://nonebot.dev/docs/appendices/log)，[loguru 日志等级](https://loguru.readthedocs.io/en/stable/api/logger.html#levels)。\n\n    :::tip 提示\n    日志等级名称应为大写，如 `INFO`。\n    :::\n\n    用法:\n        ```conf\n        LOG_LEVEL=25\n        LOG_LEVEL=INFO\n        ```",
+      "title": "Log Level"
+    },
+    "model_updater_template_file": {
+      "default": "template.html",
+      "description": "模型更新器使用的HTML模板文件名，支持HTML格式。",
+      "title": "Model Updater Template File",
+      "type": "string"
+    },
+    "music": {
+      "$ref": "#/$defs/kanade_bot__plugins__music__config__ScopedConfig",
+      "default": {
+        "playlist_file": "lx_list",
+        "playlist_link": "",
+        "audios_dir": "audios/",
+        "audio_page_size": 10,
+        "lyrics_dir": "lyrics/",
+        "lyric_default_length": 4
+      }
+    },
+    "nickname": {
+      "default": [],
+      "description": "机器人昵称。",
+      "items": {
+        "type": "string"
+      },
+      "title": "Nickname",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "onebot_v11_access_token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "OneBot 协议授权令牌",
+      "title": "Onebot V11 Access Token"
+    },
+    "onebot_v11_api_roots": {
+      "additionalProperties": {
+        "format": "uri",
+        "minLength": 1,
+        "type": "string"
+      },
+      "description": "OneBot HTTP API 请求地址字典",
+      "title": "Onebot V11 Api Roots",
+      "type": "object"
+    },
+    "onebot_v11_secret": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "OneBot HTTP 上报数据签名口令",
+      "title": "Onebot V11 Secret"
+    },
+    "onebot_v11_ws_urls": {
+      "description": "OneBot 正向 Websocket 连接目标 URL 集合",
+      "items": {
+        "format": "uri",
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Onebot V11 Ws Urls",
+      "type": "array",
+      "uniqueItems": true
+    },
     "permission_load_command": {
       "default": true,
       "description": "是否加载权限命令",
@@ -1928,6 +1876,14 @@
       "type": "array",
       "uniqueItems": true
     },
+    "port": {
+      "default": 8080,
+      "description": "NoneBot {ref}`nonebot.drivers.ReverseDriver` 服务端监听的端口。",
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
     "proxy": {
       "anyOf": [
         {
@@ -1940,10 +1896,43 @@
       "default": null,
       "title": "Proxy"
     },
-    "ps_template": {
-      "default": "default",
-      "title": "Ps Template",
+    "ps_bg_local_path": {
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_bg.webp",
+      "format": "path",
+      "title": "Ps Bg Local Path",
       "type": "string"
+    },
+    "ps_bg_lolicon_r18_type": {
+      "default": 0,
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "title": "Ps Bg Lolicon R18 Type",
+      "type": "integer"
+    },
+    "ps_bg_preload_count": {
+      "default": 2,
+      "title": "Ps Bg Preload Count",
+      "type": "integer"
+    },
+    "ps_bg_provider": {
+      "default": "loli",
+      "title": "Ps Bg Provider",
+      "type": "string"
+    },
+    "ps_collect_cache_size": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Ps Collect Cache Size",
+      "type": "object"
+    },
+    "ps_collect_interval": {
+      "default": 5,
+      "title": "Ps Collect Interval",
+      "type": "integer"
     },
     "ps_command": {
       "default": [
@@ -1959,15 +1948,124 @@
       "title": "Ps Command",
       "type": "array"
     },
-    "ps_only_su": {
+    "ps_count_message_sent_event": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      ],
       "default": false,
-      "title": "Ps Only Su",
+      "title": "Ps Count Message Sent Event"
+    },
+    "ps_default_avatar": {
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_avatar.webp",
+      "format": "path",
+      "title": "Ps Default Avatar",
+      "type": "string"
+    },
+    "ps_default_collect_cache_size": {
+      "default": 1,
+      "title": "Ps Default Collect Cache Size",
+      "type": "integer"
+    },
+    "ps_disconnect_reset_counter": {
+      "default": true,
+      "title": "Ps Disconnect Reset Counter",
       "type": "boolean"
+    },
+    "ps_ignore_0b_net": {
+      "default": false,
+      "title": "Ps Ignore 0B Net",
+      "type": "boolean"
+    },
+    "ps_ignore_bad_parts": {
+      "default": false,
+      "title": "Ps Ignore Bad Parts",
+      "type": "boolean"
+    },
+    "ps_ignore_disk_ios": {
+      "default": [
+        "^(loop|zram)\\d*$"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Disk Ios",
+      "type": "array"
+    },
+    "ps_ignore_nets": {
+      "default": [
+        "^lo(op)?\\d*$|^(Loopback|本地连接)"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Nets",
+      "type": "array"
+    },
+    "ps_ignore_no_io_disk": {
+      "default": false,
+      "title": "Ps Ignore No Io Disk",
+      "type": "boolean"
+    },
+    "ps_ignore_parts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Parts",
+      "type": "array"
+    },
+    "ps_ignore_procs": {
+      "default": [
+        "^System Idle Process$"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ps Ignore Procs",
+      "type": "array"
     },
     "ps_need_at": {
       "default": false,
       "title": "Ps Need At",
       "type": "boolean"
+    },
+    "ps_ob_v11_use_get_status": {
+      "default": true,
+      "title": "Ps Ob V11 Use Get Status",
+      "type": "boolean"
+    },
+    "ps_only_su": {
+      "default": false,
+      "title": "Ps Only Su",
+      "type": "boolean"
+    },
+    "ps_proc_cpu_max_100p": {
+      "default": false,
+      "title": "Ps Proc Cpu Max 100P",
+      "type": "boolean"
+    },
+    "ps_proc_len": {
+      "default": 5,
+      "title": "Ps Proc Len",
+      "type": "integer"
+    },
+    "ps_proc_sort_by": {
+      "default": "cpu",
+      "enum": [
+        "cpu",
+        "mem"
+      ],
+      "title": "Ps Proc Sort By",
+      "type": "string"
     },
     "ps_reply_target": {
       "default": true,
@@ -1986,102 +2084,19 @@
       "default": 10,
       "title": "Ps Req Timeout"
     },
-    "ps_bg_provider": {
-      "default": "loli",
-      "title": "Ps Bg Provider",
-      "type": "string"
-    },
-    "ps_bg_preload_count": {
-      "default": 2,
-      "title": "Ps Bg Preload Count",
-      "type": "integer"
-    },
-    "ps_bg_lolicon_r18_type": {
-      "default": 0,
-      "enum": [
-        0,
-        1,
-        2
-      ],
-      "title": "Ps Bg Lolicon R18 Type",
-      "type": "integer"
-    },
-    "ps_bg_local_path": {
-      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_bg.webp",
-      "format": "path",
-      "title": "Ps Bg Local Path",
-      "type": "string"
-    },
-    "ps_default_avatar": {
-      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_avatar.webp",
-      "format": "path",
-      "title": "Ps Default Avatar",
-      "type": "string"
-    },
-    "ps_collect_interval": {
-      "default": 5,
-      "title": "Ps Collect Interval",
-      "type": "integer"
-    },
-    "ps_default_collect_cache_size": {
-      "default": 1,
-      "title": "Ps Default Collect Cache Size",
-      "type": "integer"
-    },
-    "ps_collect_cache_size": {
-      "additionalProperties": {
-        "type": "integer"
-      },
-      "title": "Ps Collect Cache Size",
-      "type": "object"
-    },
-    "ps_use_env_nick": {
-      "default": false,
-      "title": "Ps Use Env Nick",
-      "type": "boolean"
-    },
     "ps_show_current_bot_only": {
       "default": false,
       "title": "Ps Show Current Bot Only",
       "type": "boolean"
     },
-    "ps_ob_v11_use_get_status": {
+    "ps_sort_disk_ios": {
       "default": true,
-      "title": "Ps Ob V11 Use Get Status",
+      "title": "Ps Sort Disk Ios",
       "type": "boolean"
     },
-    "ps_count_message_sent_event": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "uniqueItems": true
-        }
-      ],
-      "default": false,
-      "title": "Ps Count Message Sent Event"
-    },
-    "ps_disconnect_reset_counter": {
+    "ps_sort_nets": {
       "default": true,
-      "title": "Ps Disconnect Reset Counter",
-      "type": "boolean"
-    },
-    "ps_ignore_parts": {
-      "default": [],
-      "items": {
-        "type": "string"
-      },
-      "title": "Ps Ignore Parts",
-      "type": "array"
-    },
-    "ps_ignore_bad_parts": {
-      "default": false,
-      "title": "Ps Ignore Bad Parts",
+      "title": "Ps Sort Nets",
       "type": "boolean"
     },
     "ps_sort_parts": {
@@ -2094,45 +2109,15 @@
       "title": "Ps Sort Parts Reverse",
       "type": "boolean"
     },
-    "ps_ignore_disk_ios": {
-      "default": [
-        "^(loop|zram)\\d*$"
-      ],
-      "items": {
-        "type": "string"
-      },
-      "title": "Ps Ignore Disk Ios",
-      "type": "array"
-    },
-    "ps_ignore_no_io_disk": {
-      "default": false,
-      "title": "Ps Ignore No Io Disk",
-      "type": "boolean"
-    },
-    "ps_sort_disk_ios": {
+    "ps_sort_sites": {
       "default": true,
-      "title": "Ps Sort Disk Ios",
+      "title": "Ps Sort Sites",
       "type": "boolean"
     },
-    "ps_ignore_nets": {
-      "default": [
-        "^lo(op)?\\d*$|^(Loopback|本地连接)"
-      ],
-      "items": {
-        "type": "string"
-      },
-      "title": "Ps Ignore Nets",
-      "type": "array"
-    },
-    "ps_ignore_0b_net": {
-      "default": false,
-      "title": "Ps Ignore 0B Net",
-      "type": "boolean"
-    },
-    "ps_sort_nets": {
-      "default": true,
-      "title": "Ps Sort Nets",
-      "type": "boolean"
+    "ps_template": {
+      "default": "default",
+      "title": "Ps Template",
+      "type": "string"
     },
     "ps_test_sites": {
       "default": [
@@ -2153,44 +2138,59 @@
       "title": "Ps Test Sites",
       "type": "array"
     },
-    "ps_sort_sites": {
-      "default": true,
-      "title": "Ps Sort Sites",
-      "type": "boolean"
-    },
     "ps_test_timeout": {
       "default": 5,
       "title": "Ps Test Timeout",
       "type": "integer"
     },
-    "ps_proc_len": {
-      "default": 5,
-      "title": "Ps Proc Len",
-      "type": "integer"
+    "ps_use_env_nick": {
+      "default": false,
+      "title": "Ps Use Env Nick",
+      "type": "boolean"
     },
-    "ps_ignore_procs": {
-      "default": [
-        "^System Idle Process$"
-      ],
+    "schema_output_dir": {
+      "default": "schemas/",
+      "description": "JSON Schema输出目录，默认为`schemas/`",
+      "title": "Schema Output Dir",
+      "type": "string"
+    },
+    "session_expire_timeout": {
+      "default": "PT2M",
+      "description": "等待用户回复的超时时间。\n\n    用法:\n        ```conf\n        SESSION_EXPIRE_TIMEOUT=[-][DD]D[,][HH:MM:]SS[.ffffff]\n        SESSION_EXPIRE_TIMEOUT=[±]P[DD]DT[HH]H[MM]M[SS]S  # ISO 8601\n        ```",
+      "format": "duration",
+      "title": "Session Expire Timeout",
+      "type": "string"
+    },
+    "summary": {
+      "$ref": "#/$defs/kanade_bot__plugins__summary__config__ScopedConfig",
+      "default": {
+        "model": "gpt-5-mini",
+        "provider": null,
+        "system_prompt_file": "Summarizer.md",
+        "bot_name": "宵崎奏",
+        "min_size": 10,
+        "max_size": 2048,
+        "message_records_file": "summary_message_records.json"
+      }
+    },
+    "superusers": {
+      "default": [],
+      "description": "机器人超级用户。\n\n    用法:\n        ```conf\n        SUPERUSERS=[\"12345789\"]\n        ```",
       "items": {
         "type": "string"
       },
-      "title": "Ps Ignore Procs",
-      "type": "array"
+      "title": "Superusers",
+      "type": "array",
+      "uniqueItems": true
     },
-    "ps_proc_sort_by": {
-      "default": "cpu",
-      "enum": [
-        "cpu",
-        "mem"
-      ],
-      "title": "Ps Proc Sort By",
-      "type": "string"
-    },
-    "ps_proc_cpu_max_100p": {
-      "default": false,
-      "title": "Ps Proc Cpu Max 100P",
-      "type": "boolean"
+    "tool": {
+      "$ref": "#/$defs/kanade_bot__plugins__tool__config__ScopedConfig",
+      "default": {
+        "fallback_icon_file": "grass_block.png",
+        "template_file": "mcstatus_template.html",
+        "schedule_configs_file": "schedule_configs.json",
+        "preset_reaction_config_file": "preset_reaction_config.json"
+      }
     },
     "uninfo_cache": {
       "default": true,
@@ -2210,28 +2210,16 @@
       "title": "User Token Prefix",
       "type": "string"
     },
-    "waiter_timeout": {
-      "default": 120,
-      "description": "默认等待超时时间",
-      "title": "Waiter Timeout",
-      "type": "number"
+    "waiter_limited_prompt": {
+      "default": "重试次数已用完，输入失败。",
+      "description": "默认重试次数用完时的提示信息",
+      "title": "Waiter Limited Prompt",
+      "type": "string"
     },
     "waiter_retry_prompt": {
       "default": "输入错误，请重新输入。剩余次数：{count}",
       "description": "默认重试时的提示信息",
       "title": "Waiter Retry Prompt",
-      "type": "string"
-    },
-    "waiter_timeout_prompt": {
-      "default": "等待超时。",
-      "description": "默认超时时的提示信息",
-      "title": "Waiter Timeout Prompt",
-      "type": "string"
-    },
-    "waiter_limited_prompt": {
-      "default": "重试次数已用完，输入失败。",
-      "description": "默认重试次数用完时的提示信息",
-      "title": "Waiter Limited Prompt",
       "type": "string"
     },
     "waiter_suggest_hint": {
@@ -2240,17 +2228,32 @@
       "title": "Waiter Suggest Hint",
       "type": "string"
     },
+    "waiter_suggest_not_in_hint": {
+      "default": "以下为非候选项",
+      "description": "默认非候选项前的提示信息",
+      "title": "Waiter Suggest Not In Hint",
+      "type": "string"
+    },
     "waiter_suggest_sep": {
       "default": "\n",
       "description": "默认建议信息的分隔符",
       "title": "Waiter Suggest Sep",
       "type": "string"
     },
-    "waiter_suggest_not_in_hint": {
-      "default": "以下为非候选项",
-      "description": "默认非候选项前的提示信息",
-      "title": "Waiter Suggest Not In Hint",
+    "waiter_timeout": {
+      "default": 120,
+      "description": "默认等待超时时间",
+      "title": "Waiter Timeout",
+      "type": "number"
+    },
+    "waiter_timeout_prompt": {
+      "default": "等待超时。",
+      "description": "默认超时时的提示信息",
+      "title": "Waiter Timeout Prompt",
       "type": "string"
+    },
+    "watchdog": {
+      "$ref": "#/$defs/scripts__github_watchdog__ScopedConfig"
     },
     "whateat_cd": {
       "default": 10,
@@ -2266,11 +2269,23 @@
       "default": "/home/cola/Projects/Python/kanade-bot/cache/nonebot_plugin_whateat_pic",
       "title": "Whatpic Res Path",
       "type": "string"
+    },
+    "wordle": {
+      "$ref": "#/$defs/kanade_bot__plugins__wordle__config__ScopedConfig",
+      "default": {
+        "default_length": 5,
+        "default_dictionary": "CET4",
+        "min_length": 3,
+        "max_length": 13,
+        "meanings": [
+          "中释"
+        ],
+        "crystal_bonus_map": {},
+        "hinted_crystal_bonus_map": {}
+      }
     }
   },
   "required": [
-    "superusers",
-    "nickname",
     "watchdog"
   ],
   "title": "MergedConfig",
