@@ -5,7 +5,7 @@ from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
-from nonebot.adapters.onebot.v11 import ActionFailed, MessageSegment
+from nonebot.adapters.onebot.v11 import ActionFailed, GroupMessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -13,6 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.adapters.onebot.v11.helpers import Cooldown, CooldownIsolateLevel, autorevoke_send
 from nonebot.params import CommandArg, EventMessage, EventPlainText
+from nonebot.typing import T_State
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
@@ -27,15 +28,19 @@ from .duanzi import (
     parse_duanzi_args,
     remove_duanzi,
 )
+from .duel import create_session, get_session
 from .matcher import (
     add_a_duanzi,
+    agree,
     ciallo,
+    duel_matcher,
     list_duanzi,
     plus_one,
     random_duanzi,
     random_waifu,
     refresh_waifu,
     remove_a_duanzi,
+    shot,
     today_waifu,
 )
 from .waifu import get_compressed_image, query_lolicon_waifus, random_loli_waifu
@@ -317,3 +322,38 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     # 发送混淆图片链接，并在30秒后撤回消息
     obscured_urls = [url.replace(".", "。").replace(":", "：") for url in urls]
     await autorevoke_send(bot, event, "\n\n".join(obscured_urls), revoke_time=30)
+
+
+@duel_matcher.handle()
+async def _(bot: OneBot, event: GroupMessageEvent, state: T_State):
+    duel_user_1: int = state["duel_user_1"]
+    duel_user_2: int = state["duel_user_2"]
+
+    can_duel = await create_session(bot, event.group_id, duel_user_1, duel_user_2)
+    if can_duel:
+        await duel_matcher.finish(
+            MessageSegment.at(duel_user_1)
+            + " 发起了一场决斗，请"
+            + MessageSegment.at(duel_user_2)
+            + " 确认是否参与决斗，如果参与请发送 /同意，否则将自动取消"
+        )
+    else:
+        await duel_matcher.finish("当前群聊已有决斗进行中，请稍后再试")
+
+
+@agree.handle()
+async def _(bot: OneBot, event: GroupMessageEvent):
+    session = await get_session(bot, event.group_id)
+    if session and event.user_id == session.duel_user_2:
+        await session.set_user2_agreed_duel()
+    else:
+        await agree.finish("当前没有决斗进行中，或者你不是被邀请的玩家")
+
+
+@shot.handle()
+async def _(bot: OneBot, event: GroupMessageEvent):
+    session = await get_session(bot, event.group_id)
+    if session:
+        await session.shot(event.user_id)
+    else:
+        await shot.finish("当前没有决斗进行中")
