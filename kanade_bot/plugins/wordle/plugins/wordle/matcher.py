@@ -1,10 +1,6 @@
-from typing import Annotated
-
 from nonebot import on_command, require
-from nonebot.adapters.onebot.v11 import MessageEvent
-from nonebot.params import Depends
 
-from kanade_bot.utils.session import extract_session_info_sync
+from kanade_bot.plugins.wordle.util import SessionId
 
 from .wordle import Wordle
 
@@ -14,13 +10,6 @@ from kanade_bot.plugins.command_counter import register_matcher
 
 games: dict[str, Wordle] = {}
 """正在进行的wordle游戏，key为会话id"""
-
-
-def get_session_id(event: MessageEvent) -> str:
-    return extract_session_info_sync(event).session_id
-
-
-SessionId = Annotated[str, Depends(get_session_id)]
 
 
 def game_is_running(session_id: SessionId) -> bool:

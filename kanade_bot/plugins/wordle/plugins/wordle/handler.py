@@ -8,11 +8,12 @@ from nonebot.matcher import Matcher
 from nonebot.params import CommandArg, RegexDict
 from nonebot.utils import run_sync
 
+from kanade_bot.plugins.wordle.util import GuessResult, SessionId
 from kanade_bot.utils.parse import parse_arg_message
 
 from .config import cfg
-from .matcher import SessionId, dictionaries, games, hint, start_wordle, stop
-from .wordle import DIC_LIST, GuessResult, Wordle
+from .matcher import dictionaries, games, hint, start_wordle, stop
+from .wordle import DIC_LIST, Wordle
 
 increment_crystal_maybe_init = None
 if cfg.crystal_bonus_map:

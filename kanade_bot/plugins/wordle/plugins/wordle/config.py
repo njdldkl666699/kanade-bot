@@ -1,10 +1,16 @@
-from nonebot import get_plugin_config
+from pathlib import Path
+
+from nonebot import get_plugin_config, require
 from pydantic import BaseModel
 
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
+require("nonebot_plugin_localstore")
 
-class ScopedConfig(AttrDocModel):
+from nonebot_plugin_localstore import get_plugin_config_dir
+
+
+class WordleConfig(AttrDocModel):
     default_length: int = 5
     """默认单词长度"""
     default_dictionary: str = "CET4"
@@ -26,9 +32,14 @@ class ScopedConfig(AttrDocModel):
     hinted_crystal_bonus_map: dict[int, int] = {}
     """使用提示后猜出单词获得的水晶奖励"""
 
+    @property
+    def dictionaries_dir_path(self) -> Path:
+        return get_plugin_config_dir()
+
 
 class Config(BaseModel):
-    wordle: ScopedConfig = ScopedConfig()
+    wordle: WordleConfig = WordleConfig()
+    """猜单词配置"""
 
 
 ConfigRegistry.register_config_types(Config)

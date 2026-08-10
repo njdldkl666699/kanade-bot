@@ -1,22 +1,18 @@
 import json
 import random
-from enum import Enum
 from io import BytesIO
 from pathlib import Path
 from typing import ClassVar, Self
 
-from nonebot import require
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from PIL.Image import Image as IMG
 from spellchecker import SpellChecker
 
+from kanade_bot.plugins.wordle.util import GuessResult, load_font, save_png
+
 from .config import cfg
 
-require("nonebot_plugin_localstore")
-
-from nonebot_plugin_localstore import get_plugin_config_dir
-
-words_dir = get_plugin_config_dir()
+words_dir = cfg.dictionaries_dir_path
 
 DIC_LIST = [f.stem for f in words_dir.iterdir() if f.suffix == ".json"]
 
@@ -25,44 +21,6 @@ spell = SpellChecker()
 
 def _legal_word(word: str) -> bool:
     return not spell.unknown((word,))
-
-
-def save_png(frame: IMG) -> BytesIO:
-    output = BytesIO()
-    frame = frame.convert("RGBA")
-    frame.save(output, format="png")
-    return output
-
-
-def _load_font(size: int, *, bold=True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    font_names = (
-        (
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-            "NotoSansCJK-Bold.ttc",
-        )
-        if bold
-        else (
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            "NotoSansCJK-Regular.ttc",
-        )
-    )
-    for font_name in font_names:
-        try:
-            return ImageFont.truetype(font_name, size=size)
-        except OSError:
-            continue
-    return ImageFont.load_default(size=size)
-
-
-class GuessResult(Enum):
-    WIN = 0
-    """猜出正确单词"""
-    LOSS = 1
-    """达到最大可猜次数，未猜出正确单词"""
-    DUPLICATE = 2
-    """单词重复"""
-    ILLEGAL = 3
-    """单词不合法"""
 
 
 Meanings = dict[str, str]
@@ -75,7 +33,7 @@ class Wordle:
     dict_words_cache: ClassVar[dict[Path, dict[int, Words]]] = {}
     """词典数据缓存，格式为 {词典路径: {单词长度: 词典数据}}"""
 
-    letter_font = _load_font(20, bold=True)
+    letter_font = load_font("NotoSansCJK-Bold.ttc", 20)
 
     @classmethod
     def _load_and_cache_dict(cls, dict_name: str) -> dict[int, Words]:

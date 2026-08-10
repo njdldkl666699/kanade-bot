@@ -3,32 +3,36 @@ name = "kanade-bot"
 version = "v5.0.0"
 description = "kanade-bot"
 readme = "README.md"
-requires-python = ">=3.13, <4.0"
+requires-python = ">=3.13"
 dependencies = [
-    "nonebot2[fastapi]>=2.5.0",
-    "nonebot-adapter-onebot @ git+https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git@master",
-    "nonebot-adapter-console>=0.9.0",
-    "nonebot-plugin-apscheduler>=0.5.0",
-    "nonebot-plugin-htmlrender==0.6.7",
-    "nonebot-plugin-localstore>=0.7.4",
-    "nonebot-plugin-datastore>=1.3.1",
-    "nonebot-plugin-orm[default]>=0.8.3",
-    "nonebot-plugin-picstatus-ng>=2.2.5",
-    "nonebot-plugin-whateat-pic>=1.5.9",
-    "nonebot-plugin-wordcloud>=0.10.0",
-    "github-copilot-sdk>=1.0.0",
-    "httpx>=0.28.1",
-    "pydub>=0.25.1",
-    "audioop-lts>=0.2.2",
-    "mcstatus>=13.0.1",
-    "emoji>=2.15.0",
-    "chromadb>=1.5.6",
-    "sentence-transformers>=5.3.0",
-    "openai>=2.41.0",
-    "send2trash>=2.1.0",
-    "pyspellchecker>=0.9.0",
-    "anyconfig>=0.15.1",
+  "anyconfig>=0.15.1",
+  "audioop-lts>=0.2.2",
+  "chromadb>=1.5.6",
+  "emoji>=2.15.0",
+  "github-copilot-sdk>=1.0.0",
+  "httpx>=0.28.1",
+  "mcstatus>=13.0.1",
+  "nonebot-adapter-console>=0.9.0",
+  "nonebot-adapter-onebot @ git+https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git@master",
+  "nonebot-plugin-apscheduler>=0.5.0",
+  "nonebot-plugin-datastore>=1.3.1",
+  "nonebot-plugin-htmlrender==0.6.7",
+  "nonebot-plugin-localstore>=0.7.4",
+  "nonebot-plugin-orm[default]>=0.8.3",
+  "nonebot-plugin-picstatus-ng>=2.2.5",
+  "nonebot-plugin-whateat-pic>=1.5.9",
+  "nonebot-plugin-wordcloud>=0.10.0",
+  "nonebot2[fastapi]>=2.5.0",
+  "openai>=2.41.0",
+  "pydub>=0.25.1",
+  "pypinyin>=0.55.0",
+  "pyspellchecker>=0.9.0",
+  "send2trash>=2.1.0",
+  "sentence-transformers>=5.3.0",
 ]
+
+[dependency-groups]
+dev = ["check-requirements-txt>=1.4.2"]
 
 [tool.nonebot]
 plugin_dirs = ["kanade_bot/plugins"]
@@ -36,10 +40,10 @@ builtin_plugins = ["echo"]
 
 [tool.nonebot.adapters]
 nonebot-adapter-onebot = [
-    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
+  { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
 ]
 nonebot-adapter-console = [
-    { name = "Console", module_name = "nonebot.adapters.console" },
+  { name = "Console", module_name = "nonebot.adapters.console" },
 ]
 "@local" = []
 
@@ -51,9 +55,6 @@ nonebot-plugin-picstatus-ng = ["nonebot_plugin_picstatus_ng"]
 nonebot-plugin-localstore = ["nonebot_plugin_localstore"]
 nonebot-plugin-whateat-pic = ["nonebot_plugin_whateat_pic"]
 nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
-
-[dependency-groups]
-dev = ["check-requirements-txt>=1.4.2"]
 
 [tool.ruff.lint]
 ignore = ["B008", "RUF012"]
