@@ -299,9 +299,15 @@ class Mindle:
             return GuessResult.DUPLICATE
         self.guessed_item_ids.append(recipe.result_id)
         self.last_recipe = recipe
-        self.last_states = compare_ingredients(recipe.ingredients, self.answer.ingredients)
         if recipe.result_id == self.answer.result_id:
+            # One item can have multiple recipes. A correct item guess should
+            # still render every slot as correct when its recipe differs from
+            # the randomly selected answer recipe.
+            self.last_states = (GuessState.CORRECT,) * len(recipe.ingredients)
             return GuessResult.WIN
+        self.last_states = compare_ingredients(
+            recipe.ingredients, self.answer.ingredients
+        )
         if len(self.guessed_item_ids) >= self.max_attempts:
             return GuessResult.LOSS
         return None

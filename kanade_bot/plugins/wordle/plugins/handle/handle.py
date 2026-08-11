@@ -95,7 +95,7 @@ ENHANCED_COLOR = ColorGroup("#ffffff", "#f7f8f9", "#5ba554", "#ff46ff", "#b4b8be
 
 
 class Handle:
-    font_char = load_font("NotoSansCJK-Regular.ttc", 60)
+    font_char = load_font("NotoSerifSC-Regular.ttf", 60)
     """汉字字体"""
     font_pinyin = load_font("NotoSansMono-Regular.ttf", 30)
     """拼音字体"""

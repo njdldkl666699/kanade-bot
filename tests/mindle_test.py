@@ -19,10 +19,12 @@ from kanade_bot.plugins.wordle.plugins.mindle.mindle import (
     GuessState,
     Ingredient,
     Mindle,
+    Recipe,
     RecipeBook,
     compare_ingredients,
     parse_recipe,
 )
+from kanade_bot.plugins.wordle.util import GuessResult
 
 
 class MindleTest(unittest.TestCase):
@@ -101,6 +103,34 @@ class MindleTest(unittest.TestCase):
             self.assertEqual(rendered.size, (704, 332))
             self.assertEqual(rendered.mode, "RGBA")
         self.assertEqual(Mindle.OUTPUT_SIZE, Mindle.SLOT_SIZE)
+
+    def test_winning_alternate_recipe_renders_every_slot_correct(self):
+        answer = Recipe(
+            "answer_recipe",
+            "shared_result",
+            "相同产物",
+            (Ingredient(("answer_item",)),) * 9,
+        )
+        guess = Recipe(
+            "alternate_recipe",
+            "shared_result",
+            "相同产物",
+            (Ingredient(("guess_item",)),) * 9,
+        )
+        game = Mindle(answer, self.book)
+
+        self.assertEqual(game.guess(guess), GuessResult.WIN)
+        self.assertEqual(game.last_states, (GuessState.CORRECT,) * 9)
+        with Image.open(game.draw(game.answer)) as rendered:
+            for index in range(9):
+                row, col = divmod(index, 3)
+                pixel = (
+                    (Mindle.SLOT_ORIGIN[0] + col * Mindle.SLOT_STEP) * Mindle.SCALE,
+                    (Mindle.SLOT_ORIGIN[1] + row * Mindle.SLOT_STEP) * Mindle.SCALE,
+                )
+                self.assertEqual(
+                    rendered.getpixel(pixel), Mindle.COLORS[GuessState.CORRECT]
+                )
 
     def test_hint_contains_name_id_and_image(self):
         answer = self.book.get("橡木告示牌")
