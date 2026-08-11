@@ -125,13 +125,16 @@ async def _(
         message += "恭喜"
         message += MessageSegment.at(user_id) if isinstance(event, GroupMessageEvent) else "你"
         message += " 猜出了配方！"
+        message += f"\n{game.result}\n"
+        message += MessageSegment.image(await run_sync(game.draw)(game.answer))
+
         if increment_crystal_maybe_init and cfg.crystal_bonus > 0:
             await increment_crystal_maybe_init(matcher, "onebot", user_id, cfg.crystal_bonus)
-            message += f"\n你获得了 {cfg.crystal_bonus} 水晶奖励~"
+        message += f"\n你获得了 {cfg.crystal_bonus} 水晶奖励~"
     else:
         message += "很遗憾，没有人猜出来呢"
-    message += f"\n{game.result}\n"
-    message += MessageSegment.image(await run_sync(game.draw)(game.answer))
+        message += f"\n{game.result}\n"
+        message += MessageSegment.image(await run_sync(game.draw)(game.answer, states=()))
     await matcher.finish(message)
 
 
@@ -157,5 +160,5 @@ async def _(matcher: Matcher, session_id: SessionId):
     message = Message()
     message += "游戏已结束\n"
     message += f"{game.result}\n"
-    message += MessageSegment.image(await run_sync(game.draw)(game.answer))
+    message += MessageSegment.image(await run_sync(game.draw)(game.answer, states=()))
     await matcher.finish(message)

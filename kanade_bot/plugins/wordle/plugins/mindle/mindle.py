@@ -238,11 +238,9 @@ class RecipeBook:
                 name,
             ),
         )
-        return [
-            name
-            for name in ranked
-            if SequenceMatcher(None, query, name).ratio() >= 0.35
-        ][:limit]
+        return [name for name in ranked if SequenceMatcher(None, query, name).ratio() >= 0.35][
+            :limit
+        ]
 
     def texture_path(self, item_id: str) -> Path | None:
         direct = self.items_dir / f"{_strip_namespace(item_id)}.png"
@@ -301,9 +299,7 @@ class Mindle:
             return GuessResult.DUPLICATE
         self.guessed_item_ids.append(recipe.result_id)
         self.last_recipe = recipe
-        self.last_states = compare_ingredients(
-            recipe.ingredients, self.answer.ingredients
-        )
+        self.last_states = compare_ingredients(recipe.ingredients, self.answer.ingredients)
         if recipe.result_id == self.answer.result_id:
             return GuessResult.WIN
         if len(self.guessed_item_ids) >= self.max_attempts:
@@ -320,9 +316,7 @@ class Mindle:
         )
         if not item_ids:
             return None
-        unrevealed = [
-            item_id for item_id in item_ids if item_id not in self.hinted_item_ids
-        ]
+        unrevealed = [item_id for item_id in item_ids if item_id not in self.hinted_item_ids]
         item_id = random.choice(unrevealed or item_ids)
         image_path = self.book.texture_path(item_id)
         if image_path is None:
@@ -356,8 +350,9 @@ class Mindle:
                 Image.Resampling.NEAREST,
             )
         draw = ImageDraw.Draw(canvas)
+        if states is None:
+            states = self.last_states
         recipe = recipe or self.last_recipe
-        states = states or self.last_states
         if recipe is None:
             return save_png(canvas)
 
@@ -366,10 +361,8 @@ class Mindle:
             x = (self.SLOT_ORIGIN[0] + col * self.SLOT_STEP) * self.SCALE
             y = (self.SLOT_ORIGIN[1] + row * self.SLOT_STEP) * self.SCALE
             size = self.SLOT_SIZE * self.SCALE
-            if states is not None:
-                draw.rectangle(
-                    (x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]]
-                )
+            if states:
+                draw.rectangle((x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]])
             if not ingredient.is_air:
                 self._paste_item(canvas, ingredient.options[0], (x, y, size))
 
