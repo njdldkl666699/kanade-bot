@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal, override
 
+from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import Bot, MessageSegment, NoticeEvent
 
 
@@ -55,6 +56,29 @@ async def get_onebot_info(bot: Bot) -> tuple[int, str]:
     bot_info = await bot.get_stranger_info(user_id=bot_id)
     bot_nickname: str = bot_info.get("nickname", "宵崎奏")
     return bot_id, bot_nickname
+
+
+async def get_image_local(bot: Bot, file: str) -> Path:
+    """调用bot.get_image()获取file对应的本地图片路径
+
+    部分协议实现可能返回网络路径，此函数会将其下载到本地缓存目录并返回本地路径
+    """
+    from kanade_bot.utils.common import HTTPX_CLIENT
+    from kanade_bot.utils.schema import KanadeConfig
+
+    r = await bot.get_image(file=file)
+    file = r["file"]
+    if not file.startswith(("http://", "https://")):
+        return Path(file)
+
+    # 下载图片到本地缓存目录
+    cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
+    file_name = file.split("/")[-1]
+    pic_path = cache_dir / file_name
+    r = await HTTPX_CLIENT.get(file)
+    r.raise_for_status()
+    pic_path.write_bytes(r.content)
+    return pic_path
 
 
 class BotOfflineNoticeEvent(NoticeEvent):

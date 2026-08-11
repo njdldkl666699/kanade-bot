@@ -13,6 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage
 
 from kanade_bot.utils.common import get_platform_type
+from kanade_bot.utils.onebot11 import get_image_local
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
@@ -138,13 +139,13 @@ async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Messa
         await add_meme.finish()
 
     # 下载图片
-    r = await bot.get_image(file=image_file)
+    local_path = await get_image_local(bot, image_file)
     # 确保表情包目录存在
     meme_path = cfg.memes_dir_path / name
     meme_path.mkdir(parents=True, exist_ok=True)
     # 保存图片到表情包目录
     image_path = meme_path / f"{uuid.uuid4()}.png"
-    shutil.copy(r["file"], image_path)
+    shutil.copy(local_path, image_path)
 
     # 将表情包信息添加（或更新）到配置中
     memes = chat_configs.instance.memes

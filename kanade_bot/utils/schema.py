@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
 from nonebot.config import Env
+from nonebot_plugin_localstore import BASE_CONFIG_DIR
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
 
@@ -19,23 +20,32 @@ class AttrDocModel(BaseModel):
     model_config = {"use_attribute_docstrings": True}
 
 
-class SchemaConfig(AttrDocModel):
-    """JSON Schema生成配置"""
+class KanadeConfig(AttrDocModel):
+    """宵崎奏Bot额外全局配置"""
 
     generate_schemas: bool = False
     """是否生成JSON Schema文件"""
     schema_output_dir: str = "schemas/"
-    """JSON Schema输出目录，默认为`schemas/`"""
+    """JSON Schema输出目录"""
+    image_cache_dir: str = "kanade_images/"
+    """图片缓存目录"""
 
     @property
     def schema_output_dir_path(self) -> Path:
         """JSON Schema输出目录路径"""
         return Path(self.schema_output_dir)
 
+    @property
+    def image_cache_dir_path(self) -> Path:
+        """图片缓存目录路径"""
+        p = BASE_CONFIG_DIR / self.image_cache_dir
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
 
 def generate_schema[T: BaseModel](cls: type[T]):
     """生成JSON Schema文件"""
-    cfg = get_plugin_config(SchemaConfig)
+    cfg = get_plugin_config(KanadeConfig)
     if not cfg.generate_schemas:
         return
 
@@ -84,7 +94,7 @@ class ConfigRegistry:
     config_types: ClassVar[list[type[BaseModel]]] = [
         Env,
         NoneBotConfig,
-        SchemaConfig,
+        KanadeConfig,
         WatchdogConfig,
     ]
     """插件配置类型注册表"""

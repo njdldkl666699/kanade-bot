@@ -7,7 +7,7 @@ from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
 require("nonebot_plugin_localstore")
 
-from nonebot_plugin_localstore import get_plugin_data_file
+from nonebot_plugin_localstore import get_plugin_config_file
 
 
 class MindleConfig(AttrDocModel):
@@ -27,19 +27,19 @@ class MindleConfig(AttrDocModel):
 
     @property
     def background_image_path(self) -> Path:
-        return get_plugin_data_file(self.background_image)
+        return get_plugin_config_file(self.background_image)
 
     @property
     def lang_file_path(self) -> Path:
-        return get_plugin_data_file(self.lang_file)
+        return get_plugin_config_file(self.lang_file)
 
     @property
     def render_items_dir_path(self) -> Path:
-        return get_plugin_data_file(self.render_items_dir)
+        return get_plugin_config_file(self.render_items_dir)
 
     @property
     def recipes_dir_path(self) -> Path:
-        return get_plugin_data_file(self.recipes_dir)
+        return get_plugin_config_file(self.recipes_dir)
 
 
 class Config(BaseModel):

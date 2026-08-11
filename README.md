@@ -19,6 +19,14 @@
 3. 创建`config-{环境}.yaml`配置文件，补全`config.yaml`和`config-{环境}.yaml`中的配置项；
 4. 运行机器人：`nb run`。
 
+### 依赖
+
+本项目使用可选依赖组`rag`来支持RAG功能，如果需要使用RAG功能，请安装依赖：
+
+```bash
+uv sync --with rag
+```
+
 ### 配置
 
 `config.yaml` 顶部已声明 `$schema: ./schemas/MergedConfig.json`，在支持 YAML Schema 的编辑器（如 VS Code + YAML 插件）中可自动补全全部配置项。

@@ -1797,6 +1797,12 @@
       "description": "Playwright浏览器代理的绕过地址。",
       "title": "Htmlrender Proxy Host Bypass"
     },
+    "image_cache_dir": {
+      "default": "kanade_images/",
+      "description": "图片缓存目录",
+      "title": "Image Cache Dir",
+      "type": "string"
+    },
     "localstore_cache_dir": {
       "anyOf": [
         {
@@ -2254,7 +2260,7 @@
     },
     "schema_output_dir": {
       "default": "schemas/",
-      "description": "JSON Schema输出目录，默认为`schemas/`",
+      "description": "JSON Schema输出目录",
       "title": "Schema Output Dir",
       "type": "string"
     },

@@ -21,11 +21,15 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.copilot import copilot
 from .ban import is_banned
 from .config import cfg, chat_configs
-from .rag import query
 
 require("crystal")
 
 from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
+
+if cfg.rag.enabled:
+    from .rag import query
+else:
+    query = lambda query_str: None
 
 
 def _send_fail_message(matcher: type[Matcher]):

@@ -15,6 +15,7 @@ from nonebot.exception import NetworkError
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 
+from .onebot11 import get_image_local
 from .session import extract_session_info
 
 
@@ -190,10 +191,10 @@ async def parse_onebot_message_for_ai(
         elif bot:
             # 普通消息中的图片，使用bot.get_image获取图片附件
             try:
-                r = await bot.get_image(file=file)
+                local_path = await get_image_local(bot, file)
                 attachment = {
                     "type": "file",
-                    "path": r["file"],
+                    "path": str(local_path),
                     "displayName": file or "image.png",
                 }
             except NetworkError as e:

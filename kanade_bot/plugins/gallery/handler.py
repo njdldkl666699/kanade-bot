@@ -2,7 +2,7 @@ import random
 import re
 from pathlib import Path
 
-from nonebot import logger
+from nonebot import get_plugin_config, logger
 from nonebot.adapters import Message
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -14,8 +14,9 @@ from nonebot.typing import T_State
 from send2trash import send2trash
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_image_local
 from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
+from kanade_bot.utils.schema import KanadeConfig
 
 from .config import cfg, gallery_name_data
 from .gallery import (
@@ -221,7 +222,7 @@ async def _get_image_from_url(url: str) -> Path | None:
         return None
 
     # 将图片保存到缓存目录
-    cache_dir = cfg.cache_dir_path
+    cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
     file_name = url.split("/")[-1]
     pic_path = cache_dir / file_name
     pic_path.write_bytes(r.content)
@@ -250,8 +251,7 @@ async def _get_pictures_from_message(
                 # 普通消息中的图片，使用bot.get_image获取图片附件
                 file: str = seg.data["file"]
                 try:
-                    r = await bot.get_image(file=file)
-                    p = Path(r["file"])
+                    p = await get_image_local(bot, file)
                 except NetworkError as e:
                     logger.warning(f"bot.get_image获取图片附件失败: {file}, {e}")
                     # 回退到使用http client获取图片附件

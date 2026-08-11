@@ -12,6 +12,7 @@ from nonebot.params import CommandArg
 from PIL import Image, UnidentifiedImageError
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.onebot11 import get_image_local
 
 from .matcher import back, fan, flow, mid, mirror, rotate, speed
 
@@ -57,13 +58,9 @@ async def _get_reply_image(bot: Bot, event: MessageEvent) -> bytes:
     # 也能避免再次从公网下载已经落盘的图片。
     if file:
         try:
-            r = await bot.get_image(file=file)
-            local_file = r["file"]
-            url = r.get("url") or url
-            if local_file:
-                path = Path(local_file)
-                if path.is_file():
-                    return await asyncio.to_thread(path.read_bytes)
+            path = await get_image_local(bot, file)
+            if path.is_file():
+                return await asyncio.to_thread(path.read_bytes)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"imgtool 调用 get_image 失败，将尝试直接读取图片：{e}")
 
