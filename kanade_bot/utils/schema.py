@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
 from nonebot.config import Env
-from nonebot_plugin_localstore import BASE_CONFIG_DIR
+from nonebot_plugin_localstore import BASE_CACHE_DIR
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
 
@@ -38,7 +38,7 @@ class KanadeConfig(AttrDocModel):
     @property
     def image_cache_dir_path(self) -> Path:
         """图片缓存目录路径"""
-        p = BASE_CONFIG_DIR / self.image_cache_dir
+        p = BASE_CACHE_DIR / self.image_cache_dir
         p.mkdir(parents=True, exist_ok=True)
         return p
 

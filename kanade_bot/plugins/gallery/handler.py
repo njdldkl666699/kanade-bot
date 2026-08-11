@@ -215,7 +215,7 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     await get_picture.finish(message)
 
 
-async def _get_image_from_url(url: str) -> Path | None:
+async def _get_image_from_url(url: str, file: str) -> Path | None:
     """从URL获取图片文件，返回图片文件路径"""
     r = await HTTPX_CLIENT.get(url)
     if r.status_code != 200:
@@ -244,18 +244,18 @@ async def _get_pictures_from_message(
     for seg in message:
         if seg.type == "image":
             p: Path | None = None
+            file: str = seg.data["file"]
             if forward_image:
                 # 转发消息中的图片，直接使用http client获取图片附件
-                p = await _get_image_from_url(seg.data["url"])
+                p = await _get_image_from_url(seg.data["url"], file)
             else:
                 # 普通消息中的图片，使用bot.get_image获取图片附件
-                file: str = seg.data["file"]
                 try:
                     p = await get_image_local(bot, file)
                 except NetworkError as e:
                     logger.warning(f"bot.get_image获取图片附件失败: {file}, {e}")
                     # 回退到使用http client获取图片附件
-                    p = await _get_image_from_url(seg.data["url"])
+                    p = await _get_image_from_url(seg.data["url"], file)
             if p:
                 pictures.append(p)
             else:

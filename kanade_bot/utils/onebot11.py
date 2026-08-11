@@ -67,15 +67,14 @@ async def get_image_local(bot: Bot, file: str) -> Path:
     from kanade_bot.utils.schema import KanadeConfig
 
     r = await bot.get_image(file=file)
-    file = r["file"]
-    if not file.startswith(("http://", "https://")):
-        return Path(file)
+    file_url = r["file"]
+    if not file_url.startswith(("http://", "https://")):
+        return Path(file_url)
 
     # 下载图片到本地缓存目录
     cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
-    file_name = file.split("/")[-1]
-    pic_path = cache_dir / file_name
-    r = await HTTPX_CLIENT.get(file)
+    pic_path = cache_dir / file
+    r = await HTTPX_CLIENT.get(file_url)
     r.raise_for_status()
     pic_path.write_bytes(r.content)
     return pic_path
