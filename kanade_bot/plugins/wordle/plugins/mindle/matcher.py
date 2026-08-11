@@ -36,15 +36,6 @@ guess_item = on_command(
     block=True,
 )
 
-stop = on_command(
-    "mindle_stop",
-    aliases={"结束猜配方", "结束"},
-    rule=game_is_running,
-    priority=2,
-    block=True,
-)
-register_matcher(stop, "结束猜配方")
-
 hint = on_command(
     "mindle_hint",
     aliases={"猜配方提示", "提示"},
@@ -53,3 +44,12 @@ hint = on_command(
     block=True,
 )
 register_matcher(hint, "猜配方提示")
+
+stop = on_command(
+    "mindle_stop",
+    aliases={"结束猜配方", "结束"},
+    rule=game_is_running,
+    priority=2,
+    block=True,
+)
+register_matcher(stop, "结束猜配方")
