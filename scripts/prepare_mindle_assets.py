@@ -20,9 +20,7 @@ class TagResolver:
             return self.cache[tag_id]
         if tag_id in stack:
             raise ValueError(f"标签循环引用：{' -> '.join((*stack, tag_id))}")
-        namespace, name = (
-            tag_id.split(":", 1) if ":" in tag_id else ("minecraft", tag_id)
-        )
+        namespace, name = tag_id.split(":", 1) if ":" in tag_id else ("minecraft", tag_id)
         path = self.data_root / namespace / "tags" / "item" / f"{name}.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         values: list[str] = []
@@ -57,26 +55,36 @@ def expand_ingredient(value: Any, resolver: TagResolver) -> Any:
 
 def collect_item_ids(value: Any, output: set[str]):
     if isinstance(value, str):
-        output.add(value.split(":", 1)[-1])
+        output.add(value)
     elif isinstance(value, list):
         for item in value:
             collect_item_ids(item, output)
 
 
+def build_name_map(lang: dict) -> dict[str, str]:
+    """从语言文件构建物品 ID（无命名空间）到中文名的映射，item 优先于 block，
+    且优先使用带 .new 后缀的新版显示名（如旗帜图案、锻造模板）。"""
+    names: dict[str, str] = {}
+    for prefix in ("item.minecraft.", "block.minecraft."):
+        for key, value in lang.items():
+            if not isinstance(value, str) or not key.startswith(prefix):
+                continue
+            name = key[len(prefix) :]
+            if name.endswith(".new"):
+                names[name[:-4]] = value
+            else:
+                names.setdefault(name, value)
+    return names
+
+
 def prepare(source: Path, target: Path):
     recipes_source = source / "data" / "minecraft" / "recipe"
-    textures_source = source / "assets" / "minecraft" / "textures" / "render" / "items"
+    rendered_source = source / "simple-image-renderer"
     lang_source = source / "assets" / "minecraft" / "lang" / "zh_cn.json"
     gui_source = (
-        source
-        / "assets"
-        / "minecraft"
-        / "textures"
-        / "gui"
-        / "container"
-        / "crafting_table.png"
+        source / "assets" / "minecraft" / "textures" / "gui" / "container" / "crafting_table.png"
     )
-    for path in (recipes_source, textures_source, lang_source, gui_source):
+    for path in (recipes_source, rendered_source, lang_source, gui_source):
         if not path.exists():
             raise FileNotFoundError(path)
 
@@ -94,8 +102,7 @@ def prepare(source: Path, target: Path):
             continue
         if data["type"] == "minecraft:crafting_shaped":
             data["key"] = {
-                symbol: expand_ingredient(value, resolver)
-                for symbol, value in data["key"].items()
+                symbol: expand_ingredient(value, resolver) for symbol, value in data["key"].items()
             }
             for value in data["key"].values():
                 collect_item_ids(value, item_ids)
@@ -111,22 +118,17 @@ def prepare(source: Path, target: Path):
         )
         recipe_count += 1
 
+    lang = json.loads(lang_source.read_text(encoding="utf-8"))
+    item_names = build_name_map(lang)
     missing: list[str] = []
     copied = 0
     for item_id in sorted(item_ids):
-        direct = textures_source / f"{item_id}.png"
-        state_dir = textures_source / item_id
-        if direct.is_file():
-            source_file = direct
-        elif state_dir.is_dir():
-            candidates = sorted(state_dir.rglob("*.png"), key=lambda path: path.name)
-            source_file = candidates[0] if candidates else None
-        else:
-            source_file = None
-        if source_file is None:
+        name = item_names.get(item_id.split(":", 1)[-1])
+        source_file = rendered_source / f"{name}.png" if name else None
+        if source_file is None or not source_file.is_file():
             missing.append(item_id)
             continue
-        shutil.copy2(source_file, items_target / f"{item_id}.png")
+        shutil.copy2(source_file, items_target / f"{item_id.split(':', 1)[-1]}.png")
         copied += 1
 
     shutil.copy2(lang_source, target / "zh_cn.json")
@@ -140,9 +142,7 @@ def prepare(source: Path, target: Path):
 def main():
     parser = argparse.ArgumentParser(description="准备 mindle 所需的 Minecraft 资源")
     parser.add_argument("source", type=Path, nargs="?", default=Path("cache/26.2"))
-    parser.add_argument(
-        "target", type=Path, nargs="?", default=Path("data/wordle/mindle")
-    )
+    parser.add_argument("target", type=Path, nargs="?", default=Path("data/wordle/mindle"))
     args = parser.parse_args()
     prepare(args.source, args.target)
 
