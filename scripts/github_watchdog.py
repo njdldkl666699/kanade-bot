@@ -5,14 +5,18 @@ import os
 import signal
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from httpx import AsyncClient, HTTPStatusError, RequestError, Timeout
 from loguru import logger
+from nonebot.compat import model_dump, type_validate_python
+from nonebot.config import DOTENV_TYPE, BaseSettings, Env
+from nonebot.config import Config as NoneBotConfig
 from pydantic import BaseModel
 
-from scripts.util import get_config
+from scripts.util import load_configs
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).parent.parent
 
 
 class ScopedConfig(BaseModel):
@@ -397,9 +401,34 @@ class WatchdogService:
         await self._core.start()
 
 
+def _get_watchdog_config(
+    *,
+    env: Env = Env(),
+    _env_file: DOTENV_TYPE | None = None,
+    **kwargs: Any,
+) -> ScopedConfig:
+    _env_file = _env_file or f".env.{env.environment}"
+    config = NoneBotConfig(
+        **kwargs,
+        _env_file=((".env", _env_file) if isinstance(_env_file, (str, os.PathLike)) else _env_file),
+    )
+    cfg = type_validate_python(
+        Config,
+        BaseSettings._settings_build_values(
+            Config,
+            model_dump(config),
+            env_file=config._env_file,
+            env_file_encoding=config._env_file_encoding,
+            env_nested_delimiter=config._env_nested_delimiter,
+        ),
+    )
+    return cfg.watchdog
+
+
 async def main() -> None:
-    cfg = get_config(Config).watchdog
-    await WatchdogService(cfg).run()
+    env, configs = load_configs(ROOT_DIR)
+    watchdog_cfg = _get_watchdog_config(env=env, **configs)
+    await WatchdogService(watchdog_cfg).run()
 
 
 if __name__ == "__main__":

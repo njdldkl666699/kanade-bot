@@ -3,55 +3,17 @@ import re
 from pathlib import Path
 from typing import Any
 
-import anyconfig
 import nonebot
 from nonebot import logger
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 from nonebot.compat import model_dump
 from nonebot.config import DOTENV_TYPE, Config, Env
-from nonebot.utils import deep_update, escape_tag
+from nonebot.utils import escape_tag
 
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
-
-
-def load_configs(stem: str = "config", suffix: str = ".yaml") -> tuple[Env, dict[str, Any]]:
-    """加载配置文件，并根据environment字段加载对应的环境配置
-
-    Args:
-        stem: 配置文件名的前缀，默认为"config"
-        suffix: 配置文件名的后缀，默认为".yaml"
-
-    Returns:
-        env: 环境对象
-        configs: 合并后的配置字典
-
-    Raises:
-        FileNotFoundError: 配置文件不存在
-        TypeError: 配置文件解析结果不是字典类型
-    """
-    WORKING_DIR = Path(__file__).parent
-    path = WORKING_DIR / f"{stem}{suffix}"
-    if not path.exists():
-        raise FileNotFoundError(f"配置文件 {path} 不存在")
-
-    configs = anyconfig.load(path)
-    if not isinstance(configs, dict):
-        raise TypeError(f"配置文件 {path} 解析结果不是字典类型: {type(configs)}")
-
-    if environment := configs.get("environment"):
-        env = Env(environment=environment)
-    else:
-        env = Env()
-
-    env_config_path = WORKING_DIR / f"{stem}-{env.environment}{suffix}"
-    env_configs = anyconfig.load(env_config_path)
-    if not isinstance(env_configs, dict):
-        raise TypeError(f"环境配置文件 {env_config_path} 解析结果不是字典类型: {type(env_configs)}")
-
-    # 递归（深度）合并字典
-    return env, deep_update(configs, env_configs)
+from scripts.util import load_configs
 
 
 def init_nonebot(
@@ -234,7 +196,7 @@ def register_other_configs_and_generate_schema():
 
 if __name__ == "__main__":
     print(get_kanade())
-    env, configs = load_configs()
+    env, configs = load_configs(Path(__file__).parent)
     init_nonebot(env=env, **configs)
     register_adapters_and_load_plugins()
     patch_foreign_plugins()

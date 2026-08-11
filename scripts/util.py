@@ -1,37 +1,48 @@
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import Any
 
-from nonebot.compat import PYDANTIC_V2, model_dump, type_validate_python
-from nonebot.config import DOTENV_TYPE, BaseSettings, SettingsConfig
-from nonebot.plugin import C
-
-
-class Config(BaseSettings):
-    """配置类，继承自BaseSettings，可以在脚本中使用这个类来加载环境变量"""
-
-    if TYPE_CHECKING:
-        _env_file: DOTENV_TYPE | None = ".env", ".env.prod"
-
-    if PYDANTIC_V2:  # pragma: pydantic-v2
-        model_config = SettingsConfig(env_file=(".env", ".env.prod"))  # pyright: ignore[reportCallIssue]
-    else:  # pragma: pydantic-v1
-
-        class Config(SettingsConfig):  # pyright: ignore[reportIncompatibleVariableOverride]
-            env_file = ".env", ".env.prod"
+import anyconfig
+from nonebot.config import Env
+from nonebot.utils import deep_update
 
 
-global_config = Config()
-"""全局配置对象，加载了环境变量，可用使用get_config函数从这个对象中获取脚本需要的配置项。"""
+def load_configs(
+    working_dir: Path,
+    stem: str = "config",
+    suffix: str = ".yaml",
+) -> tuple[Env, dict[str, Any]]:
+    """加载配置文件，并根据environment字段加载对应的环境配置
 
+    Args:
+        working_dir: 配置文件所在的工作目录
+        stem: 配置文件名的前缀，默认为"config"
+        suffix: 配置文件名的后缀，默认为".yaml"
 
-def get_config(config: type[C]) -> C:
-    """从全局配置获取当前脚本需要的配置项。"""
-    return type_validate_python(
-        config,
-        BaseSettings._settings_build_values(
-            config,
-            model_dump(global_config),
-            env_file=global_config._env_file,
-            env_file_encoding=global_config._env_file_encoding,
-            env_nested_delimiter=global_config._env_nested_delimiter,
-        ),
-    )
+    Returns:
+        env: 环境对象
+        configs: 合并后的配置字典
+
+    Raises:
+        FileNotFoundError: 配置文件不存在
+        TypeError: 配置文件解析结果不是字典类型
+    """
+    path = working_dir / f"{stem}{suffix}"
+    if not path.exists():
+        raise FileNotFoundError(f"配置文件 {path} 不存在")
+
+    configs = anyconfig.load(path)
+    if not isinstance(configs, dict):
+        raise TypeError(f"配置文件 {path} 解析结果不是字典类型: {type(configs)}")
+
+    if environment := configs.get("environment"):
+        env = Env(environment=environment)
+    else:
+        env = Env()
+
+    env_config_path = working_dir / f"{stem}-{env.environment}{suffix}"
+    env_configs = anyconfig.load(env_config_path)
+    if not isinstance(env_configs, dict):
+        raise TypeError(f"环境配置文件 {env_config_path} 解析结果不是字典类型: {type(env_configs)}")
+
+    # 递归（深度）合并字典
+    return env, deep_update(configs, env_configs)
