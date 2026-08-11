@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "G": "minecraft:glass",
+    "Q": "minecraft:quartz",
+    "W": [
+      "minecraft:oak_slab",
+      "minecraft:spruce_slab",
+      "minecraft:birch_slab",
+      "minecraft:jungle_slab",
+      "minecraft:acacia_slab",
+      "minecraft:dark_oak_slab",
+      "minecraft:pale_oak_slab",
+      "minecraft:crimson_slab",
+      "minecraft:warped_slab",
+      "minecraft:mangrove_slab",
+      "minecraft:bamboo_slab",
+      "minecraft:cherry_slab"
+    ]
+  },
+  "pattern": [
+    "GGG",
+    "QQQ",
+    "WWW"
+  ],
+  "result": {
+    "id": "minecraft:daylight_detector"
+  }
+}

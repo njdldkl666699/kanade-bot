@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "group": "planks",
+  "ingredients": [
+    [
+      "minecraft:crimson_stem",
+      "minecraft:stripped_crimson_stem",
+      "minecraft:crimson_hyphae",
+      "minecraft:stripped_crimson_hyphae"
+    ]
+  ],
+  "result": {
+    "count": 4,
+    "id": "minecraft:crimson_planks"
+  }
+}

@@ -71,6 +71,43 @@
       "title": "CompConfig",
       "type": "object"
     },
+    "HandleConfig": {
+      "properties": {
+        "strict_mode": {
+          "default": false,
+          "description": "是否启用严格模式，开启后猜测的短语必须是成语",
+          "title": "Strict Mode",
+          "type": "boolean"
+        },
+        "color_enhance": {
+          "default": false,
+          "description": "是否启用色彩增强模式",
+          "title": "Color Enhance",
+          "type": "boolean"
+        },
+        "crystal_bonus": {
+          "default": 0,
+          "description": "猜出成语后获得的水晶奖励，若为0则不启用水晶奖励功能",
+          "minimum": 0,
+          "title": "Crystal Bonus",
+          "type": "integer"
+        },
+        "idiom_file": {
+          "default": "idioms.txt",
+          "description": "成语文件名",
+          "title": "Idiom File",
+          "type": "string"
+        },
+        "answer_file": {
+          "default": "answers.json",
+          "description": "成语答案文件名，包含可猜的成语及其释义",
+          "title": "Answer File",
+          "type": "string"
+        }
+      },
+      "title": "HandleConfig",
+      "type": "object"
+    },
     "ImageCaptionConfig": {
       "description": "图片转述模型配置",
       "properties": {
@@ -260,6 +297,50 @@
         }
       },
       "title": "MCPStdioServerConfig",
+      "type": "object"
+    },
+    "MindleConfig": {
+      "properties": {
+        "max_attempts": {
+          "default": 10,
+          "description": "最大尝试次数",
+          "exclusiveMinimum": 0,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "crystal_bonus": {
+          "default": 0,
+          "description": "猜出配方后的水晶奖励，若为 0 则不启用水晶奖励功能",
+          "minimum": 0,
+          "title": "Crystal Bonus",
+          "type": "integer"
+        },
+        "background_image": {
+          "default": "background.png",
+          "description": "工作台背景图片文件名",
+          "title": "Background Image",
+          "type": "string"
+        },
+        "lang_file": {
+          "default": "zh_cn.json",
+          "description": "Minecraft 中文语言文件名",
+          "title": "Lang File",
+          "type": "string"
+        },
+        "render_items_dir": {
+          "default": "items/",
+          "description": "渲染物品贴图目录名",
+          "title": "Render Items Dir",
+          "type": "string"
+        },
+        "recipes_dir": {
+          "default": "recipe/",
+          "description": "Minecraft 配方数据目录名",
+          "title": "Recipes Dir",
+          "type": "string"
+        }
+      },
+      "title": "MindleConfig",
       "type": "object"
     },
     "ProviderConfig": {
@@ -549,6 +630,66 @@
         "url"
       ],
       "title": "TestSiteCfg",
+      "type": "object"
+    },
+    "WordleConfig": {
+      "properties": {
+        "default_length": {
+          "default": 5,
+          "description": "默认单词长度",
+          "title": "Default Length",
+          "type": "integer"
+        },
+        "default_dictionary": {
+          "default": "CET4",
+          "description": "默认词典",
+          "title": "Default Dictionary",
+          "type": "string"
+        },
+        "min_length": {
+          "default": 3,
+          "description": "单词最小长度",
+          "title": "Min Length",
+          "type": "integer"
+        },
+        "max_length": {
+          "default": 13,
+          "description": "单词最大长度",
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "meanings": {
+          "default": [
+            "中释"
+          ],
+          "description": "单词释义类型，根据数据源可以选择多种释义类型",
+          "items": {
+            "type": "string"
+          },
+          "title": "Meanings",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "crystal_bonus_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "description": "猜出单词后获得的水晶奖励，key为单词长度，value为奖励水晶数。\n\n如果未配置或配置为空字典，则不启用水晶奖励功能。",
+          "title": "Crystal Bonus Map",
+          "type": "object"
+        },
+        "hinted_crystal_bonus_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "description": "使用提示后猜出单词获得的水晶奖励",
+          "title": "Hinted Crystal Bonus Map",
+          "type": "object"
+        }
+      },
+      "title": "WordleConfig",
       "type": "object"
     },
     "kanade_bot__plugins__chat__config__ScopedConfig": {
@@ -1135,66 +1276,6 @@
       "title": "ScopedConfig",
       "type": "object"
     },
-    "kanade_bot__plugins__wordle__config__ScopedConfig": {
-      "properties": {
-        "default_length": {
-          "default": 5,
-          "description": "默认单词长度",
-          "title": "Default Length",
-          "type": "integer"
-        },
-        "default_dictionary": {
-          "default": "CET4",
-          "description": "默认词典",
-          "title": "Default Dictionary",
-          "type": "string"
-        },
-        "min_length": {
-          "default": 3,
-          "description": "单词最小长度",
-          "title": "Min Length",
-          "type": "integer"
-        },
-        "max_length": {
-          "default": 13,
-          "description": "单词最大长度",
-          "title": "Max Length",
-          "type": "integer"
-        },
-        "meanings": {
-          "default": [
-            "中释"
-          ],
-          "description": "单词释义类型，根据数据源可以选择多种释义类型",
-          "items": {
-            "type": "string"
-          },
-          "title": "Meanings",
-          "type": "array",
-          "uniqueItems": true
-        },
-        "crystal_bonus_map": {
-          "additionalProperties": {
-            "type": "integer"
-          },
-          "default": {},
-          "description": "猜出单词后获得的水晶奖励，key为单词长度，value为奖励水晶数。\n\n如果未配置或配置为空字典，则不启用水晶奖励功能。",
-          "title": "Crystal Bonus Map",
-          "type": "object"
-        },
-        "hinted_crystal_bonus_map": {
-          "additionalProperties": {
-            "type": "integer"
-          },
-          "default": {},
-          "description": "使用提示后猜出单词获得的水晶奖励",
-          "title": "Hinted Crystal Bonus Map",
-          "type": "object"
-        }
-      },
-      "title": "ScopedConfig",
-      "type": "object"
-    },
     "scripts__github_watchdog__ScopedConfig": {
       "description": "Watchdog 配置模型，用于描述服务启动所需的环境参数。",
       "properties": {
@@ -1543,6 +1624,17 @@
       "title": "Generate Schemas",
       "type": "boolean"
     },
+    "handle": {
+      "$ref": "#/$defs/HandleConfig",
+      "default": {
+        "strict_mode": false,
+        "color_enhance": false,
+        "crystal_bonus": 0,
+        "idiom_file": "idioms.txt",
+        "answer_file": "answers.json"
+      },
+      "description": "猜成语配置"
+    },
     "harvest": {
       "$ref": "#/$defs/kanade_bot__plugins__crystal__plugins__harvest__config__ScopedConfig",
       "default": {
@@ -1785,6 +1877,18 @@
       "default": "INFO",
       "description": "NoneBot 日志输出等级，可以为 `int` 类型等级或等级名称。\n\n    参考 [记录日志](https://nonebot.dev/docs/appendices/log)，[loguru 日志等级](https://loguru.readthedocs.io/en/stable/api/logger.html#levels)。\n\n    :::tip 提示\n    日志等级名称应为大写，如 `INFO`。\n    :::\n\n    用法:\n        ```conf\n        LOG_LEVEL=25\n        LOG_LEVEL=INFO\n        ```",
       "title": "Log Level"
+    },
+    "mindle": {
+      "$ref": "#/$defs/MindleConfig",
+      "default": {
+        "max_attempts": 10,
+        "crystal_bonus": 0,
+        "background_image": "background.png",
+        "lang_file": "zh_cn.json",
+        "render_items_dir": "items/",
+        "recipes_dir": "recipe/"
+      },
+      "description": "猜配方配置"
     },
     "model_updater_template_file": {
       "default": "template.html",
@@ -2271,7 +2375,7 @@
       "type": "string"
     },
     "wordle": {
-      "$ref": "#/$defs/kanade_bot__plugins__wordle__config__ScopedConfig",
+      "$ref": "#/$defs/WordleConfig",
       "default": {
         "default_length": 5,
         "default_dictionary": "CET4",
@@ -2282,7 +2386,8 @@
         ],
         "crystal_bonus_map": {},
         "hinted_crystal_bonus_map": {}
-      }
+      },
+      "description": "猜单词配置"
     }
   },
   "required": [

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "group": "planks",
+  "ingredients": [
+    [
+      "minecraft:acacia_log",
+      "minecraft:acacia_wood",
+      "minecraft:stripped_acacia_log",
+      "minecraft:stripped_acacia_wood"
+    ]
+  ],
+  "result": {
+    "count": 4,
+    "id": "minecraft:acacia_planks"
+  }
+}

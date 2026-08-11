@@ -1,0 +1,29 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "#": "minecraft:stick",
+    "X": [
+      "minecraft:oak_planks",
+      "minecraft:spruce_planks",
+      "minecraft:birch_planks",
+      "minecraft:jungle_planks",
+      "minecraft:acacia_planks",
+      "minecraft:dark_oak_planks",
+      "minecraft:pale_oak_planks",
+      "minecraft:crimson_planks",
+      "minecraft:warped_planks",
+      "minecraft:mangrove_planks",
+      "minecraft:bamboo_planks",
+      "minecraft:cherry_planks"
+    ]
+  },
+  "pattern": [
+    "XXX",
+    " # ",
+    " # "
+  ],
+  "result": {
+    "id": "minecraft:wooden_pickaxe"
+  }
+}

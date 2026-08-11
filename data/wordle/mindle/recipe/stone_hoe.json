@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "#": "minecraft:stick",
+    "X": [
+      "minecraft:cobblestone",
+      "minecraft:blackstone",
+      "minecraft:cobbled_deepslate"
+    ]
+  },
+  "pattern": [
+    "XX",
+    " #",
+    " #"
+  ],
+  "result": {
+    "id": "minecraft:stone_hoe"
+  }
+}

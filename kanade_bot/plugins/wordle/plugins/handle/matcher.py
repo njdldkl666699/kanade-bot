@@ -20,13 +20,6 @@ def game_not_running(session_id: SessionId) -> bool:
     return session_id not in games
 
 
-matcher_idiom = on_regex(
-    r"^(?P<idiom>[\u4e00-\u9fa5]{4})$",
-    rule=game_is_running,
-    block=True,
-    priority=2,
-)
-
 start_handle = on_command(
     "handle",
     aliases={"猜成语"},
@@ -34,7 +27,14 @@ start_handle = on_command(
     priority=2,
     block=True,
 )
-register_matcher(start_handle, "猜成语")
+register_matcher(start_handle, "开始猜成语")
+
+matcher_idiom = on_regex(
+    r"^(?P<idiom>[\u4e00-\u9fa5]{4})$",
+    rule=game_is_running,
+    block=True,
+    priority=2,
+)
 
 hint = on_command(
     "handle_hint",

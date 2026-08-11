@@ -66,6 +66,10 @@ wordle:
   max_length: 13
   meanings: ["中释"]
 
+mindle:
+  max_attempts: 10
+  crystal_bonus: 15
+
 handle:
   strict_mode: true
   color_enhance: true
