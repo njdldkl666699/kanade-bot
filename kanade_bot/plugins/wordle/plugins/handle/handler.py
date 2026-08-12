@@ -68,7 +68,7 @@ async def _(matcher: Matcher, session_id: SessionId):
 async def _(matcher: Matcher, session_id: SessionId):
     game = games[session_id]
     set_timeout(matcher, session_id)
-
+    game.set_hinted_crystal_bonus()
     await matcher.finish(MessageSegment.image(await run_sync(game.draw_hint)()))
 
 

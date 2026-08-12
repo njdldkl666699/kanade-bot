@@ -79,9 +79,7 @@ async def _(matcher: Matcher, session_id: SessionId):
     await matcher.finish(message)
 
 
-def _suggestion_message(
-    event: MessageEvent, item_name: str, suggestions: list[str]
-) -> Message:
+def _suggestion_message(event: MessageEvent, item_name: str, suggestions: list[str]) -> Message:
     message = Message()
     if isinstance(event, GroupMessageEvent):
         message += MessageSegment.at(event.get_user_id())
@@ -118,8 +116,7 @@ async def _(
     if result is None:
         image = MessageSegment.image(await run_sync(game.draw)())
         await matcher.finish(
-            Message(f"第 {len(game.guessed_item_ids)}/{game.max_attempts} 次猜测")
-            + image
+            Message(f"第 {len(game.guessed_item_ids)}/{game.max_attempts} 次猜测") + image
         )
 
     stop_game(session_id)
@@ -127,9 +124,7 @@ async def _(
     if result == GuessResult.WIN:
         user_id = event.get_user_id()
         message += "恭喜"
-        message += (
-            MessageSegment.at(user_id) if isinstance(event, GroupMessageEvent) else "你"
-        )
+        message += MessageSegment.at(user_id) if isinstance(event, GroupMessageEvent) else "你"
         message += " 猜出了配方！"
         message += f"\n{game.result}\n"
         message += MessageSegment.image(await run_sync(game.draw)(game.answer))
@@ -140,9 +135,7 @@ async def _(
     else:
         message += "很遗憾，没有人猜出来呢"
         message += f"\n{game.result}\n"
-        message += MessageSegment.image(
-            await run_sync(game.draw)(game.answer, states=())
-        )
+        message += MessageSegment.image(await run_sync(game.draw)(game.answer, states=()))
     await matcher.finish(message)
 
 
@@ -150,6 +143,7 @@ async def _(
 async def _(matcher: Matcher, session_id: SessionId):
     game = games[session_id]
     set_timeout(matcher, session_id)
+    game.set_hinted_crystal_bonus()
     recipe_hint = game.get_hint()
     if recipe_hint is None:
         await matcher.finish("暂时无法获取这个配方的原料提示")
