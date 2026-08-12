@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from kanade_bot.utils.cache import UserDailyCache
 from kanade_bot.utils.common import PlatformType, asia_shanghai_now
+from kanade_bot.utils.persistence import DeferredWriter, atomic_write_text
 
 from .config import cfg
 from .enum import DaypartEnum
@@ -41,6 +42,7 @@ class UserWeeklyCache[T]:
     def __init__(self, T_type: type[T], persistence_file_path: Path):
         self._data = UserWeeklyCacheModel[T]()
         self._file_path = persistence_file_path
+        self._writer = DeferredWriter(self._save)
 
         # 每周自动清除缓存
         scheduler.add_job(self._auto_clear_cache, "cron", day_of_week="mon", hour=0, minute=0)
@@ -80,7 +82,7 @@ class UserWeeklyCache[T]:
 
         @driver.on_shutdown
         def _():
-            self._save()
+            self.flush()
             logger.info(
                 "已将缓存数据保存到 {}，console: {} 条，onebot: {} 条",
                 p,
@@ -101,7 +103,10 @@ class UserWeeklyCache[T]:
         cache = self._data.get_by_platform(platform)
         cache[user_id] = cache.get(user_id, {})
         cache[user_id][weekday] = value
-        self._save()
+        self._writer.mark_dirty()
+
+    def flush(self) -> None:
+        self._writer.flush()
 
     def _auto_clear_cache(self):
         """每周凌晨自动清除缓存"""
@@ -111,9 +116,8 @@ class UserWeeklyCache[T]:
     def _save(self):
         """将当前缓存数据保存到文件"""
         self._data.updated_at = asia_shanghai_now()
-        self._file_path.parent.mkdir(parents=True, exist_ok=True)
         data_json = self._data.model_dump_json(ensure_ascii=False, indent=2)
-        self._file_path.write_text(data_json, encoding="utf-8")
+        atomic_write_text(self._file_path, data_json)
 
 
 check_in_weekly_cache = UserWeeklyCache(bool, cfg.weekly_check_in_file_path)

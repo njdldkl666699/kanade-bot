@@ -1,3 +1,4 @@
+import asyncio
 from io import BytesIO
 from typing import Literal
 
@@ -151,8 +152,16 @@ async def get_compressed_image(
     if len(raw) < 2 * 1024 * 1024:
         return raw
 
-    # 压缩图片
-    img = Image.open(BytesIO(raw))
-    compressed_io = BytesIO()
-    img.save(compressed_io, format="WEBP", quality=quality, lossless=lossless)
-    return compressed_io.getvalue()
+    return await asyncio.to_thread(
+        _compress_image,
+        raw,
+        quality=quality,
+        lossless=lossless,
+    )
+
+
+def _compress_image(raw: bytes, *, quality: int, lossless: bool) -> bytes:
+    with Image.open(BytesIO(raw)) as img:
+        compressed_io = BytesIO()
+        img.save(compressed_io, format="WEBP", quality=quality, lossless=lossless)
+        return compressed_io.getvalue()

@@ -4,7 +4,8 @@ from pathlib import Path
 from nonebot import get_driver, logger, require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import PlatformType, asia_shanghai_now
+from .common import PlatformType, asia_shanghai_now
+from .persistence import DeferredWriter, atomic_write_text
 
 require("nonebot_plugin_apscheduler")
 
@@ -31,6 +32,7 @@ class UserDailyCache[T]:
     def __init__(self, T_type: type[T], persistence_file_path: Path):
         self._data = UserDailyCacheModel[T]()
         self._file_path = persistence_file_path
+        self._writer = DeferredWriter(self._save)
 
         # 每天自动清除缓存
         scheduler.add_job(self._auto_clear_cache, "cron", hour=0, minute=0)
@@ -62,7 +64,7 @@ class UserDailyCache[T]:
 
         @driver.on_shutdown
         def _():
-            self._save()
+            self.flush()
             logger.info(
                 "已将缓存数据保存到 {}，console: {} 条，onebot: {} 条",
                 p,
@@ -75,7 +77,10 @@ class UserDailyCache[T]:
 
     def set(self, platform: PlatformType, user_id: str, value: T) -> None:
         self._data.get_by_platform(platform)[user_id] = value
-        self._save()
+        self._writer.mark_dirty()
+
+    def flush(self) -> None:
+        self._writer.flush()
 
     def _auto_clear_cache(self):
         """每天凌晨自动清除缓存"""
@@ -85,6 +90,5 @@ class UserDailyCache[T]:
     def _save(self):
         """将当前缓存数据保存到文件"""
         self._data.updated_at = asia_shanghai_now()
-        self._file_path.parent.mkdir(parents=True, exist_ok=True)
         data_json = self._data.model_dump_json(ensure_ascii=False, indent=2)
-        self._file_path.write_text(data_json, encoding="utf-8")
+        atomic_write_text(self._file_path, data_json)

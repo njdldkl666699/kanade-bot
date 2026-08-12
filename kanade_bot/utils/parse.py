@@ -13,8 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.onebot.v11.event import Reply
 from nonebot.exception import NetworkError
 
-from kanade_bot.utils.common import HTTPX_CLIENT
-
+from .common import HTTPX_CLIENT
 from .onebot11 import get_image_local
 from .session import extract_session_info
 

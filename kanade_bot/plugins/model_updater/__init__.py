@@ -8,6 +8,8 @@ from nonebot import get_plugin_config, logger, require
 from nonebot.plugin import PluginMetadata
 from pydantic import BaseModel, ValidationError
 
+from kanade_bot.utils.persistence import atomic_write_text
+
 from .config import Config
 
 require("nonebot_plugin_localstore")
@@ -36,9 +38,9 @@ class ModelRegistryItem[T: BaseModel](BaseModel):
     def save_to_file(self):
         """将模型保存到 JSON 文件"""
         logger.debug(f"保存模型 {self.cls.__name__} 到文件 {self.path}")
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            self.instance.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"
+        atomic_write_text(
+            self.path,
+            self.instance.model_dump_json(indent=2, ensure_ascii=False),
         )
 
 

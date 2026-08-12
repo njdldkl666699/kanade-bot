@@ -4,7 +4,7 @@ from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType
 
-from .config import crystal_config, crystal_data
+from .config import crystal_config, crystal_data, crystal_data_writer
 from .enum import HandlerKeyEnum
 
 
@@ -12,7 +12,7 @@ def increment_crystal(platform: PlatformType, user_id: str, crystal: int) -> Non
     """增加用户积分"""
     data = crystal_data.instance.get_by_platform(platform)
     data[user_id] += crystal
-    crystal_data.save_to_file()
+    crystal_data_writer.mark_dirty()
 
 
 async def increment_crystal_maybe_init(
@@ -27,14 +27,13 @@ async def increment_crystal_maybe_init(
         # 如果用户没有水晶数据，说明是首次使用此功能，赠送水晶并发送首次使用消息
         cfg = crystal_config.instance
         data[user_id] = cfg.first_use_bonus
-        crystal_data.save_to_file()
 
         template = random.choice(cfg.first_use_templates)
         message = template.format(first_use_bonus=cfg.first_use_bonus)
         await matcher.send(message)
 
     data[user_id] += crystal
-    crystal_data.save_to_file()
+    crystal_data_writer.mark_dirty()
 
 
 def get_crystal(platform: PlatformType, user_id: str) -> int:
@@ -71,7 +70,23 @@ def succeed_consume(
         raise ValueError("用户水晶不足，无法扣除")
 
     data[user_id] = current_crystal - consume
-    crystal_data.save_to_file()
+    crystal_data_writer.mark_dirty()
+
+
+def consume_and_increment(
+    handler_key: HandlerKeyEnum,
+    platform: PlatformType,
+    user_id: str,
+    increment: int,
+) -> None:
+    """Apply a command cost and its reward as one balance mutation."""
+    consume = crystal_config.instance.handler_consumes.get(handler_key, 0)
+    data = crystal_data.instance.get_by_platform(platform)
+    current_crystal = data.get(user_id, 0)
+    if current_crystal < consume:
+        raise ValueError("用户水晶不足，无法扣除")
+    data[user_id] = current_crystal - consume + increment
+    crystal_data_writer.mark_dirty()
 
 
 async def finish_fail_consume(

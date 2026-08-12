@@ -23,7 +23,6 @@ dependencies = [
   "nonebot-plugin-wordcloud>=0.10.0",
   "nonebot2[fastapi]>=2.5.0",
   "openai>=2.41.0",
-  "pydub>=0.25.1",
   "pypinyin>=0.55.0",
   "pyspellchecker>=0.9.0",
   "send2trash>=2.1.0",
@@ -33,7 +32,10 @@ dependencies = [
 rag = ["chromadb>=1.5.6", "sentence-transformers>=5.3.0"]
 
 [dependency-groups]
-dev = ["check-requirements-txt>=1.4.2"]
+dev = [
+  "check-requirements-txt>=1.4.2",
+  "ruff>=0.16.2",
+]
 
 [tool.nonebot]
 plugin_dirs = ["kanade_bot/plugins"]

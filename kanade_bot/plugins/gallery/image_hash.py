@@ -94,17 +94,25 @@ def _calculate_phash(image: Image.Image) -> int:
         ).get_flattened_data()
     )
     cosine_table = _cosine_table()
-    coefficients: list[float] = []
-    for vertical_frequency in range(HASH_SIZE):
-        vertical_cosines = cosine_table[vertical_frequency]
-        for horizontal_frequency in range(HASH_SIZE):
-            horizontal_cosines = cosine_table[horizontal_frequency]
-            coefficient = sum(
-                pixels[y * PHASH_IMAGE_SIZE + x] * horizontal_cosines[x] * vertical_cosines[y]
-                for y in range(PHASH_IMAGE_SIZE)
+    # 二维 DCT 可分离为两次一维变换，避免为每个系数重复完整遍历图像。
+    horizontal = [
+        [
+            sum(
+                pixels[y * PHASH_IMAGE_SIZE + x] * cosine_table[frequency][x]
                 for x in range(PHASH_IMAGE_SIZE)
             )
-            coefficients.append(coefficient)
+            for frequency in range(HASH_SIZE)
+        ]
+        for y in range(PHASH_IMAGE_SIZE)
+    ]
+    coefficients = [
+        sum(
+            horizontal[y][horizontal_frequency] * cosine_table[vertical_frequency][y]
+            for y in range(PHASH_IMAGE_SIZE)
+        )
+        for vertical_frequency in range(HASH_SIZE)
+        for horizontal_frequency in range(HASH_SIZE)
+    ]
 
     # The reference implementation excludes the DC coefficient and emits complete
     # hexadecimal nibbles, resulting in a 60-bit pHash.

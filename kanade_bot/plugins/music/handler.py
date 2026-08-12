@@ -1,5 +1,3 @@
-from io import BytesIO
-
 from nonebot import get_plugin_config
 from nonebot.adapters import Bot, Message
 from nonebot.adapters.console.bot import Bot as ConsoleBot
@@ -104,10 +102,8 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
         await sing_song.finish(f"唱了 {song_path.stem} 这首歌")
 
     if isinstance(bot, OneBot):
-        audio = random_clip_audio(song_path)
-        buffer = BytesIO()
-        audio.export(buffer, format="mp3")
-        message = MessageSegment.record(buffer)
+        audio = await random_clip_audio(song_path)
+        message = MessageSegment.record(audio)
         await sing_song.finish(message)
 
 

@@ -5,13 +5,25 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 
+from kanade_bot.plugins.crystal import increment_crystal
 from kanade_bot.plugins.crystal.config import crystal_data
 from kanade_bot.utils.common import get_platform_type
 
 from .cache import harvest_power_cache
 from .config import cfg, harvest_config
-from .harvest import HarvestResult, harvest_once, render_harvest_result, render_harvest_results
-from .matcher import harvest, harvest_all, harvest_category, harvest_power, resume_harvest_power
+from .harvest import (
+    HarvestResult,
+    harvest_once,
+    render_harvest_result,
+    render_harvest_results,
+)
+from .matcher import (
+    harvest,
+    harvest_all,
+    harvest_category,
+    harvest_power,
+    resume_harvest_power,
+)
 
 
 @harvest.handle()
@@ -118,8 +130,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     new_power = current_power + power
     harvest_power_cache.set_by(platform, user_id, power)
     # 扣除水晶
-    data[user_id] = user_crystal - crystal_cost
-    crystal_data.save_to_file()
+    increment_crystal(platform, user_id, -crystal_cost)
 
     await resume_harvest_power.finish(
         f"已恢复 {power} 体力，消耗 {crystal_cost} 水晶，你当前体力为 {new_power:g}。"

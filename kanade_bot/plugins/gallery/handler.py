@@ -1,3 +1,4 @@
+import asyncio
 import random
 import re
 from pathlib import Path
@@ -24,6 +25,8 @@ from .gallery import (
     get_gallery_name,
     get_picture_by_id,
     invalidate_gallery_render_cache,
+    remove_gallery_from_index,
+    remove_picture_from_index,
     render_gallery_overview,
     render_gallery_thumbnails,
 )
@@ -89,6 +92,7 @@ async def _(arg_msg: Message = CommandArg()):
     for alias in aliases:
         v.alias_to_name.pop(alias, None)
     gallery_name_data.save_to_file()
+    remove_gallery_from_index(name)
     invalidate_gallery_render_cache()
     invalidate_gallery_render_cache(name)
     await remove_gallery.finish(f"成功删除画廊：{name}")
@@ -145,7 +149,7 @@ async def _(arg_msg: Message = CommandArg()):
 async def _(arg_msg: Message = CommandArg()):
     name_or_alias = arg_msg.extract_plain_text().strip()
     if not name_or_alias:
-        image = render_gallery_overview()
+        image = await asyncio.to_thread(render_gallery_overview)
         if not image:
             await gallery_pictures.finish("当前没有画廊。")
         await gallery_pictures.finish(OneBotMessageSegment.image(image))
@@ -163,7 +167,7 @@ async def _(arg_msg: Message = CommandArg()):
     if not pic_files:
         await gallery_pictures.finish(f"画廊 {name} 中没有图片。")
 
-    image = render_gallery_thumbnails(name, pic_files)
+    image = await asyncio.to_thread(render_gallery_thumbnails, name, pic_files)
     if not image:
         await gallery_pictures.finish(f"画廊 {name} 中没有可读取的图片。")
     await gallery_pictures.finish(OneBotMessageSegment.image(image))
@@ -317,7 +321,7 @@ async def _finish_add_pictures(
     *,
     force: bool,
 ) -> None:
-    result = add_pictures(name, pic_paths, force=force)
+    result = await asyncio.to_thread(add_pictures, name, pic_paths, force=force)
     response = OneBotMessage()
     if result.duplicate_image:
         response += OneBotMessageSegment.image(result.duplicate_image)
@@ -342,6 +346,7 @@ async def _(arg_msg: Message = CommandArg()):
     except OSError as e:
         logger.exception(f"删除图片文件 {pic_path} 失败：{e}")
         await remove_picture.finish(f"删除图片文件失败：{e}")
+    remove_picture_from_index(pic_path)
     gallery_name = str(pic_path.parent.relative_to(cfg.data_dir_path))
     invalidate_gallery_render_cache()
     invalidate_gallery_render_cache(gallery_name)

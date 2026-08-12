@@ -1,13 +1,17 @@
+import json
 import shutil
 from dataclasses import dataclass
 from functools import cache, lru_cache
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+from threading import RLock
 
 from emoji import emoji_list
 from nonebot import logger
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+from kanade_bot.utils.persistence import atomic_write_text
 
 from .config import cfg, gallery_name_data
 from .image_hash import ImageHashes, calculate_image_hashes, perceptual_distances
@@ -29,9 +33,9 @@ class AddPicturesResult:
 
     def summary(self, gallery_name: str) -> str:
         lines: list[str] = []
-        # if self.duplicates:
-        #     lines.append(f"检测到 {len(self.duplicates)} 张重复图片，已跳过。")
-        #     lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
+        if self.duplicates:
+            lines.append(f"检测到 {len(self.duplicates)} 张重复图片，已跳过。")
+            lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
         lines.append(f"成功添加 {self.added_count} 张图片到画廊 {gallery_name}。")
         return "\n".join(lines)
 
@@ -54,10 +58,7 @@ def get_gallery_name(name_or_alias: str) -> str | None:
 
 def get_picture_by_id(pic_id: int) -> Path | None:
     """根据图片id获取图片文件路径"""
-    for file in cfg.data_dir_path.rglob(f"{pic_id}.*"):
-        if file.is_file():
-            return file
-    return None
+    return _gallery_index.get_picture_by_id(pic_id)
 
 
 def save_pictures(name: str, pic_paths: list[Path]) -> list[Path]:
@@ -75,6 +76,9 @@ def save_pictures(name: str, pic_paths: list[Path]) -> list[Path]:
         new_pic_path = gallery_dir / f"{pic_id}{suffix}"
         shutil.copy(pic_path, new_pic_path)
         saved_paths.append(new_pic_path)
+
+    if saved_paths:
+        _gallery_index.record_many(saved_paths)
 
     gallery_name_data.save_to_file()
     if saved_paths:
@@ -109,19 +113,9 @@ def find_duplicate_pictures(
     candidate_paths: list[Path],
 ) -> tuple[list[Path], list[DuplicatePicture]]:
     """Compare candidate pictures with files that already exist in a gallery."""
-    gallery_dir = cfg.data_dir_path / name
-    existing_hashes: list[tuple[Path, ImageHashes]] = []
+    existing_hashes = _gallery_index.hashes_for_gallery(name)
     exact_hashes: dict[str, Path] = {}
-    existing_paths = gallery_dir.iterdir() if gallery_dir.is_dir() else ()
-    for existing_path in existing_paths:
-        if not existing_path.is_file():
-            continue
-        try:
-            hashes = calculate_image_hashes(existing_path)
-        except (OSError, ValueError) as e:
-            logger.warning(f"无法计算画廊图片 {existing_path} 的哈希，已跳过：{e}")
-            continue
-        existing_hashes.append((existing_path, hashes))
+    for existing_path, hashes in existing_hashes:
         exact_hashes.setdefault(hashes.file_hash, existing_path)
 
     unique_paths: list[Path] = []
@@ -178,6 +172,203 @@ def find_duplicate_pictures(
         )
 
     return unique_paths, duplicates
+
+
+HASH_INDEX_FILE_NAME = "image_index_v1.json"
+
+
+class GalleryImageIndex:
+    """可重建的画廊路径和图片哈希索引。"""
+
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._root: Path | None = None
+        self._entries: dict[str, dict[str, int | str | None]] = {}
+        self._picture_ids: dict[str, str] = {}
+
+    def _ensure_loaded(self) -> None:
+        root = cfg.data_dir_path.resolve()
+        if root == self._root:
+            return
+        self._root = root
+        self._entries = {}
+        self._picture_ids = {}
+        try:
+            data = json.loads(self._index_path().read_text(encoding="utf-8"))
+            if data.get("version") == 1 and isinstance(data.get("entries"), dict):
+                self._entries = data["entries"]
+                self._picture_ids = {
+                    Path(relative).stem: relative for relative in self._entries
+                }
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError, TypeError) as e:
+            logger.warning(f"无法加载画廊图片索引，将自动重建：{e}")
+
+    def _index_path(self) -> Path:
+        return cfg.cache_dir_path / HASH_INDEX_FILE_NAME
+
+    def _relative(self, path: Path) -> str:
+        assert self._root is not None
+        return path.resolve().relative_to(self._root).as_posix()
+
+    @staticmethod
+    def _metadata(path: Path) -> tuple[int, int]:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns
+
+    def _entry_for(self, path: Path) -> dict[str, int | str | None]:
+        relative = self._relative(path)
+        size, mtime_ns = self._metadata(path)
+        entry = self._entries.get(relative)
+        if entry is None or entry.get("size") != size or entry.get("mtime_ns") != mtime_ns:
+            entry = {
+                "size": size,
+                "mtime_ns": mtime_ns,
+                "file_hash": None,
+                "dhash": None,
+                "phash": None,
+                "ahash": None,
+            }
+            self._entries[relative] = entry
+        self._picture_ids[path.stem] = relative
+        return entry
+
+    def _remove_relative(self, relative: str) -> bool:
+        if self._entries.pop(relative, None) is None:
+            return False
+        picture_id = Path(relative).stem
+        if self._picture_ids.get(picture_id) == relative:
+            self._picture_ids.pop(picture_id, None)
+        return True
+
+    def record_many(self, paths: list[Path]) -> None:
+        with self._lock:
+            self._ensure_loaded()
+            for path in paths:
+                try:
+                    self._entry_for(path)
+                except OSError as e:
+                    logger.warning(f"无法记录画廊图片 {path}：{e}")
+            self._save()
+
+    def remove(self, path: Path) -> None:
+        with self._lock:
+            self._ensure_loaded()
+            try:
+                relative = self._relative(path)
+            except ValueError:
+                return
+            if self._remove_relative(relative):
+                self._save()
+
+    def remove_gallery(self, name: str) -> None:
+        with self._lock:
+            self._ensure_loaded()
+            prefix = f"{Path(name).as_posix()}/"
+            removed = False
+            for relative in tuple(self._entries):
+                if relative.startswith(prefix):
+                    removed = self._remove_relative(relative) or removed
+            if removed:
+                self._save()
+
+    def get_picture_by_id(self, pic_id: int) -> Path | None:
+        with self._lock:
+            self._ensure_loaded()
+            assert self._root is not None
+            target = str(pic_id)
+            changed = False
+
+            if relative := self._picture_ids.get(target):
+                path = self._root / relative
+                if path.is_file():
+                    return path
+                changed = self._remove_relative(relative)
+
+            if not self._root.is_dir():
+                if changed:
+                    self._save()
+                return None
+            for path in self._root.rglob(f"{target}.*"):
+                if path.is_file():
+                    self._entry_for(path)
+                    self._save()
+                    return path
+            if changed:
+                self._save()
+            return None
+
+    def hashes_for_gallery(self, name: str) -> list[tuple[Path, ImageHashes]]:
+        with self._lock:
+            self._ensure_loaded()
+            assert self._root is not None
+            gallery_dir = self._root / name
+            if not gallery_dir.is_dir():
+                return []
+
+            current_paths = [path for path in gallery_dir.iterdir() if path.is_file()]
+            current_relatives = {self._relative(path) for path in current_paths}
+            prefix = f"{Path(name).as_posix()}/"
+            changed = False
+            for relative in tuple(self._entries):
+                if relative.startswith(prefix) and relative not in current_relatives:
+                    changed = self._remove_relative(relative) or changed
+
+            result: list[tuple[Path, ImageHashes]] = []
+            for path in current_paths:
+                try:
+                    entry = self._entry_for(path)
+                    if entry["file_hash"] is None:
+                        hashes = calculate_image_hashes(path)
+                        entry.update(
+                            file_hash=hashes.file_hash,
+                            dhash=hashes.dhash,
+                            phash=hashes.phash,
+                            ahash=hashes.ahash,
+                        )
+                        changed = True
+                    result.append(
+                        (
+                            path,
+                            ImageHashes(
+                                file_hash=str(entry["file_hash"]),
+                                dhash=int(entry["dhash"]),
+                                phash=int(entry["phash"]),
+                                ahash=(int(entry["ahash"]) if entry["ahash"] is not None else None),
+                            ),
+                        )
+                    )
+                except (OSError, ValueError, TypeError) as e:
+                    logger.warning(f"无法计算画廊图片 {path} 的哈希，已跳过：{e}")
+            if changed:
+                self._save()
+            return result
+
+    def _save(self) -> None:
+        index_path = self._index_path()
+        try:
+            atomic_write_text(
+                index_path,
+                json.dumps(
+                    {"version": 1, "entries": self._entries},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
+        except OSError as e:
+            logger.warning(f"无法保存画廊图片索引 {index_path}：{e}")
+
+
+_gallery_index = GalleryImageIndex()
+
+
+def remove_picture_from_index(path: Path) -> None:
+    _gallery_index.remove(path)
+
+
+def remove_gallery_from_index(name: str) -> None:
+    _gallery_index.remove_gallery(name)
 
 
 GALLERY_COLUMNS = 10

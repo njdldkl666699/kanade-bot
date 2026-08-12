@@ -1,4 +1,5 @@
 import random
+from io import BytesIO
 from pathlib import Path
 
 from nonebot import get_driver, logger
@@ -131,7 +132,14 @@ def render_composed_card(card: Card) -> Image.Image:
     return image
 
 
-async def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
+def render_composed_card_png(card: Card) -> bytes:
+    output = BytesIO()
+    with render_composed_card(card) as image:
+        image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
     """渲染10连抽卡牌"""
     thumbnail_width, thumbnail_height = GACHA_THUMBNAIL_SIZE
     canvas_width = (
@@ -183,6 +191,13 @@ async def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
         canvas.alpha_composite(slot, (x, y))
 
     return canvas
+
+
+def render_gacha_10_cards_png(cards: list[Card]) -> bytes:
+    output = BytesIO()
+    with render_gacha_10_cards(cards) as image:
+        image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def gacha_draw_card(cumulative_probabilities: dict[RarityEnum, float]) -> Card:

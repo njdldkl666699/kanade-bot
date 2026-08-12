@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from nonebot import get_plugin_config, require
+from nonebot import get_driver, get_plugin_config, require
 from pydantic import BaseModel
 
 from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.persistence import DeferredWriter
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 from .enum import HandlerKeyEnum
@@ -166,3 +167,5 @@ class CrystalData(AttrDocModel):
 
 generate_schema(CrystalData)
 crystal_data = load_register_model_from_file(CrystalData, cfg.data_file_path)
+crystal_data_writer = DeferredWriter(crystal_data.save_to_file)
+get_driver().on_shutdown(crystal_data_writer.flush)

@@ -8,6 +8,7 @@ import nonebot
 from PIL import Image, ImageDraw
 
 nonebot.init(_env_file=None)
+assert nonebot.load_plugin("nonebot_plugin_localstore")
 assert nonebot.load_plugin("kanade_bot.plugins.model_updater")
 assert nonebot.load_plugin("kanade_bot.plugins.command_counter")
 assert nonebot.load_plugin("kanade_bot.plugins.gallery")
@@ -108,6 +109,97 @@ def test_add_pictures_detects_perceptual_duplicate(monkeypatch, tmp_path):
     assert result.added_count == 0
     assert len(result.duplicates) == 1
     assert result.duplicates[0].reason == "感知哈希相似：dHash、pHash、aHash"
+
+
+def test_duplicate_hash_index_reuses_unchanged_existing_hash(monkeypatch, tmp_path):
+    _configure_gallery(monkeypatch, tmp_path, iota=1)
+    gallery_dir = tmp_path / "test"
+    gallery_dir.mkdir()
+    existing = gallery_dir / "1.png"
+    candidate = tmp_path / "candidate.png"
+    _make_test_image(existing)
+    _make_test_image(candidate, inverted=True)
+
+    gallery.find_duplicate_pictures("test", [candidate])
+    original = gallery.calculate_image_hashes
+
+    def fail_for_existing(path: Path):
+        if path == existing:
+            raise AssertionError("unchanged existing image was hashed again")
+        return original(path)
+
+    monkeypatch.setattr(gallery, "calculate_image_hashes", fail_for_existing)
+    gallery.find_duplicate_pictures("test", [candidate])
+
+
+def test_duplicate_hash_index_invalidates_changed_existing_file(monkeypatch, tmp_path):
+    _configure_gallery(monkeypatch, tmp_path, iota=1)
+    gallery_dir = tmp_path / "test"
+    gallery_dir.mkdir()
+    existing = gallery_dir / "1.png"
+    candidate = tmp_path / "candidate.png"
+    _make_test_image(existing)
+    _make_test_image(candidate, inverted=True)
+    gallery.find_duplicate_pictures("test", [candidate])
+
+    _make_test_image(existing, inverted=True, compress_level=0)
+    original = gallery.calculate_image_hashes
+    hashed_paths: list[Path] = []
+
+    def track(path: Path):
+        hashed_paths.append(path)
+        return original(path)
+
+    monkeypatch.setattr(gallery, "calculate_image_hashes", track)
+    gallery.find_duplicate_pictures("test", [candidate])
+    assert existing in hashed_paths
+
+
+def test_picture_id_index_tracks_added_and_removed_files(monkeypatch, tmp_path):
+    _configure_gallery(monkeypatch, tmp_path)
+    candidate = tmp_path / "candidate.png"
+    _make_test_image(candidate)
+
+    result = gallery.add_pictures("test", [candidate], force=True)
+    saved = tmp_path / "test" / "1.png"
+    assert result.added_count == 1
+    assert gallery.get_picture_by_id(1) == saved
+
+    saved.unlink()
+    gallery.remove_picture_from_index(saved)
+    assert gallery.get_picture_by_id(1) is None
+
+
+def test_picture_id_index_miss_does_not_rewrite_unchanged_index(monkeypatch, tmp_path):
+    _configure_gallery(monkeypatch, tmp_path)
+    save_calls = 0
+    original_save = gallery._gallery_index._save
+
+    def track_save():
+        nonlocal save_calls
+        save_calls += 1
+        original_save()
+
+    monkeypatch.setattr(gallery._gallery_index, "_save", track_save)
+
+    assert gallery.get_picture_by_id(999) is None
+    assert save_calls == 0
+
+
+def test_remove_nested_gallery_clears_its_index_entries(monkeypatch, tmp_path):
+    _configure_gallery(monkeypatch, tmp_path)
+    candidate = tmp_path / "candidate.png"
+    _make_test_image(candidate)
+    saved = gallery.save_pictures("parent/child", [candidate])[0]
+    assert gallery.get_picture_by_id(1) == saved
+
+    gallery.remove_gallery_from_index("parent/child")
+
+    index_data = (tmp_path / "cache" / gallery.HASH_INDEX_FILE_NAME).read_text(
+        encoding="utf-8"
+    )
+    assert "parent/child/1.png" not in index_data
+    assert gallery.get_picture_by_id(1) == saved
 
 
 def test_add_pictures_force_bypasses_duplicate_check(monkeypatch, tmp_path):

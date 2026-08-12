@@ -63,8 +63,8 @@ async def get_image_local(bot: Bot, file: str) -> Path:
 
     部分协议实现可能返回网络路径，此函数会将其下载到本地缓存目录并返回本地路径
     """
-    from kanade_bot.utils.common import HTTPX_CLIENT
-    from kanade_bot.utils.schema import KanadeConfig
+    from .common import HTTPX_CLIENT
+    from .schema import KanadeConfig
 
     r = await bot.get_image(file=file)
     file_url = r["file"]

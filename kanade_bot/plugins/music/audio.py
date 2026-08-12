@@ -1,8 +1,8 @@
+import asyncio
 import random
 from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger
-from pydub import AudioSegment
 
 from .config import Config
 
@@ -56,17 +56,59 @@ def get_or_random_audio(query: str | None = None, number: int | None = None) -> 
     return random.choice(song_files)
 
 
-def random_clip_audio(song_path: Path) -> AudioSegment:
-    """随机裁剪长度为clip_length_ms的片段"""
-    audio = AudioSegment.from_file(song_path)
-    audio_length = len(audio)
-    # 随机裁剪长度
-    clip_length_ms = random.randint(5000, 15000)
-    if audio_length <= clip_length_ms:
-        return audio
+async def random_clip_audio(song_path: Path) -> bytes:
+    """使用 FFmpeg 只解码并编码随机片段，避免加载整首歌曲。"""
+    probe = await asyncio.create_subprocess_exec(
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(song_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await probe.communicate()
+    if probe.returncode != 0:
+        raise RuntimeError(f"无法读取音频时长：{stderr.decode(errors='replace').strip()}")
 
-    start_ms = random.randint(0, audio_length - clip_length_ms)
-    return audio[start_ms : start_ms + clip_length_ms]
+    try:
+        audio_length = max(0.0, float(stdout.strip()))
+    except ValueError as exc:
+        raise RuntimeError("无法解析音频时长") from exc
+
+    clip_length = random.randint(5000, 15000) / 1000
+    clip_length = min(clip_length, audio_length)
+    start = 0.0
+    if audio_length > clip_length:
+        start = random.uniform(0, audio_length - clip_length)
+
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        f"{start:.3f}",
+        "-t",
+        f"{clip_length:.3f}",
+        "-i",
+        str(song_path),
+        "-vn",
+        "-c:a",
+        "libmp3lame",
+        "-f",
+        "mp3",
+        "pipe:1",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    encoded, stderr = await process.communicate()
+    if process.returncode != 0 or not encoded:
+        raise RuntimeError(f"音频片段转码失败：{stderr.decode(errors='replace').strip()}")
+    return encoded
 
 
 driver = get_driver()

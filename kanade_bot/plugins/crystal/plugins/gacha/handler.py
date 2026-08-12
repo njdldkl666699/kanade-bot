@@ -1,5 +1,5 @@
+import asyncio
 import random
-from io import BytesIO
 
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
@@ -9,15 +9,19 @@ from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 
 from kanade_bot.plugins.crystal import (
     check_user_crystal,
+    consume_and_increment,
     finish_fail_consume,
-    increment_crystal,
-    succeed_consume,
 )
 from kanade_bot.plugins.crystal.enum import HandlerKeyEnum
 from kanade_bot.utils.common import get_platform_type
 
 from .config import gacha_config
-from .gacha import Card, gacha_draw_card, render_composed_card, render_gacha_10_cards
+from .gacha import (
+    Card,
+    gacha_draw_card,
+    render_composed_card_png,
+    render_gacha_10_cards_png,
+)
 from .matcher import gacha, gacha_10
 
 
@@ -33,11 +37,9 @@ async def _(event: Event):
     v = gacha_config.instance
     # 抽一次卡
     card = gacha_draw_card(v.cumulative_probabilities)
-    succeed_consume(key, platform, user_id)
-
     # 返还水晶
     bonus = v.bonus_crystals.get(card.card_rarity_type, 0)
-    increment_crystal(platform, user_id, bonus)
+    consume_and_increment(key, platform, user_id, bonus)
 
     if isinstance(event, ConsoleEvent):
         messages = [
@@ -48,14 +50,12 @@ async def _(event: Event):
         ]
         await gacha.finish("\n".join(messages))
     elif isinstance(event, OneBotEvent):
-        card_image = render_composed_card(card)
-        bytes_io = BytesIO()
-        card_image.save(bytes_io, format="PNG")
+        card_image = await asyncio.to_thread(render_composed_card_png, card)
 
         message = OneBotMessage()
         message += OneBotMessageSegment.at(user_id)
         message += f"\n你抽到了 {card.prefix} {card.character_name}！\n"
-        message += OneBotMessageSegment.image(bytes_io)
+        message += OneBotMessageSegment.image(card_image)
         message += f"返还的水晶数: {bonus}"
         await gacha.finish(message)
 
@@ -79,11 +79,9 @@ async def _(event: Event):
         else:
             card = gacha_draw_card(v.cumulative_probabilities)
         cards.append(card)
-    succeed_consume(key, platform, user_id)
-
     # 返还水晶
     total_bonus = sum(v.bonus_crystals.get(card.card_rarity_type, 0) for card in cards)
-    increment_crystal(platform, user_id, total_bonus)
+    consume_and_increment(key, platform, user_id, total_bonus)
 
     if isinstance(event, ConsoleEvent):
         messages = ["你进行了十连抽！"]
@@ -94,12 +92,10 @@ async def _(event: Event):
         messages.append(f"返还的水晶总数: {total_bonus}")
         await gacha_10.finish("\n".join(messages))
     elif isinstance(event, OneBotEvent):
-        cards_image = await render_gacha_10_cards(cards)
-        bytes_io = BytesIO()
-        cards_image.save(bytes_io, format="PNG")
+        cards_image = await asyncio.to_thread(render_gacha_10_cards_png, cards)
 
         message = OneBotMessage()
         message += OneBotMessageSegment.at(user_id)
-        message += OneBotMessageSegment.image(bytes_io)
+        message += OneBotMessageSegment.image(cards_image)
         message += f"返还的水晶总数: {total_bonus}"
         await gacha_10.finish(message)

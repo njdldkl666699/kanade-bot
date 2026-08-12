@@ -4,6 +4,7 @@ from nonebot import get_driver, logger
 
 from kanade_bot.utils.cache import UserDailyCache, UserDailyCacheModel
 from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.persistence import atomic_write_text
 
 from .config import cfg
 
@@ -38,7 +39,6 @@ class HarvestPowerCache(UserDailyCache[float]):
 
         @driver.on_shutdown
         def _():
-            self._save()
             logger.info(
                 "已将缓存数据保存到 {}，console: {} 条，onebot: {} 条",
                 p,
@@ -80,7 +80,7 @@ class HarvestPowerCache(UserDailyCache[float]):
             new_power = power + value
             self._data.get_by_platform(platform)[user_id] = new_power
 
-        self._save()
+        self._writer.mark_dirty()
 
     @override
     def _save(self):
@@ -90,8 +90,7 @@ class HarvestPowerCache(UserDailyCache[float]):
         cp = cfg.crystal_power_cache_file_path
         cd.updated_at = self._data.updated_at
         crystal_data_json = cd.model_dump_json(indent=2, ensure_ascii=False)
-        cp.parent.mkdir(parents=True, exist_ok=True)
-        cp.write_text(crystal_data_json, encoding="utf-8")
+        atomic_write_text(cp, crystal_data_json)
 
 
 harvest_power_cache = HarvestPowerCache()

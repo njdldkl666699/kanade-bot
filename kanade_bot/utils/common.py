@@ -11,7 +11,7 @@ from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
 from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 
-from kanade_bot.utils.schema import AttrDocModel
+from .schema import AttrDocModel
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
