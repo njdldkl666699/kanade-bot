@@ -80,7 +80,7 @@ handle:
   crystal_bonus: 25
   hinted_crystal_bonus: 15
   answer_file: answers.json
-  idiom_file: new_idioms.txt
+  idiom_file: words.txt
 
 ps_command: ["状态", "status"]
 ps_reply_target: false

@@ -101,7 +101,7 @@ async def _(
     elif result == GuessResult.DUPLICATE:
         await matcher.finish("你已经猜过这个成语了呢")
     elif result == GuessResult.ILLEGAL:
-        await matcher.finish(f"你确定“{idiom}”是个成语吗？")
+        return
 
     # WIN or LOSS
     stop_game(session_id)
