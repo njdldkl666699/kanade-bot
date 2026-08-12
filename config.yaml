@@ -79,7 +79,7 @@ handle:
   color_enhance: false
   crystal_bonus: 25
   hinted_crystal_bonus: 15
-  answer_file: new_answers.json
+  answer_file: answers.json
   idiom_file: new_idioms.txt
 
 ps_command: ["状态", "status"]

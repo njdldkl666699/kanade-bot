@@ -19,7 +19,5 @@ config-*.yaml
 cache/
 
 # 杂项
-bge-small-zh-v1.5/
-copilot-sdk_docs/
 kanade_banner*
-mc_status.png
+.VSCodeCounter/

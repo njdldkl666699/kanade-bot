@@ -335,7 +335,7 @@ async def _(bot: OneBot, event: GroupMessageEvent, state: T_State):
             MessageSegment.at(duel_user_1)
             + " 发起了一场决斗，请"
             + MessageSegment.at(duel_user_2)
-            + " 确认是否参与决斗，如果参与请发送 /同意，否则将自动取消"
+            + " 确认是否参与决斗，如果参与请在30秒内发送“/同意”，否则将自动取消"
         )
     else:
         await duel_matcher.finish("当前群聊已有决斗进行中，请稍后再试")

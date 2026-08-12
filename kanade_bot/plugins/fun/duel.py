@@ -52,7 +52,7 @@ class DuelSession:
             logger.info(f"{time_delta}秒后开始决斗")
             await self.bot.send_group_msg(
                 group_id=self.group_id,
-                message="接下来，我会在60秒内喊出开始，在这之后最先发送“/开枪”或“/shot”的玩家胜出，"
+                message="接下来，我会在60秒内喊出开始，在这之后的10秒内最先发送“/开枪”或“/shot”的玩家胜出，"
                 "在喊开始之前发送的玩家会被视为犯规。",
             )
             try:
@@ -88,12 +88,18 @@ class DuelSession:
             return
 
     async def wait_shot(self):
-        self.shot_future = asyncio.get_event_loop().create_future()
+        loop = asyncio.get_running_loop()
+        self.shot_future = loop.create_future()
         try:
+            start_time = loop.time()
             winner = await asyncio.wait_for(self.shot_future, 10)
+            end_time = loop.time()
+
             await self.bot.send_group_msg(
                 group_id=self.group_id,
-                message="玩家" + MessageSegment.at(winner) + " 胜出！",
+                message="玩家"
+                + MessageSegment.at(winner)
+                + f"仅用{end_time - start_time:.2f}秒就开枪了，恭喜获胜！",
             )
         except TimeoutError:
             self.is_time_out = True
