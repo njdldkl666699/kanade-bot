@@ -128,9 +128,9 @@ async def _(
         message += f"\n{game.result}\n"
         message += MessageSegment.image(await run_sync(game.draw)(game.answer))
 
-        if increment_crystal_maybe_init and cfg.crystal_bonus > 0:
-            await increment_crystal_maybe_init(matcher, "onebot", user_id, cfg.crystal_bonus)
-        message += f"\n你获得了 {cfg.crystal_bonus} 水晶奖励~"
+        if increment_crystal_maybe_init and (crystal := game.crystal_bonus) > 0:
+            await increment_crystal_maybe_init(matcher, "onebot", user_id, crystal)
+            message += f"\n你获得了 {crystal} 水晶奖励~"
     else:
         message += "很遗憾，没有人猜出来呢"
         message += f"\n{game.result}\n"

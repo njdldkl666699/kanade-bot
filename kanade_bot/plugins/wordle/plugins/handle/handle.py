@@ -118,6 +118,8 @@ class Handle:
         self.guessed_idiom: list[str] = []  # 记录已猜成语
         self.guessed_pinyin: list[list[tuple[str, str, str]]] = []  # 记录已猜成语的拼音
 
+        self.crystal_bonus: int = cfg.crystal_bonus
+
         self.block_size = (160, 160)  # 文字块尺寸
         self.block_padding = (20, 20)  # 文字块之间间距
         self.padding = (40, 40)  # 边界间距
@@ -135,6 +137,9 @@ class Handle:
             return GuessResult.WIN
         if len(self.guessed_idiom) == self.times:
             return GuessResult.LOSS
+
+    def set_hinted_crystal_bonus(self):
+        self.crystal_bonus = cfg.hinted_crystal_bonus
 
     def draw_block(
         self,

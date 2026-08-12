@@ -2,7 +2,7 @@
   "$schema": "../../schemas/CrystalConfig.json",
   "check_in": {
     "min_crystal": 25,
-    "max_crystal": 100,
+    "max_crystal": 50,
     "max_times": 3,
     "succeed_templates": [
       "嗯，{daypart}。获得 {crystal} 水晶…一点点积攒起来呢。",

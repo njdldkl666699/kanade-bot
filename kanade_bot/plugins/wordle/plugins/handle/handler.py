@@ -117,7 +117,7 @@ async def _(
         message += user_segment
         message += " 猜出了成语！"
 
-        if increment_crystal_maybe_init and (crystal := cfg.crystal_bonus) > 0:
+        if increment_crystal_maybe_init and (crystal := game.crystal_bonus) > 0:
             await increment_crystal_maybe_init(matcher, "onebot", user_id, crystal)
             message += f"\n你获得了 {crystal} 水晶奖励~"
     else:

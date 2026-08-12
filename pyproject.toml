@@ -34,6 +34,7 @@ rag = ["chromadb>=1.5.6", "sentence-transformers>=5.3.0"]
 [dependency-groups]
 dev = [
   "check-requirements-txt>=1.4.2",
+  "py-spy>=0.4.2",
   "ruff>=0.16.2",
 ]
 

@@ -15,6 +15,8 @@ class MindleConfig(AttrDocModel):
     """最大尝试次数"""
     crystal_bonus: NonNegativeInt = 0
     """猜出配方后的水晶奖励，若为 0 则不启用水晶奖励功能"""
+    hinted_crystal_bonus: NonNegativeInt = 0
+    """使用提示后猜出配方获得的水晶奖励"""
 
     background_image: str = "background.png"
     """工作台背景图片文件名"""

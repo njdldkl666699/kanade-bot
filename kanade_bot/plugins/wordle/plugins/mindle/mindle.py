@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw
 
 from kanade_bot.plugins.wordle.util import GuessResult, save_png
 
+from .config import cfg
+
 SUPPORTED_RECIPE_TYPES = {
     "minecraft:crafting_shaped",
     "minecraft:crafting_shapeless",
@@ -285,6 +287,7 @@ class Mindle:
         self.last_recipe: Recipe | None = None
         self.last_states: tuple[GuessState, ...] | None = None
         self.hinted_item_ids: set[str] = set()
+        self.crystal_bonus: int = cfg.crystal_bonus
 
     @classmethod
     def random_mindle(cls, book: RecipeBook, max_attempts: int = 10) -> Self:
@@ -305,12 +308,13 @@ class Mindle:
             # the randomly selected answer recipe.
             self.last_states = (GuessState.CORRECT,) * len(recipe.ingredients)
             return GuessResult.WIN
-        self.last_states = compare_ingredients(
-            recipe.ingredients, self.answer.ingredients
-        )
+        self.last_states = compare_ingredients(recipe.ingredients, self.answer.ingredients)
         if len(self.guessed_item_ids) >= self.max_attempts:
             return GuessResult.LOSS
         return None
+
+    def set_hinted_crystal_bonus(self):
+        self.crystal_bonus = cfg.hinted_crystal_bonus
 
     def get_hint(self) -> RecipeHint | None:
         item_ids = list(

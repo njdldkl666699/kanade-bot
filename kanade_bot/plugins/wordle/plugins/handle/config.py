@@ -18,6 +18,8 @@ class HandleConfig(AttrDocModel):
 
     crystal_bonus: NonNegativeInt = 0
     """猜出成语后获得的水晶奖励，若为0则不启用水晶奖励功能"""
+    hinted_crystal_bonus: NonNegativeInt = 0
+    """使用提示后猜出成语获得的水晶奖励"""
 
     idiom_file: str = "idioms.txt"
     """成语文件名"""

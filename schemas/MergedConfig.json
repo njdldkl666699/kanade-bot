@@ -92,6 +92,13 @@
           "title": "Crystal Bonus",
           "type": "integer"
         },
+        "hinted_crystal_bonus": {
+          "default": 0,
+          "description": "使用提示后猜出成语获得的水晶奖励",
+          "minimum": 0,
+          "title": "Hinted Crystal Bonus",
+          "type": "integer"
+        },
         "idiom_file": {
           "default": "idioms.txt",
           "description": "成语文件名",
@@ -313,6 +320,13 @@
           "description": "猜出配方后的水晶奖励，若为 0 则不启用水晶奖励功能",
           "minimum": 0,
           "title": "Crystal Bonus",
+          "type": "integer"
+        },
+        "hinted_crystal_bonus": {
+          "default": 0,
+          "description": "使用提示后猜出配方获得的水晶奖励",
+          "minimum": 0,
+          "title": "Hinted Crystal Bonus",
           "type": "integer"
         },
         "background_image": {
@@ -1630,6 +1644,7 @@
         "strict_mode": false,
         "color_enhance": false,
         "crystal_bonus": 0,
+        "hinted_crystal_bonus": 0,
         "idiom_file": "idioms.txt",
         "answer_file": "answers.json"
       },
@@ -1889,6 +1904,7 @@
       "default": {
         "max_attempts": 10,
         "crystal_bonus": 0,
+        "hinted_crystal_bonus": 0,
         "background_image": "background.png",
         "lang_file": "zh_cn.json",
         "render_items_dir": "items/",

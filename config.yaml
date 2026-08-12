@@ -69,11 +69,13 @@ wordle:
 mindle:
   max_attempts: 10
   crystal_bonus: 25
+  hinted_crystal_bonus: 10
 
 handle:
   strict_mode: true
   color_enhance: false
   crystal_bonus: 25
+  hinted_crystal_bonus: 15
 
 ps_command: ["状态", "status"]
 ps_reply_target: false
