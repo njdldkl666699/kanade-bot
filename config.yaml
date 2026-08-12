@@ -47,6 +47,9 @@ gallery:
   send_pic_limit: 10
   send_pic_as_meme: true
 
+help:
+  welcome_image_file: welcome.gif
+
 music:
   playlist_link: "https://blog.njdldkl666699.dpdns.org/playlists/"
   audio_page_size: 10

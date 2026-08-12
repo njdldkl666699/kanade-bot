@@ -19,6 +19,52 @@ SUPPORTED_RECIPE_TYPES = {
     "minecraft:crafting_shapeless",
 }
 
+# Recipe groups are data identifiers rather than translation keys. Only groups
+# containing multiple result items need an explicit user-facing name; groups
+# that merely collect alternate recipes for one item keep that item's name.
+# Dyeing recipes use separate group ids, so normalize them to the same guess.
+GROUP_ALIASES = {
+    "bed_dye": "bed",
+    "carpet_dye": "carpet",
+    "harness_dye": "harness",
+}
+GROUP_NAMES = {
+    "banner": "旗帜",
+    "bark": "木",
+    "bed": "床",
+    "boat": "船",
+    "carpet": "地毯",
+    "chest_boat": "运输船",
+    "concrete_powder": "混凝土粉末",
+    "dyed_candle": "蜡烛",
+    "harness": "挽具",
+    "planks": "木板",
+    "shelf": "展示架",
+    "stained_glass": "染色玻璃",
+    "stained_glass_pane": "染色玻璃板",
+    "stained_terracotta": "陶瓦",
+    "waxed_copper_bar": "涂蜡的铜栏杆",
+    "waxed_copper_block": "涂蜡的铜块",
+    "waxed_copper_chain": "涂蜡的铜链",
+    "waxed_copper_chest": "涂蜡的铜箱子",
+    "waxed_copper_door": "涂蜡的铜门",
+    "waxed_copper_golem_statue": "涂蜡的铜傀儡像",
+    "waxed_copper_lantern": "涂蜡的铜灯笼",
+    "waxed_copper_trapdoor": "涂蜡的铜活板门",
+    "waxed_lightning_rod": "涂蜡的避雷针",
+    "wooden_button": "按钮",
+    "wooden_door": "门",
+    "wooden_fence": "栅栏",
+    "wooden_fence_gate": "栅栏门",
+    "wooden_hanging_sign": "悬挂式告示牌",
+    "wooden_pressure_plate": "压力板",
+    "wooden_sign": "告示牌",
+    "wooden_slab": "台阶",
+    "wooden_stairs": "楼梯",
+    "wooden_trapdoor": "活板门",
+    "wool": "羊毛",
+}
+
 
 class MindleDataError(RuntimeError):
     pass
@@ -53,6 +99,7 @@ class Recipe:
     result_id: str
     result_name: str
     ingredients: tuple[Ingredient, ...]
+    group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -124,7 +171,10 @@ def parse_recipe(path: Path, translations: dict[str, str]) -> Recipe | None:
         for index, ingredient in enumerate(ingredients):
             slots[index] = _ingredient_from_json(ingredient)
 
-    return Recipe(path.stem, result_id, result_name, tuple(slots))
+    group = data.get("group")
+    if group is not None and not isinstance(group, str):
+        raise TypeError("配方 group 必须是字符串")
+    return Recipe(path.stem, result_id, result_name, tuple(slots), group)
 
 
 def compare_ingredients(
@@ -182,8 +232,16 @@ class RecipeBook:
         self.background_path = background_path
         self.item_names = item_names or {}
         self.by_name: dict[str, Recipe] = {}
+        self.aliases: dict[str, Recipe] = {}
         for recipe in recipes:
-            self.by_name.setdefault(recipe.result_name, recipe)
+            guess_name = self.guess_name(recipe)
+            self.by_name.setdefault(guess_name, recipe)
+            alias = self.aliases.get(recipe.result_name)
+            if alias is None or (alias.group is not None and recipe.group is None):
+                # Prefer an ungrouped recipe for an exact item name. This keeps
+                # the exact guess distinct when one result has both grouped and
+                # ungrouped recipes (for example white wool from string).
+                self.aliases[recipe.result_name] = recipe
 
     @classmethod
     def load(
@@ -222,27 +280,58 @@ class RecipeBook:
         return random.choice(self.recipes)
 
     def get(self, item_name: str) -> Recipe | None:
-        return self.by_name.get(item_name.strip())
+        item_name = item_name.strip()
+        return self.by_name.get(item_name) or self.aliases.get(item_name)
+
+    @staticmethod
+    def group_id(recipe: Recipe) -> str | None:
+        if recipe.group is None:
+            return None
+        return GROUP_ALIASES.get(recipe.group, recipe.group)
+
+    @classmethod
+    def guess_id(cls, recipe: Recipe) -> str:
+        group = cls.group_id(recipe)
+        return f"group:{group}" if group is not None else f"item:{recipe.result_id}"
+
+    @classmethod
+    def guess_name(cls, recipe: Recipe) -> str:
+        group = cls.group_id(recipe)
+        if group is None:
+            return recipe.result_name
+        return GROUP_NAMES.get(group, recipe.result_name)
 
     def suggestions(self, query: str, limit: int = 10) -> list[str]:
         query = query.strip()
         if not query:
             return []
-        containing = [name for name in self.by_name if query in name]
+        searchable = {
+            alias: self.guess_name(recipe) for alias, recipe in self.aliases.items()
+        }
+        searchable.update({name: name for name in self.by_name})
+        containing = {
+            name for candidate, name in searchable.items() if query in candidate
+        }
         if containing:
-            containing.sort(key=lambda name: (len(name), name))
-            return containing[:limit]
+            return sorted(containing, key=lambda name: (len(name), name))[:limit]
         ranked = sorted(
-            self.by_name,
-            key=lambda name: (
-                -SequenceMatcher(None, query, name).ratio(),
-                len(name),
-                name,
+            searchable,
+            key=lambda candidate: (
+                -SequenceMatcher(None, query, candidate).ratio(),
+                len(candidate),
+                candidate,
             ),
         )
-        return [name for name in ranked if SequenceMatcher(None, query, name).ratio() >= 0.35][
-            :limit
-        ]
+        suggestions: list[str] = []
+        for candidate in ranked:
+            if SequenceMatcher(None, query, candidate).ratio() < 0.35:
+                break
+            name = searchable[candidate]
+            if name not in suggestions:
+                suggestions.append(name)
+            if len(suggestions) >= limit:
+                break
+        return suggestions
 
     def texture_path(self, item_id: str) -> Path | None:
         direct = self.items_dir / f"{_strip_namespace(item_id)}.png"
@@ -298,17 +387,25 @@ class Mindle:
         return f"【物品】：{self.answer.result_name}"
 
     def guess(self, recipe: Recipe) -> GuessResult | None:
-        if recipe.result_id in self.guessed_item_ids:
+        guess_id = self.book.guess_id(recipe)
+        if guess_id in self.guessed_item_ids:
             return GuessResult.DUPLICATE
-        self.guessed_item_ids.append(recipe.result_id)
+        self.guessed_item_ids.append(guess_id)
         self.last_recipe = recipe
-        if recipe.result_id == self.answer.result_id:
-            # One item can have multiple recipes. A correct item guess should
-            # still render every slot as correct when its recipe differs from
-            # the randomly selected answer recipe.
+        answer_group = self.book.group_id(self.answer)
+        same_result = recipe.result_id == self.answer.result_id
+        same_group = answer_group is not None and answer_group == self.book.group_id(
+            recipe
+        )
+        if same_result or same_group:
+            # A result can have alternate recipes, and grouped recipes can have
+            # different result items. Either kind of correct guess is rendered
+            # as an entirely correct recipe.
             self.last_states = (GuessState.CORRECT,) * len(recipe.ingredients)
             return GuessResult.WIN
-        self.last_states = compare_ingredients(recipe.ingredients, self.answer.ingredients)
+        self.last_states = compare_ingredients(
+            recipe.ingredients, self.answer.ingredients
+        )
         if len(self.guessed_item_ids) >= self.max_attempts:
             return GuessResult.LOSS
         return None
@@ -326,7 +423,9 @@ class Mindle:
         )
         if not item_ids:
             return None
-        unrevealed = [item_id for item_id in item_ids if item_id not in self.hinted_item_ids]
+        unrevealed = [
+            item_id for item_id in item_ids if item_id not in self.hinted_item_ids
+        ]
         item_id = random.choice(unrevealed or item_ids)
         image_path = self.book.texture_path(item_id)
         if image_path is None:
@@ -372,7 +471,9 @@ class Mindle:
             y = (self.SLOT_ORIGIN[1] + row * self.SLOT_STEP) * self.SCALE
             size = self.SLOT_SIZE * self.SCALE
             if states:
-                draw.rectangle((x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]])
+                draw.rectangle(
+                    (x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]]
+                )
             if not ingredient.is_air:
                 self._paste_item(canvas, ingredient.options[0], (x, y, size))
 

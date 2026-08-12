@@ -16,6 +16,7 @@ nonebot.load_plugin("kanade_bot.plugins.wordle")
 from kanade_bot.plugins.wordle.plugins.mindle.config import cfg
 from kanade_bot.plugins.wordle.plugins.mindle.mindle import (
     AIR,
+    GROUP_NAMES,
     GuessState,
     Ingredient,
     Mindle,
@@ -48,7 +49,7 @@ class MindleTest(unittest.TestCase):
         self.assertGreater(len(self.book.recipes), 1000)
         self.assertIsNotNone(self.book.get("橡木告示牌"))
         suggestions = self.book.suggestions("按钮")
-        self.assertEqual(len(suggestions), 10)
+        self.assertIn("按钮", suggestions)
         self.assertTrue(all("按钮" in name for name in suggestions))
 
     def test_air_and_repeated_ingredient_comparison(self):
@@ -86,14 +87,95 @@ class MindleTest(unittest.TestCase):
             recipe = parse_recipe(path, {"test_item": "测试物品"})
         self.assertIsNotNone(recipe)
         assert recipe is not None
+        self.assertIsNone(recipe.group)
         occupied = [
             index for index, item in enumerate(recipe.ingredients) if not item.is_air
         ]
         self.assertEqual(occupied, [1, 4])
 
+    def test_recipe_group_is_parsed(self):
+        data = {
+            "type": "minecraft:crafting_shapeless",
+            "group": "wool",
+            "ingredients": ["minecraft:white_wool"],
+            "result": {"id": "minecraft:test_item"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "test.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            recipe = parse_recipe(path, {"test_item": "测试物品"})
+
+        self.assertIsNotNone(recipe)
+        assert recipe is not None
+        self.assertEqual(recipe.group, "wool")
+
+    def test_grouped_recipes_use_generic_guess_name(self):
+        wool = self.book.get("羊毛")
+        sign = self.book.get("告示牌")
+        self.assertIsNotNone(wool)
+        self.assertIsNotNone(sign)
+        assert wool is not None and sign is not None
+        self.assertEqual(wool.group, "wool")
+        self.assertEqual(sign.group, "wooden_sign")
+        self.assertIn("羊毛", self.book.suggestions("羊"))
+
+    def test_all_multi_result_groups_have_generic_names(self):
+        results_by_group: dict[str, set[str]] = {}
+        for recipe in self.book.recipes:
+            group = self.book.group_id(recipe)
+            if group is not None:
+                results_by_group.setdefault(group, set()).add(recipe.result_id)
+
+        missing = {
+            group
+            for group, result_ids in results_by_group.items()
+            if len(result_ids) > 1 and group not in GROUP_NAMES
+        }
+        self.assertEqual(missing, set())
+
+    def test_same_group_wins_and_counts_as_one_guess(self):
+        wool_recipes = [
+            recipe for recipe in self.book.recipes if recipe.group == "wool"
+        ]
+        answer = next(
+            recipe for recipe in wool_recipes if recipe.result_id == "white_wool"
+        )
+        guess = next(
+            recipe for recipe in wool_recipes if recipe.result_id == "red_wool"
+        )
+        game = Mindle(answer, self.book)
+
+        self.assertEqual(game.guess(guess), GuessResult.WIN)
+        self.assertEqual(game.guessed_item_ids, ["group:wool"])
+        self.assertEqual(game.last_states, (GuessState.CORRECT,) * 9)
+
+    def test_ungrouped_recipe_still_requires_exact_item(self):
+        answer = Recipe("answer", "first", "第一件物品", (AIR,) * 9)
+        guess = Recipe("guess", "second", "第二件物品", (AIR,) * 9)
+        game = Mindle(answer, self.book)
+
+        self.assertIsNone(game.guess(guess))
+
+    def test_group_guess_does_not_block_exact_ungrouped_guess(self):
+        answer = next(
+            recipe
+            for recipe in self.book.recipes
+            if recipe.recipe_id == "white_wool_from_string"
+        )
+        grouped_guess = self.book.get("羊毛")
+        exact_guess = self.book.get("白色羊毛")
+        self.assertIsNotNone(grouped_guess)
+        self.assertIsNotNone(exact_guess)
+        assert grouped_guess is not None and exact_guess is not None
+        self.assertIsNone(exact_guess.group)
+        game = Mindle(answer, self.book)
+
+        self.assertIsNone(game.guess(grouped_guess))
+        self.assertEqual(game.guess(exact_guess), GuessResult.WIN)
+
     def test_guess_and_render(self):
         answer = self.book.get("橡木告示牌")
-        wrong = self.book.get("白桦木告示牌")
+        wrong = self.book.get("橡木压力板")
         self.assertIsNotNone(answer)
         self.assertIsNotNone(wrong)
         assert answer is not None and wrong is not None

@@ -72,13 +72,16 @@ async def _(matcher: Matcher, session_id: SessionId):
     set_timeout(matcher, session_id)
 
     message = Message(
-        f"猜配方开始！你有 {game.max_attempts} 次机会，请使用 /猜 <物品名称> 猜测 Minecraft 物品。"
+        f"猜配方开始！你有 {game.max_attempts} 次机会，请使用 /猜 <物品名称> 猜测 "
+        "Minecraft 物品；同组物品可使用去掉颜色或木材种类后的通用名称。"
     )
     message += MessageSegment.image(await run_sync(game.draw)())
     await matcher.finish(message)
 
 
-def _suggestion_message(event: MessageEvent, item_name: str, suggestions: list[str]) -> Message:
+def _suggestion_message(
+    event: MessageEvent, item_name: str, suggestions: list[str]
+) -> Message:
     message = Message()
     if isinstance(event, GroupMessageEvent):
         message += MessageSegment.at(event.get_user_id())
@@ -115,7 +118,8 @@ async def _(
     if result is None:
         image = MessageSegment.image(await run_sync(game.draw)())
         await matcher.finish(
-            Message(f"第 {len(game.guessed_item_ids)}/{game.max_attempts} 次猜测") + image
+            Message(f"第 {len(game.guessed_item_ids)}/{game.max_attempts} 次猜测")
+            + image
         )
 
     stop_game(session_id)
@@ -123,7 +127,9 @@ async def _(
     if result == GuessResult.WIN:
         user_id = event.get_user_id()
         message += "恭喜"
-        message += MessageSegment.at(user_id) if isinstance(event, GroupMessageEvent) else "你"
+        message += (
+            MessageSegment.at(user_id) if isinstance(event, GroupMessageEvent) else "你"
+        )
         message += " 猜出了配方！"
         message += f"\n{game.result}\n"
         message += MessageSegment.image(await run_sync(game.draw)(game.answer))
@@ -134,7 +140,9 @@ async def _(
     else:
         message += "很遗憾，没有人猜出来呢"
         message += f"\n{game.result}\n"
-        message += MessageSegment.image(await run_sync(game.draw)(game.answer, states=()))
+        message += MessageSegment.image(
+            await run_sync(game.draw)(game.answer, states=())
+        )
     await matcher.finish(message)
 
 
