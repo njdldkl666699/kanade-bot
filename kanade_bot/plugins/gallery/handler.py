@@ -302,6 +302,11 @@ async def _(
         pic_paths = await _get_pictures_from_message(bot, event.reply.message)
         await _finish_add_pictures(name, pic_paths, force=force)
 
+    # 获取消息中的图片
+    pic_paths = await _get_pictures_from_message(bot, event.message)
+    if pic_paths:
+        await _finish_add_pictures(name, pic_paths, force=force)
+
     # pause，要求用户发送图片
     state["gallery_name"] = name
     state["gallery_force"] = force

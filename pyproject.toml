@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "anyconfig>=0.15.1",
-  "audioop-lts>=0.2.2",
   "emoji>=2.15.0",
   "github-copilot-sdk>=1.0.0",
   "httpx>=0.28.1",
@@ -22,7 +21,6 @@ dependencies = [
   "nonebot-plugin-whateat-pic>=1.5.9",
   "nonebot-plugin-wordcloud>=0.10.0",
   "nonebot2[fastapi]>=2.5.0",
-  "openai>=2.41.0",
   "pypinyin>=0.55.0",
   "pyspellchecker>=0.9.0",
   "send2trash>=2.1.0",

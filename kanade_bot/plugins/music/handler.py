@@ -131,14 +131,16 @@ async def _(arg_msg: Message = CommandArg()):
 
 @random_lyric.handle()
 async def _(arg_msg: Message = CommandArg()):
-    args = parse_arg_message(
-        arg_msg.extract_plain_text(), {"query": str, "length": int, "show_song": bool}
-    )
-    query: str | None = args["query"]
-    length: int | None = args["length"]
-    show_song: bool = args["show_song"] or True
+    # args = parse_arg_message(
+    #     arg_msg.extract_plain_text(), {"query": str, "length": int, "show_song": bool}
+    # )
+    # query: str | None = args["query"]
+    # length: int | None = args["length"]
+    # show_song: bool = args["show_song"] or True
+    query = arg_msg.extract_plain_text().strip()
+    show_song = True
 
-    result = get_random_lyric(query, length)
+    result = get_random_lyric(query)
     if not result:
         await random_lyric.finish("没有找到符合条件的歌曲")
 
