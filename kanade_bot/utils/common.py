@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from copilot import CopilotClient
+from copilot import CopilotClient, RuntimeConnection
 from copilot.client import StopError
 from copilot.session import AzureProviderOptions
 from httpx import AsyncClient
@@ -86,7 +86,7 @@ HTTPX_CLIENT = AsyncClient(timeout=20)
 """全局HTTPX客户端单例"""
 
 
-COPILOT_CLIENT = CopilotClient()
+COPILOT_CLIENT = CopilotClient(connection=RuntimeConnection.for_inprocess())
 """全局Copilot客户端单例
 
 负责与Copilot服务进行通信，创建和恢复会话等操作
