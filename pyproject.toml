@@ -27,7 +27,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-rag = ["chromadb>=1.5.6", "sentence-transformers>=5.3.0"]
+rag = [
+  "chromadb>=1.5.6",
+  "openai>=3.0.0",
+  "sentence-transformers>=5.3.0",
+]
 
 [dependency-groups]
 dev = [

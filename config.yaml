@@ -91,7 +91,7 @@ ps_test_sites:
 
 whateat_cd: 0
 
-wordcloud_background_color: black
+wordcloud_background_color: white
 
 generate_schemas: false
 schema_output_dir: ./schemas
