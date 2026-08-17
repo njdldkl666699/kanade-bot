@@ -51,7 +51,7 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
      watchdog:
        github_repo: owner/repo
        github_branch: main
-       github_token: "..."   # 可选，用于提高 API 限额
+       github_token: "..." # 可选，用于提高 API 限额
        poll_interval: 30
      ```
    - 环境变量：在`.env`中设置 `WATCHDOG__GITHUB_REPO=owner/repo` 等；

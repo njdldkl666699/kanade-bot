@@ -179,6 +179,7 @@ async def send_message_in_chunks(
     if not content:
         logger.warning(f"会话{session_info.session_id}没有收到任何回复")
         await matcher.finish("没有收到任何回复，请稍后再试")
+    content = content.strip()
 
     # 扣减水晶
     if not auto_reply:
