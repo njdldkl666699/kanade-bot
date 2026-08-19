@@ -1,9 +1,7 @@
 <div align="center">
   <img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em;"/>
   <h1>宵崎奏Bot (Kanade Bot)</h1>
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/njdldkl666699/kanade-bot.svg" alt="license">
-  </a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/njdldkl666699/kanade-bot.svg" alt="license"></a>
   <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="python">
   <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/njdldkl666699/kanade-bot">
 </div>

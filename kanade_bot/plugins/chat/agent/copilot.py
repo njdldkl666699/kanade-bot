@@ -262,7 +262,7 @@ class CopilotSessionManager:
         if user_info := build_sender_info(session_info.nickname, session_info.user_id):
             prompt = f"{user_info}：{prompt}"
         if prompt:
-            prompt_parts.append("\n$ 下面是这次的用户消息：")
+            prompt_parts.append("\n$ 下面是这次用户对你的消息：")
             prompt_parts.append(prompt)
 
         return "\n".join(prompt_parts).strip()
