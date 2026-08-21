@@ -80,7 +80,9 @@ register_matcher(random_waifu, "随机图")
 async def _get_at(event: GroupMessageEvent) -> int | None:
     at_segments = [seg for seg in event.get_message() if seg.type == "at"]
     if len(at_segments) == 1:
-        return int(at_segments[0].data["qq"])
+        qq: str = at_segments[0].data["qq"]
+        if qq.isdigit():
+            return int(qq)
 
 
 async def _is_duel_event(event: GroupMessageEvent, state: T_State) -> bool:

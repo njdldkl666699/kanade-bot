@@ -35,7 +35,7 @@ class Summarizer:
         "model": cfg.model,
         "reasoning_effort": "medium",
         "system_message": system_message,
-        "provider": cfg.provider.model_dump() if cfg.provider else None,
+        "provider": cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,
     }
 
     def __init__(self):
