@@ -22,6 +22,7 @@ class DaypartEnum(Enum):
     AFTERNOON = "下午好"
     DUSK = "黄昏好"
     EVENING = "晚上好"
+    MIDNIGHT = "午夜好"
     NIGHT = "晚安"
 
 
@@ -31,7 +32,8 @@ DAYPART_TIME_RANGES = {
     DaypartEnum.MORNING: [(time(5), time(11))],
     DaypartEnum.NOON: [(time(11), time(13))],
     DaypartEnum.AFTERNOON: [(time(13), time(17))],
-    DaypartEnum.DUSK: [(time(16), time(19))],
-    DaypartEnum.EVENING: [(time(18), time.max)],
-    DaypartEnum.NIGHT: [(time(21), time.max), (time(0), time(2))],  # 跨越午夜的时间段
+    DaypartEnum.DUSK: [(time(17), time(19))],
+    DaypartEnum.EVENING: [(time(18), time(23))],
+    DaypartEnum.MIDNIGHT: [(time(23), time.max), (time(0), time(1))],
+    DaypartEnum.NIGHT: [(time(21), time.max), (time(0), time(4))],
 }
