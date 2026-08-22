@@ -1,11 +1,15 @@
 import asyncio
 import json
+import logging
+import time
 from collections import deque
-from typing import Any
+from typing import Any, Literal
 
-from copilot import CopilotSession
+from copilot import CopilotSession, SessionEvent
+from copilot._diagnostics import log_timing
 from copilot.session import Attachment, PermissionHandler
-from copilot.session_events import AssistantMessageData
+from copilot.session import logger as copilot_logger
+from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
 from nonebot import get_driver, logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT
@@ -16,14 +20,21 @@ from ..config import cfg
 from .memory import MemoryContext, MemoryStore
 from .tool import build_memory_tools, get_image_caption, list_memes, view_image
 
-FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
+FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。\n"
+
+TOOL_CALL_PROMPT = """When using tools: 
+never return an empty response; 
+briefly explain the purpose when starting a new type of task, but not before every tool call; 
+follow the tool schema exactly and do not invent parameters; 
+keep the conversation style consistent.
+"""
 
 
 def _build_system_prompt() -> str:
     sp_path = cfg.system_prompt_file_path
     if not sp_path.is_file():
         logger.warning(f"系统提示词文件不存在，路径: {sp_path.absolute()}")
-        return FALLBACK_SYSTEM_PROMPT
+        return FALLBACK_SYSTEM_PROMPT + TOOL_CALL_PROMPT
 
     sp = sp_path.read_text(encoding="utf-8")
     extras = cfg.system_prompt_extras_paths
@@ -35,7 +46,7 @@ def _build_system_prompt() -> str:
         content = p.read_text(encoding="utf-8")
         sp = sp.replace(f"{{{{{k}}}}}", content)
 
-    return sp
+    return sp + TOOL_CALL_PROMPT
 
 
 class CopilotSessionManager:
@@ -149,6 +160,101 @@ class CopilotSessionManager:
             new_session = True
         return session, new_session
 
+    @staticmethod
+    async def _send_and_wait_assistant_messages(
+        session: CopilotSession,
+        prompt: str,
+        *,
+        attachments: list[Attachment] | None = None,
+        mode: Literal["enqueue", "immediate"] | None = None,
+        agent_mode: Literal["interactive", "plan", "autopilot", "shell"] | None = None,
+        request_headers: dict[str, str] | None = None,
+        display_prompt: str | None = None,
+        timeout: float = 60.0,
+    ) -> list[SessionEvent]:
+        """
+        发送消息到会话，返回所有AssistantMessageData事件。
+
+        不同于`CopilotSession.send_and_wait`的只返回最后一个助手消息，
+        这个方法会收集并返回本轮对话产生的全部AssistantMessageData。
+
+        关于流式返回（yield）：handler 是注册在 `session.on` 上的同步回调，
+        由 JSON-RPC 读取线程分发，并不在事件循环线程上。若要用 `yield` 逐个流式
+        吐出事件，需借助 `asyncio.Queue` + `loop.call_soon_threadsafe` 做跨线程桥接，
+        且调用方必须完整消费或 `aclose` 生成器，否则 `finally` 中的 `unsubscribe`不会执行。
+
+        这里采用收集后返回列表的更稳健实现。
+
+        参数注释参见`CopilotSession.send_and_wait`。
+        """
+        total_start = time.perf_counter()
+        idle_event = asyncio.Event()
+        error_event: Exception | None = None
+        assistant_messages: list[SessionEvent] = []
+        first_assistant_message_logged = False
+
+        def handler(event: SessionEvent) -> None:
+            nonlocal first_assistant_message_logged, error_event
+            match event.data:
+                case AssistantMessageData():
+                    assistant_messages.append(event)
+                    if not first_assistant_message_logged:
+                        first_assistant_message_logged = True
+                        log_timing(
+                            copilot_logger,
+                            logging.DEBUG,
+                            "CopilotSession.send_and_wait first assistant message",
+                            total_start,
+                            session_id=session.session_id,
+                        )
+                case SessionIdleData():
+                    log_timing(
+                        copilot_logger,
+                        logging.DEBUG,
+                        "CopilotSession.send_and_wait idle received",
+                        total_start,
+                        session_id=session.session_id,
+                    )
+                    idle_event.set()
+                case SessionErrorData() as data:
+                    error_event = Exception(f"Session error: {data.message or str(data)}")
+                    idle_event.set()
+
+        unsubscribe = session.on(handler)
+        try:
+            await session.send(
+                prompt,
+                attachments=attachments,
+                mode=mode,
+                agent_mode=agent_mode,
+                request_headers=request_headers,
+                display_prompt=display_prompt,
+            )
+            await asyncio.wait_for(idle_event.wait(), timeout=timeout)
+            if error_event:
+                log_timing(
+                    copilot_logger,
+                    logging.WARNING,
+                    "CopilotSession.send_and_wait failed",
+                    total_start,
+                    session_id=session.session_id,
+                    completed_by="error",
+                )
+                raise error_event
+            return assistant_messages
+        except TimeoutError:
+            log_timing(
+                copilot_logger,
+                logging.WARNING,
+                "CopilotSession.send_and_wait failed",
+                total_start,
+                session_id=session.session_id,
+                completed_by="timeout",
+            )
+            raise TimeoutError(f"Timeout after {timeout}s waiting for session.idle")
+        finally:
+            unsubscribe()
+
     async def send_and_wait(
         self,
         session_info: SessionInfo,
@@ -158,8 +264,8 @@ class CopilotSessionManager:
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
         timeout: float = 60,
-    ) -> str | None:
-        """发送消息到会话并等待响应。
+    ) -> list[str] | None:
+        """发送消息到会话并等待响应。返回助手消息的内容列表。
 
         prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息。
         """
@@ -207,7 +313,8 @@ class CopilotSessionManager:
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
             try:
-                session_event = await session.send_and_wait(
+                events = await CopilotSessionManager._send_and_wait_assistant_messages(
+                    session,
                     send_prompt,
                     attachments=attachments if cfg.image_caption else None,
                     timeout=timeout,
@@ -218,12 +325,13 @@ class CopilotSessionManager:
                     if session_id in self._sessions_messages:
                         self._sessions_messages[session_id].clear()
 
-            if not session_event:
+            if not events:
                 return None
-
-            match session_event.data:
-                case AssistantMessageData() as data:
-                    return data.content
+            return [
+                event.data.content
+                for event in events
+                if isinstance(event.data, AssistantMessageData)
+            ]
 
     @staticmethod
     async def _build_send_prompt(

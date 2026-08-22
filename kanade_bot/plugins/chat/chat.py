@@ -11,10 +11,11 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.exception import ActionFailed
 from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType, get_platform_type
-from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info, send_forward_msg
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -39,7 +40,7 @@ def _send_fail_message(matcher: type[Matcher]):
     return matcher.finish("已深度思考（用时0秒）\n服务器繁忙，请稍后再试")
 
 
-async def _finish_onebot_message(
+async def _send_onebot_message(
     matcher: type[Matcher],
     bot: OneBot,
     chunks: list[str],
@@ -76,34 +77,40 @@ async def _finish_onebot_message(
             segments.append(MessageSegment.text(text))
 
     if not segments:
-        await matcher.finish()
+        return
 
     # 消息数==1，引用回复
     if len(segments) == 1:
         segment = segments[0]
         if not reply_id:
-            await matcher.finish(segment)
-        reply = MessageSegment.reply(reply_id)
-        await matcher.finish(reply + segment)
+            await matcher.send(segment)
+        else:
+            reply = MessageSegment.reply(reply_id)
+            await matcher.send(reply + segment)
 
-    # 消息数<=3，按条发送
-    if len(segments) <= 3:
+    # 消息数<=4，按条发送
+    elif len(segments) <= 4:
         for segment in segments:
             await matcher.send(segment)
-        await matcher.finish()
+
+    # 消息数>4但<=10，合并转发
+    elif len(segments) <= 10:
+        bot_id, bot_nickname = await get_onebot_info(bot)
+        node_custom_message = OneBotMessage()
+        for segment in segments:
+            node_custom_message += MessageSegment.node_custom(
+                bot_id, bot_nickname, OneBotMessage(segment)
+            )
+        try:
+            await matcher.send(node_custom_message)
+        except ActionFailed:
+            # 部分OneBot 11实现不支持使用send_msg发送转发消息，
+            # 使用其扩展接口send_forward_msg
+            await send_forward_msg(bot, messages=node_custom_message)
 
     # 消息数>10，合并为一条消息发送
-    if len(segments) > 10:
-        await matcher.finish(OneBotMessage(segments))
-
-    # 消息数>3但<=10，合并转发
-    bot_id, bot_nickname = await get_onebot_info(bot)
-    node_custom_message = OneBotMessage()
-    for segment in segments:
-        node_custom_message += MessageSegment.node_custom(
-            bot_id, bot_nickname, OneBotMessage(segment)
-        )
-    await matcher.finish(node_custom_message)
+    else:
+        await matcher.send(OneBotMessage(segments))
 
 
 def _split_content_preserving_code_blocks(content: str) -> list[str]:
@@ -163,7 +170,7 @@ async def send_message_in_chunks(
     session_info = await extract_session_info(event, bot)
 
     try:
-        content = await copilot.send_and_wait(
+        contents = await copilot.send_and_wait(
             session_info,
             prompt,
             rag_docs=rag_docs,
@@ -176,10 +183,9 @@ async def send_message_in_chunks(
         # await _send_fail_message(matcher)
         await matcher.finish(f"发送消息时发生错误：{e}")
 
-    if not content:
+    if not contents:
         logger.warning(f"会话{session_info.session_id}没有收到任何回复")
         await matcher.finish("没有收到任何回复，请稍后再试")
-    content = content.strip()
 
     # 扣减水晶
     if not auto_reply:
@@ -189,13 +195,18 @@ async def send_message_in_chunks(
             event.get_user_id(),
         )
 
-    # OneBot消息特殊处理
-    if isinstance(event, OneBotMessageEvent):
-        chunks = _split_content_preserving_code_blocks(content)
-        await _finish_onebot_message(matcher, cast(OneBot, bot), chunks, reply_id=event.message_id)
-
-    # Console消息直接发送原始内容
-    await matcher.finish(content)
+    for content in contents:
+        if not (content := content.strip()):
+            continue
+        if isinstance(event, OneBotMessageEvent):
+            # OneBot消息特殊处理
+            chunks = _split_content_preserving_code_blocks(content)
+            await _send_onebot_message(
+                matcher, cast(OneBot, bot), chunks, reply_id=event.message_id
+            )
+        else:
+            # Console消息直接发送原始内容
+            await matcher.send(content)
 
 
 def should_reply_event(event: Event):

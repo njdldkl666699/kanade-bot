@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal, override
 
 from nonebot import get_plugin_config
-from nonebot.adapters.onebot.v11 import Bot, MessageSegment, NoticeEvent
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment, NoticeEvent
 
 
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
@@ -25,7 +25,7 @@ async def set_msg_emoji_like(
     :param message_id: 消息ID
     :param emoji_id: 表情ID
     """
-    await bot.call_api(
+    return await bot.call_api(
         "set_msg_emoji_like",
         message_id=message_id,
         emoji_id=emoji_id,
@@ -43,7 +43,7 @@ async def send_poke(
     :param user_id: 目标用户ID
     :param group_id: 群聊ID（如果是群聊内戳人则需要提供）
     """
-    await bot.call_api(
+    return await bot.call_api(
         "send_poke",
         user_id=user_id,
         group_id=group_id,
@@ -95,3 +95,16 @@ class BotOfflineNoticeEvent(NoticeEvent):
     @override
     def get_session_id(self) -> str:
         return str(self.user_id)
+
+
+async def send_forward_msg(
+    bot: Bot,
+    messages: Message | None = None,
+    message: Message | None = None,
+):
+    """发送合并转发消息"""
+    return await bot.call_api(
+        "send_forward_msg",
+        messages=messages,
+        message=message,
+    )
