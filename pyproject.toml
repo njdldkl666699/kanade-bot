@@ -18,7 +18,7 @@ dependencies = [
   "nonebot-plugin-htmlrender==0.6.7",
   "nonebot-plugin-localstore>=0.7.4",
   "nonebot-plugin-orm[default]>=0.8.3",
-  "nonebot-plugin-picstatus-ng>=2.2.5",
+  "nonebot-plugin-picstatus>=2.3.0",
   "nonebot-plugin-whateat-pic>=1.5.9",
   "nonebot-plugin-wordcloud>=0.10.0",
   "nonebot2[fastapi]>=2.5.0",
@@ -58,10 +58,10 @@ nonebot-adapter-console = [
 "@local" = []
 nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
 nonebot-plugin-htmlrender = ["nonebot_plugin_htmlrender"]
-nonebot-plugin-picstatus-ng = ["nonebot_plugin_picstatus_ng"]
 nonebot-plugin-localstore = ["nonebot_plugin_localstore"]
 nonebot-plugin-whateat-pic = ["nonebot_plugin_whateat_pic"]
 nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
+nonebot-plugin-picstatus = ["nonebot_plugin_picstatus"]
 
 [tool.ruff.lint]
 ignore = ["B008", "RUF012"]

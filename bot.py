@@ -138,8 +138,8 @@ def patch_foreign_plugins():
     add_menu_matcher.priority = 2
     del_menu_matcher.priority = 2
 
-    ## nonebot_plugin_picstatus_ng
-    from nonebot_plugin_picstatus_ng.__main__ import stat_matcher
+    ## nonebot_plugin_picstatus
+    from nonebot_plugin_picstatus.__main__ import stat_matcher
 
     # 阻止 PicStatus 的指令向后传播
     stat_matcher.block = True
@@ -165,7 +165,7 @@ def register_other_configs_and_generate_schema():
 
     # from nonebot_plugin_orm.config import Config as ORMConfig
     from nonebot_plugin_permission.config import Config as PermissionConfig
-    from nonebot_plugin_picstatus_ng.config import ConfigModel as PicStatusConfig
+    from nonebot_plugin_picstatus.config import ConfigModel as PicStatusConfig
     from nonebot_plugin_uninfo.config import Config as UninfoConfig
     from nonebot_plugin_user.config import Config as UserConfig
     from nonebot_plugin_waiter.config import Config as WaiterConfig

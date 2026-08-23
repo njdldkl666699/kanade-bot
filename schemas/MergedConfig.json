@@ -2022,8 +2022,18 @@
       "default": null,
       "title": "Proxy"
     },
+    "ps_bg_fire_return_timeout": {
+      "default": 15,
+      "title": "Ps Bg Fire Return Timeout",
+      "type": "integer"
+    },
+    "ps_bg_fire_task_timeout": {
+      "default": 60,
+      "title": "Ps Bg Fire Task Timeout",
+      "type": "integer"
+    },
     "ps_bg_local_path": {
-      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_bg.webp",
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus/res/assets/default_bg.webp",
       "format": "path",
       "title": "Ps Bg Local Path",
       "type": "string"
@@ -2043,10 +2053,27 @@
       "title": "Ps Bg Preload Count",
       "type": "integer"
     },
+    "ps_bg_preload_retry_limit": {
+      "default": 3,
+      "title": "Ps Bg Preload Retry Limit",
+      "type": "integer"
+    },
     "ps_bg_provider": {
       "default": "loli",
       "title": "Ps Bg Provider",
       "type": "string"
+    },
+    "ps_bg_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ps Bg Url"
     },
     "ps_collect_cache_size": {
       "additionalProperties": {
@@ -2091,7 +2118,7 @@
       "title": "Ps Count Message Sent Event"
     },
     "ps_default_avatar": {
-      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus_ng/res/assets/default_avatar.webp",
+      "default": "/home/cola/Projects/Python/kanade-bot/.venv/lib/python3.14/site-packages/nonebot_plugin_picstatus/res/assets/default_avatar.webp",
       "format": "path",
       "title": "Ps Default Avatar",
       "type": "string"

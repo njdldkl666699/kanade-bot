@@ -1473,7 +1473,7 @@ dependencies = [
     { name = "nonebot-plugin-htmlrender" },
     { name = "nonebot-plugin-localstore" },
     { name = "nonebot-plugin-orm", extra = ["default"] },
-    { name = "nonebot-plugin-picstatus-ng" },
+    { name = "nonebot-plugin-picstatus" },
     { name = "nonebot-plugin-whateat-pic" },
     { name = "nonebot-plugin-wordcloud" },
     { name = "nonebot2", extra = ["fastapi"] },
@@ -1512,7 +1512,7 @@ requires-dist = [
     { name = "nonebot-plugin-htmlrender", specifier = "==0.6.7" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
     { name = "nonebot-plugin-orm", extras = ["default"], specifier = ">=0.8.3" },
-    { name = "nonebot-plugin-picstatus-ng", specifier = ">=2.2.5" },
+    { name = "nonebot-plugin-picstatus", specifier = ">=2.3.0" },
     { name = "nonebot-plugin-whateat-pic", specifier = ">=1.5.9" },
     { name = "nonebot-plugin-wordcloud", specifier = ">=0.10.0" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0" },
@@ -2267,8 +2267,8 @@ wheels = [
 ]
 
 [[package]]
-name = "nonebot-plugin-picstatus-ng"
-version = "2.2.5"
+name = "nonebot-plugin-picstatus"
+version = "2.3.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "anyio" },
@@ -2285,9 +2285,9 @@ dependencies = [
     { name = "py-cpuinfo" },
     { name = "yarl" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d7/a0/db919c93c42f8a70b47973da965da000eca4d391b27957bd32e7fec5825e/nonebot_plugin_picstatus_ng-2.2.5.tar.gz", hash = "sha256:1063b4d25f942edbf1a76076b821893fa4a1cc917374aef0bb4700ad6ab148dc", size = 342878, upload-time = "2026-05-10T14:40:46.804Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/50/3a/d19ca6027430449092733a9e29b090cac3e16eed3051cda8dd741ef843c3/nonebot_plugin_picstatus-2.3.0.tar.gz", hash = "sha256:f54db0f0f769bdadde65c464430a90fb0df654cd40bbef66c1167f0ceb7be21e", size = 254673, upload-time = "2026-08-04T12:44:56.543Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/3e/3f/31de4f3379e8ae20491f047412aa92fbe44d46d015d3301561c75cb47ecd/nonebot_plugin_picstatus_ng-2.2.5-py3-none-any.whl", hash = "sha256:539eb60e520abe55d905d01e0e20c17cf109d0cca13a9664a9499af4d120d9e4", size = 248181, upload-time = "2026-05-10T14:40:48.093Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d3/97/72284d8d168a1bc7e57275db7f8b6c8cf4044512a457df8f2adb159f7e13/nonebot_plugin_picstatus-2.3.0-py3-none-any.whl", hash = "sha256:4e5052687e5bde6f5160a5aa135af9cfdfa8d3cfb88a2bbd7eceddf050d7e0f8", size = 249978, upload-time = "2026-08-04T12:44:55.351Z" },
 ]
 
 [[package]]
