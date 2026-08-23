@@ -100,5 +100,6 @@ watchdog:
   github_repo: njdldkl666699/kanade-bot
   github_branch: main
   poll_interval: 30
-  core_command: "uv sync && nb run"
   user_agent: "kanade-watchdog"
+  core_command: "uv sync && nb run"
+  core_exit_timeout: 180

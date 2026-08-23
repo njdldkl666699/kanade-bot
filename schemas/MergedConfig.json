@@ -1311,6 +1311,12 @@
           "title": "Github Token",
           "type": "string"
         },
+        "user_agent": {
+          "default": "kanade-watchdog",
+          "description": "User-Agent 字段，用于标识请求来源",
+          "title": "User Agent",
+          "type": "string"
+        },
         "poll_interval": {
           "default": 30,
           "description": "轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0",
@@ -1323,11 +1329,17 @@
           "title": "Core Command",
           "type": "string"
         },
-        "user_agent": {
-          "default": "kanade-watchdog",
-          "description": "User-Agent 字段，用于标识请求来源",
-          "title": "User Agent",
+        "core_working_directory": {
+          "default": "/home/cola/Projects/Python/kanade-bot",
+          "description": "core process 的工作目录，默认为项目根目录",
+          "title": "Core Working Directory",
           "type": "string"
+        },
+        "core_exit_timeout": {
+          "default": 90,
+          "description": "等待 core process 退出的超时时间，单位为秒",
+          "title": "Core Exit Timeout",
+          "type": "integer"
         }
       },
       "title": "ScopedConfig",

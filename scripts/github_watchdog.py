@@ -28,12 +28,17 @@ class ScopedConfig(BaseModel):
     """GitHub 分支名称"""
     github_token: str = ""
     """GitHub 访问令牌，建议使用具有 repo 访问权限的个人访问令牌（PAT），以避免 API 速率限制"""
-    poll_interval: int = 30
-    """轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0"""
-    core_command: str = "uv sync && nb run"
-    """要作为 core process 启动的命令，可包含参数"""
     user_agent: str = "kanade-watchdog"
     """User-Agent 字段，用于标识请求来源"""
+    poll_interval: int = 30
+    """轮询 GitHub 仓库更新的时间间隔，单位为秒，必须大于 0"""
+
+    core_command: str = "uv sync && nb run"
+    """要作为 core process 启动的命令，可包含参数"""
+    core_working_directory: str = str(ROOT_DIR)
+    """core process 的工作目录，默认为项目根目录"""
+    core_exit_timeout: int = 90
+    """等待 core process 退出的超时时间，单位为秒"""
 
     model_config = {"use_attribute_docstrings": True}
 
@@ -144,23 +149,25 @@ class GitHubClient:
 
 
 class CoreProcessManager:
-    def __init__(self, command: str) -> None:
+    def __init__(self, command: str, cwd: str = str(ROOT_DIR), exit_timeout: int = 90) -> None:
         self._command = command
         self._process: asyncio.subprocess.Process | None = None
+        self._cwd = cwd
+        self._exit_timeout = exit_timeout
 
     async def start(self) -> None:
         logger.info("正在启动 core 进程：{}", self._command)
         if os.name == "nt":
             self._process = await asyncio.create_subprocess_shell(
                 self._command,
-                cwd=str(ROOT_DIR),
+                cwd=self._cwd,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
             return
 
         self._process = await asyncio.create_subprocess_shell(
             self._command,
-            cwd=str(ROOT_DIR),
+            cwd=self._cwd,
             start_new_session=True,
         )
 
@@ -194,7 +201,7 @@ class CoreProcessManager:
         logger.info("正在停止 core 进程组（pid={}，pgid={}）", process.pid, pgid)
         self._send_process_group_signal(pgid, signal.SIGTERM)
 
-        if await self._wait_for_process_group_exit(process, pgid, timeout=90):
+        if await self._wait_for_process_group_exit(process, pgid, timeout=self._exit_timeout):
             return
 
         logger.warning("core 进程组未在规定时间内退出，准备强制结束")
@@ -213,7 +220,7 @@ class CoreProcessManager:
             return
 
         await self._taskkill_process_tree(process.pid, force=False)
-        if await _wait_for_process_exit(process, timeout=90):
+        if await _wait_for_process_exit(process, timeout=self._exit_timeout):
             return
 
         logger.warning("core 进程树未在规定时间内退出，准备强制结束")
@@ -293,7 +300,11 @@ class WatchdogService:
     def __init__(self, config: ScopedConfig) -> None:
         self._config = config
         self._git = GitRepository()
-        self._core = CoreProcessManager(config.core_command)
+        self._core = CoreProcessManager(
+            config.core_command,
+            cwd=config.core_working_directory,
+            exit_timeout=config.core_exit_timeout,
+        )
         self._last_reported_sha: str | None = None
 
     async def run(self) -> None:
