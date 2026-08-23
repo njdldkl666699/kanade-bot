@@ -49,33 +49,30 @@ async def _send_onebot_message(
 ):
     segments: list[MessageSegment] = []
 
-    def replace_meme(match: re.Match[str]) -> str:
-        meme_name = match.group(1)
-        if meme_name not in chat_configs.instance.memes:
-            return ""
-
-        meme_path = cfg.memes_dir_path / meme_name
-        if not meme_path.is_dir():
-            return ""
-
-        # 获取表情包目录下的所有图片文件
-        image_files = list(meme_path.glob("*"))
-        if not image_files:
-            return ""
-
-        # 随机选择一张图片
-        selected_image = random.choice(image_files)
-        # 将动画表情添加到消息中
-        segments.append(OneBotMessageSegmentMeme(selected_image))
-        return ""  # 替换为一个空字符串，表情包会在发送时添加
-
-    # 处理表情包引用，格式{{表情包名称}}
+    # 1. 处理每个块，生成消息段
     for chunk in chunks:
-        text = re.sub(r"\{\{(\w+?)\}\}", replace_meme, chunk)
-        if text.strip():
-            # 如果文本不为空，再添加到消息段中，避免发送空消息段
-            segments.append(MessageSegment.text(text))
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        # 处理表情包引用，格式{{表情包名称}}
+        if meme_match := re.search(r"^\{\{(\w+?)\}\}$", chunk):
+            meme_name = meme_match.group(1)
+            if meme_name in chat_configs.instance.memes:
+                meme_path = cfg.memes_dir_path / meme_name
+                if meme_path.is_dir():
+                    image_files = list(meme_path.glob("*"))
+                    if image_files:
+                        selected_image = random.choice(image_files)
+                        segments.append(OneBotMessageSegmentMeme(selected_image))
+        # 处理图片链接，格式 ![描述](图片链接)
+        elif image_match := re.search(r"^!\[.*?\]\((.*?)\)$", chunk):
+            image_url = image_match.group(1)
+            segments.append(MessageSegment.image(image_url))
+        else:
+            # 如果没有表情包或图片链接，则将文本添加到消息中
+            segments.append(MessageSegment.text(chunk))
 
+    # 2. 根据消息段的数量决定发送方式
     if not segments:
         return
 
