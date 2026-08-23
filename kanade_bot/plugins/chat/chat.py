@@ -30,7 +30,7 @@ from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
 if cfg.rag.enabled:
     from .rag import query
 else:
-    query = lambda query_str: None
+    query = lambda _: None
 
 
 def _send_fail_message(matcher: type[Matcher]):
@@ -43,36 +43,11 @@ def _send_fail_message(matcher: type[Matcher]):
 async def _send_onebot_message(
     matcher: type[Matcher],
     bot: OneBot,
-    chunks: list[str],
+    segments: list[MessageSegment],
     *,
     reply_id: int | None = None,
 ):
-    segments: list[MessageSegment] = []
-
-    # 1. 处理每个块，生成消息段
-    for chunk in chunks:
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        # 处理表情包引用，格式{{表情包名称}}
-        if meme_match := re.search(r"^\{\{(\w+?)\}\}$", chunk):
-            meme_name = meme_match.group(1)
-            if meme_name in chat_configs.instance.memes:
-                meme_path = cfg.memes_dir_path / meme_name
-                if meme_path.is_dir():
-                    image_files = list(meme_path.glob("*"))
-                    if image_files:
-                        selected_image = random.choice(image_files)
-                        segments.append(OneBotMessageSegmentMeme(selected_image))
-        # 处理图片链接，格式 ![描述](图片链接)
-        elif image_match := re.search(r"^!\[.*?\]\((.*?)\)$", chunk):
-            image_url = image_match.group(1)
-            segments.append(MessageSegment.image(image_url))
-        else:
-            # 如果没有表情包或图片链接，则将文本添加到消息中
-            segments.append(MessageSegment.text(chunk))
-
-    # 2. 根据消息段的数量决定发送方式
+    # 根据消息段的数量决定发送方式
     if not segments:
         return
 
@@ -85,12 +60,12 @@ async def _send_onebot_message(
             reply = MessageSegment.reply(reply_id)
             await matcher.send(reply + segment)
 
-    # 消息数<=4，按条发送
-    elif len(segments) <= 4:
+    # 消息数<=5，按条发送
+    elif len(segments) <= 5:
         for segment in segments:
             await matcher.send(segment)
 
-    # 消息数>4但<=10，合并转发
+    # 消息数>5但<=10，合并转发
     elif len(segments) <= 10:
         bot_id, bot_nickname = await get_onebot_info(bot)
         node_custom_message = OneBotMessage()
@@ -110,9 +85,9 @@ async def _send_onebot_message(
         await matcher.send(OneBotMessage(segments))
 
 
-def _split_content_preserving_code_blocks(content: str) -> list[str]:
+def _extract_segments_preserving_code(content: str) -> list[MessageSegment]:
     # 用于存储最终的块
-    chunks = []
+    segments: list[MessageSegment] = []
 
     # 找到所有代码块的位置，将它们替换为占位符
     code_blocks = []
@@ -131,15 +106,34 @@ def _split_content_preserving_code_blocks(content: str) -> list[str]:
         chunk for chunk in re.split(r"(?:\r?\n){2,}", content_with_placeholders) if chunk.strip()
     ]
 
-    # 恢复每个块中的代码块
     for chunk in temp_chunks:
-        restored_chunk = chunk
         # 替换回代码块（使用正则确保只替换占位符）
         for i, code_block in enumerate(code_blocks):
-            restored_chunk = restored_chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
-        chunks.append(restored_chunk)
+            chunk = chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
 
-    return chunks
+        # 处理表情包引用，格式{{表情包名称}}
+        if meme_match := re.search(r"\{\{(\w+?)\}\}", chunk):
+            chunk = chunk.replace(meme_match.group(0), "")
+            meme_name = meme_match.group(1)
+            if meme_name in chat_configs.instance.memes:
+                meme_path = cfg.memes_dir_path / meme_name
+                if meme_path.is_dir():
+                    image_files = list(meme_path.glob("*"))
+                    if image_files:
+                        selected_image = random.choice(image_files)
+                        segments.append(OneBotMessageSegmentMeme(selected_image))
+
+        # 处理图片链接，格式 ![描述](图片链接)
+        elif image_match := re.search(r"!\[.*?\]\((.*?)\)", chunk):
+            chunk = chunk.replace(image_match.group(0), "")
+            image_url = image_match.group(1)
+            segments.append(MessageSegment.image(image_url))
+
+        # 处理后的文本块，如果不为空，则添加为文本消息段
+        if chunk.strip():
+            segments.append(MessageSegment.text(chunk.strip()))
+
+    return segments
 
 
 async def send_message_in_chunks(
@@ -192,17 +186,20 @@ async def send_message_in_chunks(
             event.get_user_id(),
         )
 
-    for content in contents:
-        if not (content := content.strip()):
-            continue
-        if isinstance(event, OneBotMessageEvent):
-            # OneBot消息特殊处理
-            chunks = _split_content_preserving_code_blocks(content)
-            await _send_onebot_message(
-                matcher, cast(OneBot, bot), chunks, reply_id=event.message_id
-            )
-        else:
-            # Console消息直接发送原始内容
+    if isinstance(event, OneBotMessageEvent):
+        all_segments: list[MessageSegment] = []
+        for content in contents:
+            if not (content := content.strip()):
+                continue
+            segments = _extract_segments_preserving_code(content)
+            all_segments.extend(segments)
+        await _send_onebot_message(
+            matcher, cast(OneBot, bot), all_segments, reply_id=event.message_id
+        )
+    else:
+        for content in contents:
+            if not (content := content.strip()):
+                continue
             await matcher.send(content)
 
 
