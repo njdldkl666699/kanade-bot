@@ -159,7 +159,7 @@ async def parse_onebot_message_for_ai(
         file: str = segment.data["file"]
         attachment: Attachment
         if bot:
-            local_path = get_image_path(bot, segment)
+            local_path = await get_image_path(bot, segment)
             attachment = {
                 "type": "file",
                 "path": str(local_path),
