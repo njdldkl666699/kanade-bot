@@ -1,3 +1,4 @@
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, override
@@ -11,8 +12,15 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
     NoticeEvent,
 )
-from nonebot.exception import ActionFailed
 from nonebot.matcher import Matcher
+
+from .schema import KanadeConfig, ProtocolFrameworkType
+
+
+@lru_cache(maxsize=1)
+def _get_protocol_framework() -> ProtocolFrameworkType:
+    """获取OneBot协议框架类型"""
+    return get_plugin_config(KanadeConfig).onebot_protocol_framework
 
 
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
@@ -59,7 +67,7 @@ async def send_poke(
     )
 
 
-async def get_onebot_info(bot: Bot) -> tuple[int, str]:
+async def get_bot_info(bot: Bot) -> tuple[int, str]:
     """获取OneBot机器人的ID和昵称"""
     bot_id = int(bot.self_id)
     bot_info = await bot.get_stranger_info(user_id=bot_id)
@@ -67,23 +75,23 @@ async def get_onebot_info(bot: Bot) -> tuple[int, str]:
     return bot_id, bot_nickname
 
 
-async def get_image_local(bot: Bot, file: str) -> Path:
-    """调用bot.get_image()获取file对应的本地图片路径
+async def get_image_path(bot: Bot, image_segment: MessageSegment) -> Path:
+    """获取OneBot图片消息段对应的本地图片路径"""
+    assert image_segment.type == "image", "消息段必须是图片类型"
 
-    部分协议实现可能返回网络路径，此函数会将其下载到本地缓存目录并返回本地路径
-    """
     from .common import HTTPX_CLIENT
-    from .schema import KanadeConfig
 
+    file: str = image_segment.data["file"]
     r = await bot.get_image(file=file)
-    file_url = r["file"]
-    if not file_url.startswith(("http://", "https://")):
-        return Path(file_url)
+    r_file = r["file"]
+    if not r_file.startswith(("http://", "https://")):
+        return Path(r_file)
 
-    # 下载图片到本地缓存目录
+    # 若get_image返回的是网络路径，则下载到本地缓存目录
+    url = r_file
     cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
     pic_path = cache_dir / file
-    r = await HTTPX_CLIENT.get(file_url)
+    r = await HTTPX_CLIENT.get(url)
     r.raise_for_status()
     pic_path.write_bytes(r.content)
     return pic_path
@@ -133,21 +141,21 @@ async def ensure_send_forward_message(
     event: MessageEvent,
     node_custom_message: Message,
 ):
-    try:
-        await matcher.send(node_custom_message)
-    except ActionFailed:
-        # 部分OneBot 11实现不支持使用send_msg发送转发消息，
-        # 使用其扩展接口send_forward_msg
-        message_type = "private"
-        group_id: int | None = None
-        user_id = event.user_id
-        if isinstance(event, GroupMessageEvent):
-            message_type = "group"
-            group_id = event.group_id
-        await send_forward_msg(
-            bot,
-            message_type=message_type,
-            group_id=group_id,
-            user_id=user_id,
-            message=node_custom_message,
-        )
+    if _get_protocol_framework() != "snowluma":
+        return await matcher.send(node_custom_message)
+
+    # 部分OneBot 11实现不支持使用send_msg发送转发消息，
+    # 使用其扩展接口send_forward_msg
+    message_type = "private"
+    group_id: int | None = None
+    user_id = event.user_id
+    if isinstance(event, GroupMessageEvent):
+        message_type = "group"
+        group_id = event.group_id
+    return await send_forward_msg(
+        bot,
+        message_type=message_type,
+        group_id=group_id,
+        user_id=user_id,
+        message=node_custom_message,
+    )

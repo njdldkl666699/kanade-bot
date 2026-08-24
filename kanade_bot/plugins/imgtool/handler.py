@@ -12,7 +12,7 @@ from nonebot.params import CommandArg
 from PIL import Image, UnidentifiedImageError
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import get_image_local
+from kanade_bot.utils.onebot11 import get_image_path
 
 from .matcher import back, fan, flow, mid, mirror, rotate, speed
 
@@ -51,40 +51,8 @@ async def _get_reply_image(bot: Bot, event: MessageEvent) -> bytes:
     if segment is None:
         raise ImageToolError("引用的消息中没有图片。")
 
-    file: str = segment.data["file"]
-    url: str | None = segment.data.get("url")
-
-    # 优先使用 OneBot 的 get_image API。它既能处理客户端内部的图片标识，
-    # 也能避免再次从公网下载已经落盘的图片。
-    if file:
-        try:
-            path = await get_image_local(bot, file)
-            if path.is_file():
-                return await asyncio.to_thread(path.read_bytes)
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"imgtool 调用 get_image 失败，将尝试直接读取图片：{e}")
-
-    # 某些实现会直接把本地路径或 URL 放在 image.file 中。
-    if file:
-        if file.startswith(("http://", "https://")):
-            url = file
-        else:
-            try:
-                path = Path(file)
-                if path.is_file():
-                    return await asyncio.to_thread(path.read_bytes)
-            except OSError:
-                pass
-
-    if url and url.startswith(("http://", "https://")):
-        try:
-            response = await HTTPX_CLIENT.get(str(url))
-            response.raise_for_status()
-            return response.content
-        except httpx.HTTPError as exc:
-            logger.warning(f"imgtool 下载引用图片失败：{exc}")
-
-    raise ImageToolError("获取引用图片失败。")
+    local_path = await get_image_path(bot, segment)
+    return await asyncio.to_thread(local_path.read_bytes)
 
 
 def _decode_image(data: bytes) -> Animation:

@@ -357,6 +357,14 @@
       "title": "MindleConfig",
       "type": "object"
     },
+    "ProtocolFrameworkType": {
+      "enum": [
+        "napcat",
+        "snowluma",
+        "other"
+      ],
+      "type": "string"
+    },
     "ProviderConfig": {
       "description": "自定义API提供商配置\n\n此模型用于Pydantic校验，运行时通过`.model_dump()`方法获取字典形式的配置。\n\n修改自`copilot.session.ProviderConfig`，仅保留了可生成schema的字段。",
       "properties": {
@@ -1973,6 +1981,11 @@
       "description": "OneBot HTTP API 请求地址字典",
       "title": "Onebot V11 Api Roots",
       "type": "object"
+    },
+    "onebot_protocol_framework": {
+      "$ref": "#/$defs/ProtocolFrameworkType",
+      "default": "other",
+      "description": "OneBot协议框架类型（用于适配不同实现差异）\n\n当前实现下，other与napcat一致，snowluma进行额外适配。"
     },
     "onebot_v11_secret": {
       "anyOf": [

@@ -7,7 +7,7 @@ from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.onebot11 import ensure_send_forward_message, get_onebot_info
+from kanade_bot.utils.onebot11 import ensure_send_forward_message, get_bot_info
 from kanade_bot.utils.parse import bool_from_str, parse_arg_message
 
 from .config import Config
@@ -126,7 +126,7 @@ async def send_duanzi_onebot(
         await matcher.finish(message)
 
     # 超过长度阈值则发送为合并转发消息
-    bot_id, bot_nickname = await get_onebot_info(bot)
+    bot_id, bot_nickname = await get_bot_info(bot)
     node_custom = MessageSegment.node_custom(bot_id, bot_nickname, duanzi)
     await ensure_send_forward_message(matcher, bot, event, OneBotMessage(node_custom))
 

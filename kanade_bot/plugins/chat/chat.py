@@ -17,7 +17,7 @@ from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import (
     OneBotMessageSegmentMeme,
     ensure_send_forward_message,
-    get_onebot_info,
+    get_bot_info,
 )
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
@@ -71,7 +71,7 @@ async def _send_onebot_message(
 
     # 消息数>5但<=10，合并转发
     elif len(segments) <= 10:
-        bot_id, bot_nickname = await get_onebot_info(bot)
+        bot_id, bot_nickname = await get_bot_info(bot)
         node_custom_message = OneBotMessage()
         for segment in segments:
             node_custom_message += MessageSegment.node_custom(

@@ -2,12 +2,11 @@ import ast
 import inspect
 import json
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
 from nonebot.config import Env
-from nonebot_plugin_localstore import BASE_CACHE_DIR
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
 
@@ -20,6 +19,9 @@ class AttrDocModel(BaseModel):
     model_config = {"use_attribute_docstrings": True}
 
 
+type ProtocolFrameworkType = Literal["napcat", "snowluma", "other"]
+
+
 class KanadeConfig(AttrDocModel):
     """宵崎奏Bot额外全局配置"""
 
@@ -29,6 +31,11 @@ class KanadeConfig(AttrDocModel):
     """JSON Schema输出目录"""
     image_cache_dir: str = "kanade_images/"
     """图片缓存目录"""
+    onebot_protocol_framework: ProtocolFrameworkType = "other"
+    """OneBot协议框架类型（用于适配不同实现差异）
+
+    当前实现下，other与napcat一致，snowluma进行额外适配。
+    """
 
     @property
     def schema_output_dir_path(self) -> Path:
@@ -38,6 +45,8 @@ class KanadeConfig(AttrDocModel):
     @property
     def image_cache_dir_path(self) -> Path:
         """图片缓存目录路径"""
+        from nonebot_plugin_localstore import BASE_CACHE_DIR
+
         p = BASE_CACHE_DIR / self.image_cache_dir
         p.mkdir(parents=True, exist_ok=True)
         return p

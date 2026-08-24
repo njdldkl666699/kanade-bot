@@ -1,5 +1,6 @@
 import shutil
 import uuid
+from pathlib import Path
 
 from nonebot import require
 from nonebot.adapters import Bot, Event, Message
@@ -13,7 +14,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg, EventMessage
 
 from kanade_bot.utils.common import get_platform_type
-from kanade_bot.utils.onebot11 import get_image_local
+from kanade_bot.utils.onebot11 import get_image_path
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
@@ -129,17 +130,15 @@ async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Messa
     # 获取引用图片的第一张
     if not event.reply:
         await add_meme.finish()
-    message = event.reply.message
-    image_file: str | None = None
-    for segment in message:
+
+    local_path: Path | None = None
+    for segment in event.reply.message:
         if segment.type == "image":
-            image_file = segment.data["file"]
+            local_path = await get_image_path(bot, segment)
             break
-    if not image_file:
+    if not local_path:
         await add_meme.finish()
 
-    # 下载图片
-    local_path = await get_image_local(bot, image_file)
     # 确保表情包目录存在
     meme_path = cfg.memes_dir_path / name
     meme_path.mkdir(parents=True, exist_ok=True)

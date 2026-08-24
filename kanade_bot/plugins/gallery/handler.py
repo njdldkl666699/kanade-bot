@@ -3,21 +3,18 @@ import random
 import re
 from pathlib import Path
 
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from nonebot.adapters import Message
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
-from nonebot.exception import NetworkError
 from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 from send2trash import send2trash
 
-from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_image_local
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_image_path
 from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
-from kanade_bot.utils.schema import KanadeConfig
 
 from .config import cfg, gallery_name_data
 from .gallery import (
@@ -219,25 +216,9 @@ async def _(bot: OneBot, arg_msg: Message = CommandArg()):
     await get_picture.finish(message)
 
 
-async def _get_image_from_url(url: str, file: str) -> Path | None:
-    """从URL获取图片文件，返回图片文件路径"""
-    r = await HTTPX_CLIENT.get(url)
-    if r.status_code != 200:
-        return None
-
-    # 将图片保存到缓存目录
-    cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
-    file_name = url.split("/")[-1]
-    pic_path = cache_dir / file_name
-    pic_path.write_bytes(r.content)
-    return pic_path
-
-
 async def _get_pictures_from_message(
     bot: OneBot,
     message: OneBotMessage,
-    *,
-    forward_image: bool = False,
 ) -> list[Path]:
     """从消息中提取图片文件
 
@@ -247,30 +228,12 @@ async def _get_pictures_from_message(
     pictures: list[Path] = []
     for seg in message:
         if seg.type == "image":
-            p: Path | None = None
-            file: str = seg.data["file"]
-            if forward_image:
-                # 转发消息中的图片，直接使用http client获取图片附件
-                p = await _get_image_from_url(seg.data["url"], file)
-            else:
-                # 普通消息中的图片，使用bot.get_image获取图片附件
-                try:
-                    p = await get_image_local(bot, file)
-                except NetworkError as e:
-                    logger.warning(f"bot.get_image获取图片附件失败: {file}, {e}")
-                    # 回退到使用http client获取图片附件
-                    p = await _get_image_from_url(seg.data["url"], file)
-            if p:
-                pictures.append(p)
-            else:
-                logger.warning(f"获取图片附件失败，消息段：{seg}")
-
+            p = await get_image_path(bot, seg)
+            pictures.append(p)
         elif seg.type == "forward":
             _, fwd_msg_events = await get_forward_message_events(bot, seg)
             for e in fwd_msg_events:
-                pictures.extend(
-                    await _get_pictures_from_message(bot, e.message, forward_image=True)
-                )
+                pictures.extend(await _get_pictures_from_message(bot, e.message))
     return pictures
 
 
