@@ -75,7 +75,8 @@ async def _send_onebot_message(
             )
         try:
             await matcher.send(node_custom_message)
-        except ActionFailed:
+        except ActionFailed as e:
+            logger.error("发送转发消息失败: {}", e)
             # 部分OneBot 11实现不支持使用send_msg发送转发消息，
             # 使用其扩展接口send_forward_msg
             await send_forward_msg(bot, messages=node_custom_message)

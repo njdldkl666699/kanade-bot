@@ -316,7 +316,7 @@ class CopilotSessionManager:
                 events = await CopilotSessionManager._send_and_wait_assistant_messages(
                     session,
                     send_prompt,
-                    attachments=attachments if cfg.image_caption else None,
+                    attachments=attachments if not cfg.image_caption else None,
                     timeout=timeout,
                 )
             finally:
