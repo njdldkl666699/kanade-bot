@@ -22,11 +22,11 @@ from .cache import group_message_cache, waifu_cache
 from .config import Config
 from .duanzi import (
     add_duanzi,
-    duanzi_to_onebot_message,
     get_or_random_duanzi,
     list_paged_duanzi,
     parse_duanzi_args,
     remove_duanzi,
+    send_duanzi_onebot,
 )
 from .duel import create_session, get_session
 from .matcher import (
@@ -126,7 +126,7 @@ async def _(event: Event, message: Message = EventMessage()):
 
 
 @random_duanzi.handle()
-async def _(bot: Bot, arg_msg: Message = CommandArg()):
+async def _(bot: Bot, event: Event, arg_msg: Message = CommandArg()):
     args = parse_duanzi_args(arg_msg)
     index, chaos_face, custom_face_id_or_emoji = args
 
@@ -134,15 +134,17 @@ async def _(bot: Bot, arg_msg: Message = CommandArg()):
         await random_duanzi.finish()
 
     if isinstance(bot, OneBot):
-        duanzi = await duanzi_to_onebot_message(
+        await send_duanzi_onebot(
+            random_duanzi,
             bot,
+            cast(OneBotMessageEvent, event),
             duanzi,
             node_threshold=500,
             chaos_face=chaos_face,
             custom_face_id_or_emoji=custom_face_id_or_emoji,
         )
-
-    await random_duanzi.finish(duanzi)
+    else:
+        await random_duanzi.finish(duanzi)
 
 
 @add_a_duanzi.handle()

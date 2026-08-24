@@ -3,7 +3,16 @@ from pathlib import Path
 from typing import Literal, override
 
 from nonebot import get_plugin_config
-from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment, NoticeEvent
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageEvent,
+    MessageSegment,
+    NoticeEvent,
+)
+from nonebot.exception import ActionFailed
+from nonebot.matcher import Matcher
 
 
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
@@ -99,12 +108,46 @@ class BotOfflineNoticeEvent(NoticeEvent):
 
 async def send_forward_msg(
     bot: Bot,
+    message_type: Literal["private", "group"],
+    group_id: int | None = None,
+    user_id: int | None = None,
     messages: Message | None = None,
     message: Message | None = None,
+    auto_escape: bool = False,
 ):
     """发送合并转发消息"""
     return await bot.call_api(
         "send_forward_msg",
+        message_type=message_type,
+        group_id=group_id,
+        user_id=user_id,
         messages=messages,
         message=message,
+        auto_escape=auto_escape,
     )
+
+
+async def ensure_send_forward_message(
+    matcher: type[Matcher],
+    bot: Bot,
+    event: MessageEvent,
+    node_custom_message: Message,
+):
+    try:
+        await matcher.send(node_custom_message)
+    except ActionFailed:
+        # 部分OneBot 11实现不支持使用send_msg发送转发消息，
+        # 使用其扩展接口send_forward_msg
+        message_type = "private"
+        group_id: int | None = None
+        user_id = event.user_id
+        if isinstance(event, GroupMessageEvent):
+            message_type = "group"
+            group_id = event.group_id
+        await send_forward_msg(
+            bot,
+            message_type=message_type,
+            group_id=group_id,
+            user_id=user_id,
+            message=node_custom_message,
+        )

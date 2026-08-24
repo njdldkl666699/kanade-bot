@@ -11,11 +11,14 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.exception import ActionFailed
 from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType, get_platform_type
-from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_onebot_info, send_forward_msg
+from kanade_bot.utils.onebot11 import (
+    OneBotMessageSegmentMeme,
+    ensure_send_forward_message,
+    get_onebot_info,
+)
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -43,6 +46,7 @@ def _send_fail_message(matcher: type[Matcher]):
 async def _send_onebot_message(
     matcher: type[Matcher],
     bot: OneBot,
+    event: OneBotMessageEvent,
     segments: list[MessageSegment],
     *,
     reply_id: int | None = None,
@@ -73,13 +77,7 @@ async def _send_onebot_message(
             node_custom_message += MessageSegment.node_custom(
                 bot_id, bot_nickname, OneBotMessage(segment)
             )
-        try:
-            await matcher.send(node_custom_message)
-        except ActionFailed as e:
-            logger.error("发送转发消息失败: {}", e)
-            # 部分OneBot 11实现不支持使用send_msg发送转发消息，
-            # 使用其扩展接口send_forward_msg
-            await send_forward_msg(bot, messages=node_custom_message)
+        await ensure_send_forward_message(matcher, bot, event, node_custom_message)
 
     # 消息数>10，合并为一条消息发送
     else:
@@ -195,7 +193,11 @@ async def send_message_in_chunks(
             segments = _extract_segments_preserving_code(content)
             all_segments.extend(segments)
         await _send_onebot_message(
-            matcher, cast(OneBot, bot), all_segments, reply_id=event.message_id
+            matcher,
+            cast(OneBot, bot),
+            event,
+            all_segments,
+            reply_id=event.message_id,
         )
     else:
         for content in contents:

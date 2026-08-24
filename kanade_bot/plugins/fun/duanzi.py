@@ -3,10 +3,11 @@ import random
 
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Message
-from nonebot.adapters.onebot.v11 import Bot, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.matcher import Matcher
 
-from kanade_bot.utils.onebot11 import get_onebot_info
+from kanade_bot.utils.onebot11 import ensure_send_forward_message, get_onebot_info
 from kanade_bot.utils.parse import bool_from_str, parse_arg_message
 
 from .config import Config
@@ -86,14 +87,16 @@ def _face_or_emoji_to_onebot_segment(face_id_or_emoji: str | int) -> MessageSegm
         return face_id_or_emoji
 
 
-async def duanzi_to_onebot_message(
+async def send_duanzi_onebot(
+    matcher: type[Matcher],
     bot: Bot,
+    event: MessageEvent,
     duanzi: str,
     *,
     node_threshold: int = 500,
     chaos_face: bool = False,
     custom_face_id_or_emoji: int | str | None = None,
-) -> OneBotMessage:
+):
     """将一个段子转换为OneBot消息，支持分段和表情"""
     face_ids = FACE_ID_OR_EMOJI_LIST
     if custom_face_id_or_emoji is not None:
@@ -120,12 +123,12 @@ async def duanzi_to_onebot_message(
                 message += _face_or_emoji_to_onebot_segment(face_id)
 
     if len(duanzi) <= node_threshold:
-        return message
+        await matcher.finish(message)
 
     # 超过长度阈值则发送为合并转发消息
     bot_id, bot_nickname = await get_onebot_info(bot)
     node_custom = MessageSegment.node_custom(bot_id, bot_nickname, duanzi)
-    return OneBotMessage(node_custom)
+    await ensure_send_forward_message(matcher, bot, event, OneBotMessage(node_custom))
 
 
 def get_or_random_duanzi(index: int | None = None) -> str | None:

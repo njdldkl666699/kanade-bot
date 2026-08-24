@@ -820,15 +820,6 @@ wheels = [
 ]
 
 [[package]]
-name = "distro"
-version = "1.9.0"
-source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed" }
-wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2" },
-]
-
-[[package]]
 name = "dnspython"
 version = "2.8.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
@@ -1207,15 +1198,15 @@ wheels = [
 
 [[package]]
 name = "httpcore2"
-version = "2.11.0"
+version = "2.12.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "h11" },
     { name = "truststore" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/30/7d/ee6787efd5fe675d7cfd5eb149e40ccb5bdfc7e7c9252edcf7825c38986f/httpcore2-2.11.0.tar.gz", hash = "sha256:82e6fc95d784e6ee22ebd4b2cb57df53a2efb13ad6a11260a236ecebbc5f50c7", size = 67532, upload-time = "2026-08-18T08:03:53.008Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/f3/54/e84a5c82ac0959d5e55b3970d326fd95306446b2bf0702302888745f7e5c/httpcore2-2.11.0-py3-none-any.whl", hash = "sha256:c7c899fbc6b8abb6e747dda427aa6f52934c45e191eabb986965164ebb02a908", size = 83061, upload-time = "2026-08-18T08:03:50.894Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d2/74/d370e55600d9bcfa0d9794b0166126d49291a3d2b20c268fc98c453a4948/httpcore2-2.12.0-py3-none-any.whl", hash = "sha256:7e04258ce01013d7d615e5b910a3b27fac937d7a95038227e79652b4ba3b4ceb", size = 83074, upload-time = "2026-08-18T13:22:05.854Z" },
 ]
 
 [[package]]
@@ -1269,7 +1260,7 @@ http2 = [
 
 [[package]]
 name = "httpx2"
-version = "2.11.0"
+version = "2.12.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "anyio", marker = "sys_platform != 'emscripten'" },
@@ -1278,9 +1269,9 @@ dependencies = [
     { name = "idna" },
     { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d5/4d/b3fcae38f29bfb0f300517d085c488f41f65e5b0a73023976b2122f568cc/httpx2-2.11.0.tar.gz", hash = "sha256:ea01b2e8febfb026e2601814c77ecb1e64fff114a87bc789cb520e67f27e7809", size = 99617, upload-time = "2026-08-18T08:03:53.691Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/7f/f8/579a8b51e42e38ee32647df9f08aa25643ae788e275cc625b199829c4671/httpx2-2.12.0.tar.gz", hash = "sha256:7631fe9887a8a2275f4a2540e053aa670fcc50742864a9ae7c66e609fdcf12cf", size = 100040, upload-time = "2026-08-18T13:22:09.086Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/39/29/f60bcf54028601920c0ce3da81537bcd0af4ee19dd9672af85dc9dfd60e0/httpx2-2.11.0-py3-none-any.whl", hash = "sha256:c9790f62a327110f52a099f1e2030cbe32f78b28781ad68fe58bfd6f23e73ab0", size = 95043, upload-time = "2026-08-18T08:03:52.004Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/c8/95/411ba65569158e862368917aaf56597f3e5fa3b91b0502919638465a08f3/httpx2-2.12.0-py3-none-any.whl", hash = "sha256:cc8b6eecb8661c146b8f89a60e97456ee086e91a784ed31ac450c3a9e613dd36", size = 95427, upload-time = "2026-08-18T13:22:06.834Z" },
 ]
 
 [[package]]
@@ -1323,11 +1314,11 @@ wheels = [
 
 [[package]]
 name = "idna"
-version = "3.18"
+version = "3.19"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/cd/63/9496c57188a2ee585e0f1db071d75089a11e98aa86eb99d9d7618fc1edce/idna-3.18.tar.gz", hash = "sha256:ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848", size = 196711, upload-time = "2026-06-02T14:34:07.794Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/5f/f7/abb373e5757eaec4b922b92f97ec8d6d7e057cf06778247604fbc4e7c3f3/idna-3.19.tar.gz", hash = "sha256:5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15", size = 215237, upload-time = "2026-08-18T05:14:24.27Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/1e/5e/d4e9f1a599fb8e573b7b87160658329fbf28d19eac2718f51fc3def3aa5a/idna-3.18-py3-none-any.whl", hash = "sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2", size = 65455, upload-time = "2026-06-02T14:34:06.319Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/57/b0/0e52c878c53f245edd3a11020f20979b3f490f245af532c7cae3027754b5/idna-3.19-py3-none-any.whl", hash = "sha256:815e7be7a7806d54abb586dc943addc79e8b2ee16915059658cbeff4b1b43bf4", size = 68550, upload-time = "2026-08-18T05:14:22.343Z" },
 ]
 
 [[package]]
@@ -1457,7 +1448,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "5.1.3"
+version = "5.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anyconfig" },
@@ -2675,21 +2666,19 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "3.2.0"
+version = "3.3.1"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "distro" },
     { name = "httpx2" },
     { name = "jiter" },
     { name = "pydantic" },
     { name = "sniffio" },
-    { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/c8/e5/8136bc7f0b61760acb08c39871a5f617ec18ba51dadf00a70cb4e3daf4e7/openai-3.2.0.tar.gz", hash = "sha256:1d26bd6f49738f6848bcce370794ee03acc0561d468070df010b44178da8e797", size = 1163010, upload-time = "2026-08-17T19:14:18.835Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/7d/9c/ba0c292b4032ede74c249ca314ad64eb1bb5a03a843f6e01facb02f80cd8/openai-3.3.1.tar.gz", hash = "sha256:6f22807de1a976c932cecda620e8172a8c3fdbaeed29c7f21564e0c2410edf56", size = 1282113, upload-time = "2026-08-19T16:31:35.006Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/49/64/bbc2184b9a7503887e31eaac274a20485a0a5950604134d8ac720b5d84e3/openai-3.2.0-py3-none-any.whl", hash = "sha256:e97a64a2df665460fbb1f23adbe3e4b717f6ac04b5740552889ad1d8dd9025c2", size = 1689123, upload-time = "2026-08-17T19:14:16.805Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/6a/db/2b7a1b3de659bb82aef979116c74e809982b13e42c057759767552b5155f/openai-3.3.1-py3-none-any.whl", hash = "sha256:9652df7fdf8ee6f5bd58e0a12f2b1d414a18e0f06bb7a9a57c8643a5f5469bd3", size = 1690337, upload-time = "2026-08-19T16:31:32.812Z" },
 ]
 
 [[package]]
@@ -4044,7 +4033,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.15.0"
+version = "5.15.1"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -4057,9 +4046,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/a6/3f/d89353267d511e18f137dfd7769d07837350c11b88408ce1dfe2e93e56c7/transformers-5.15.0.tar.gz", hash = "sha256:bbf98f57b2ddd7c4ecbccfa2c0069017aa6fd01cc204bd50cbc0eeadcf2a13b8", size = 9377983, upload-time = "2026-08-10T10:27:23.261Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/2a/92/c50c61da7046bbb59a4d011291aeadcfb4d7980ab36fdb31e93823a3fb93/transformers-5.15.1.tar.gz", hash = "sha256:27c996bd9075ddc82d40f8590dfdc81ea45f611bfca477e0db5d7fd257a482f7", size = 9378434, upload-time = "2026-08-19T11:28:20.33Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d8/43/81355710a4c84e9420e11a86d41a5364deb561f2ef36dfdf254a07371bbb/transformers-5.15.0-py3-none-any.whl", hash = "sha256:d7f007736f67749ae9490c4f8cb5d30b452ae2d68c8675e50ba8d63ea7feb107", size = 11749280, upload-time = "2026-08-10T10:27:20.416Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/41/c4/a12e1d9b387fb0c40a57116db82b457e8c771cb419163cda29204d74a595/transformers-5.15.1-py3-none-any.whl", hash = "sha256:b7cdf238ff583e3a58dbc7fa34da1aaf091ce063141f65a30538160bd5afe93f", size = 11749582, upload-time = "2026-08-19T11:28:16.726Z" },
 ]
 
 [[package]]
@@ -4161,15 +4150,15 @@ wheels = [
 
 [[package]]
 name = "uvicorn"
-version = "0.52.3"
+version = "0.52.4"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/2e/28/64ca011edf31c715b4fad359c587ea52391aaffa125065695590241ff617/uvicorn-0.52.3.tar.gz", hash = "sha256:18857b9e6579300be55c91c0a1cfd37d9a2cf0cabea33b88275f199eb73b8b58", size = 100621, upload-time = "2026-08-13T16:50:02.899Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/f2/0f/3f86e61397dd33bf2ccf28188c40db6a740658aeebbbf6e7dbc101a1f487/uvicorn-0.52.4.tar.gz", hash = "sha256:73acfee47a0b133c5de13d219492d62d8a31e935f4fe6e41a232451a15379f86", size = 100627, upload-time = "2026-08-19T06:27:41.821Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/dc/2b/ebd108734a8204c6b4b93c681c9a38c5273b3ccd5d129fee4ffc1d97772c/uvicorn-0.52.3-py3-none-any.whl", hash = "sha256:116af2710dbf47c80f463cd20ee4884b6662f4c9f227d797ddc7279d2fcc2c7c", size = 79859, upload-time = "2026-08-13T16:50:01.323Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/f1/79/4a20b54ab0491485ccd8c077db2d39187c7f12b3e15485d38a7be37c81b4/uvicorn-0.52.4-py3-none-any.whl", hash = "sha256:f86e41a149d7d05a9969337e3946a9c171c06a5d42680896daaba624aeac8da1", size = 79871, upload-time = "2026-08-19T06:27:40.36Z" },
 ]
 
 [package.optional-dependencies]
