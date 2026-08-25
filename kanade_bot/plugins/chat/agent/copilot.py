@@ -18,23 +18,16 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .memory import MemoryContext, MemoryStore
-from .tool import build_memory_tools, get_image_caption, list_memes, view_image
+from .tool import build_memory_tools, list_memes, view_image
 
-FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。\n"
-
-TOOL_CALL_PROMPT = """When using tools: 
-never return an empty response; 
-briefly explain the purpose when starting a new type of task, but not before every tool call; 
-follow the tool schema exactly and do not invent parameters; 
-keep the conversation style consistent.
-"""
+FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
 
 def _build_system_prompt() -> str:
     sp_path = cfg.system_prompt_file_path
     if not sp_path.is_file():
         logger.warning(f"系统提示词文件不存在，路径: {sp_path.absolute()}")
-        return FALLBACK_SYSTEM_PROMPT + TOOL_CALL_PROMPT
+        return FALLBACK_SYSTEM_PROMPT
 
     sp = sp_path.read_text(encoding="utf-8")
     extras = cfg.system_prompt_extras_paths
@@ -46,7 +39,7 @@ def _build_system_prompt() -> str:
         content = p.read_text(encoding="utf-8")
         sp = sp.replace(f"{{{{{k}}}}}", content)
 
-    return sp + TOOL_CALL_PROMPT
+    return sp
 
 
 class CopilotSessionManager:
@@ -56,7 +49,7 @@ class CopilotSessionManager:
     """系统提示词"""
     logger.trace(f"系统提示词:\n{system_prompt}")
 
-    def session_config(self, session_info: SessionInfo) -> dict[str, Any]:
+    def _session_config(self, session_info: SessionInfo) -> dict[str, Any]:
         """返回会话配置字典"""
         session_system_prompt = self.system_prompt
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
@@ -94,12 +87,13 @@ class CopilotSessionManager:
 
         self._sessions: dict[str, CopilotSession] = {}
         """会话对象缓存，键为会话ID，值为CopilotSession对象"""
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
 
         self._sessions_messages: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息，键为会话ID，值为消息列表"""
-
-        self._session_locks: dict[str, asyncio.Lock] = {}
-        """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID，值为Lock对象"""
+        self._sessions_system_notification: dict[str, str] = {}
+        """会话系统通知，键为会话ID，值为系统通知内容"""
 
         self._global_lock = asyncio.Lock()
         """全局资源锁，对sessions字典的修改操作加锁，对_client对象的操作加锁，确保线程安全"""
@@ -140,25 +134,6 @@ class CopilotSessionManager:
             logger.info(f"已保存{len(self._sessions_messages)}个会话的消息缓冲区缓存")
         except Exception as e:  # noqa: BLE001
             logger.exception(f"保存会话消息缓冲区缓存时发生错误: {e}")
-
-    async def _resume_or_create_session(
-        self,
-        session_id: str,
-        session_info: SessionInfo,
-    ) -> tuple[CopilotSession, bool]:
-        """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
-        session_config = self.session_config(session_info)
-        new_session = False
-        try:
-            session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
-            # 因为我不知道的原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
-            await session.set_model(cfg.model, reasoning_effort=cfg.reasoning_effort)
-            logger.info(f"恢复会话{session_id}成功")
-        except Exception as e:  # noqa: BLE001
-            logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
-            session = await COPILOT_CLIENT.create_session(session_id=session_id, **session_config)
-            new_session = True
-        return session, new_session
 
     @staticmethod
     async def _send_and_wait_assistant_messages(
@@ -255,6 +230,35 @@ class CopilotSessionManager:
         finally:
             unsubscribe()
 
+    async def _ensure_session_lock(self, session_id: str) -> asyncio.Lock:
+        """确保会话锁存在并返回"""
+        # 不要在持有全局锁的情况下调用此函数，以避免死锁
+        if session_id not in self._session_locks:
+            # 略微提高性能，避免不必要的锁竞争
+            async with self._global_lock:
+                if session_id not in self._session_locks:
+                    self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
+
+    async def _resume_or_create_session(
+        self,
+        session_id: str,
+        session_info: SessionInfo,
+    ) -> tuple[CopilotSession, bool]:
+        """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
+        session_config = self._session_config(session_info)
+        new_session = False
+        try:
+            session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
+            # 因为我不知道的原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
+            await session.set_model(cfg.model, reasoning_effort=cfg.reasoning_effort)
+            logger.info(f"恢复会话{session_id}成功")
+        except Exception as e:  # noqa: BLE001
+            logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
+            session = await COPILOT_CLIENT.create_session(session_id=session_id, **session_config)
+            new_session = True
+        return session, new_session
+
     async def send_and_wait(
         self,
         session_info: SessionInfo,
@@ -302,13 +306,16 @@ class CopilotSessionManager:
                     logger.info("发送给模型的消息为空，未触发生成")
                     return None
 
-            send_prompt = await self._build_send_prompt(
+                # 将系统通知附加到提示词中
+                notice = self._sessions_system_notification.pop(session_id, None)
+
+            send_prompt = self._build_send_prompt(
                 session_info,
                 prompt,
                 rag_docs=rag_docs,
                 messages=messages,
                 reply_text=reply_text,
-                attachments=attachments,
+                system_notification=notice,
             )
             logger.debug(f"发送到会话{session_id}的完整提示词:\n{send_prompt}")
 
@@ -316,7 +323,7 @@ class CopilotSessionManager:
                 events = await CopilotSessionManager._send_and_wait_assistant_messages(
                     session,
                     send_prompt,
-                    attachments=attachments if not cfg.image_caption else None,
+                    attachments=attachments,
                     timeout=timeout,
                 )
             finally:
@@ -334,14 +341,14 @@ class CopilotSessionManager:
             ]
 
     @staticmethod
-    async def _build_send_prompt(
+    def _build_send_prompt(
         session_info: SessionInfo,
         prompt: str,
         *,
         rag_docs: list[str] | None = None,
         messages: deque[str] | None = None,
         reply_text: str | None = None,
-        attachments: list[Attachment] | None = None,
+        system_notification: str | None = None,
     ) -> str:
         """构建发送给模型的完整提示词"""
         prompt_parts: list[str] = []
@@ -356,38 +363,27 @@ class CopilotSessionManager:
             prompt_parts.append("\n$ 用户引用了之前的消息：")
             prompt_parts.append(reply_text)
 
-        if cfg.image_caption and attachments:
-            image_caption_tasks = [get_image_caption(att) for att in attachments]
-            # 并发获取图片转述，避免排队获取太慢
-            image_captions = await asyncio.gather(*image_caption_tasks)
-            caption_descriptions: list[str] = []
-            for att, caption in zip(attachments, image_captions):
-                if caption:
-                    caption_descriptions.append(f"图片{att.get('displayName')}：{caption}")
-            prompt_parts.append("\n$ 下面是这次的用户消息中的图片附件的文字转述：")
-            prompt_parts.extend(caption_descriptions)
-
         if user_info := build_sender_info(session_info.nickname, session_info.user_id):
             prompt = f"{user_info}：{prompt}"
         if prompt:
             prompt_parts.append("\n$ 下面是这次用户对你的消息：")
             prompt_parts.append(prompt)
 
-        return "\n".join(prompt_parts).strip()
+        if system_notification:
+            prompt_parts.append("<system_notification>")
+            prompt_parts.append(system_notification)
+            prompt_parts.append("</system_notification>")
 
-    async def _ensure_session_lock(self, session_id: str) -> asyncio.Lock:
-        """确保会话锁存在并返回"""
-        # 不要在持有全局锁的情况下调用此函数，以避免死锁
-        if session_id not in self._session_locks:
-            # 略微提高性能，避免不必要的锁竞争
-            async with self._global_lock:
-                if session_id not in self._session_locks:
-                    self._session_locks[session_id] = asyncio.Lock()
-        return self._session_locks[session_id]
+        return "\n".join(prompt_parts).strip()
 
     def get_session_messages_size(self, session_id: str) -> int:
         """获取会话消息缓冲区大小"""
         return len(self._sessions_messages.get(session_id, []))
+
+    async def add_system_notification(self, session_id: str, notification: str):
+        """添加会话系统通知，将在下一次发送消息时附加到提示词中"""
+        async with await self._ensure_session_lock(session_id), self._global_lock:
+            self._sessions_system_notification[session_id] = notification
 
     async def add_message(self, session_id: str, prompt: str):
         """向会话缓冲区添加消息"""

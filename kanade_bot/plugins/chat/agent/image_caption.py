@@ -19,8 +19,9 @@ FALLBACK_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内�
 async def get_image_caption(attachment: Attachment) -> str | None:
     """使用图片转述模型获取图片的文字描述"""
     if not cfg:
-        logger.warning("未配置图片转述模型，无法获取图片转述")
-        return
+        msg = "未配置图片转述模型，无法获取图片转述"
+        logger.warning(msg)
+        return msg
 
     if (p := cfg.system_prompt_file_path) and p.is_file():
         system_prompt = p.read_text(encoding="utf-8")
@@ -50,12 +51,14 @@ async def get_image_caption(attachment: Attachment) -> str | None:
                 timeout=180,
             )
     except Exception as e:  # noqa: BLE001
-        logger.exception("获取图片转述时发生错误: {}", e)
-        return
+        msg = f"获取图片转述时发生错误: {e}"
+        logger.exception(msg)
+        return msg
 
     if not event:
-        logger.warning(f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}")
-        return
+        msg = f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}"
+        logger.warning(msg)
+        return msg
 
     match event.data:
         case AssistantMessageData() as data:

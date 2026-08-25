@@ -4,14 +4,12 @@ from pathlib import Path
 
 from nonebot import require
 from nonebot.adapters import Bot, Event, Message
-from nonebot.adapters.console import Message as ConsoleMessage
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
-from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
-from nonebot.params import CommandArg, EventMessage
+from nonebot.params import CommandArg
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import get_image_path
@@ -30,10 +28,7 @@ from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finis
 
 
 @chat.handle()
-async def handle_chat(
-    bot: Bot,
-    event: OneBotMessageEvent | ConsoleMessageEvent,
-):
+async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent):
     if not should_reply_event(event):
         return
 
@@ -54,11 +49,7 @@ async def handle_chat_reset(event: Event):
 
 
 @chat_monitor.handle()
-async def handle_chat_monitor(
-    bot: Bot,
-    event: Event,
-    message: ConsoleMessage | OneBotMessage = EventMessage(),
-):
+async def handle_chat_monitor(bot: Bot, event: Event):
     session_info = await extract_session_info(event, bot)
     session_id = session_info.session_id
     platform = get_platform_type(event)
@@ -151,4 +142,9 @@ async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Messa
     # 如果表情包名称不存在，或新描述不为空，则更新配置文件
     if name not in memes or description:
         memes[name] = description
+        # 添加系统通知
+        session_info = await extract_session_info(event, bot)
+        session_id = session_info.session_id
+        await copilot.add_system_notification(session_id, "表情包已更新")
+
     await add_meme.finish(f"已添加表情包 {name}")

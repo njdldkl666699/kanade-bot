@@ -1,4 +1,6 @@
 import base64
+import mimetypes
+from pathlib import Path
 
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
@@ -23,30 +25,39 @@ def list_memes():
 
 
 class ViewImageParams(BaseModel):
-    url: str = Field(description="图片URL，必须是可访问的网络地址。")
+    url: str = Field(description="图片URL")
 
 
 @define_tool(
     "view_image",
-    description="查看图片工具。提供一个图片URL，如果你具备视觉能力，将返回图片内容；否则将返回图片的文字转述。",
+    description="查看图片工具。提供一个图片，如果你具备视觉能力，将返回图片内容；否则将返回图片的文字转述。",
     skip_permission=True,
     defer="never",
 )
 async def view_image(params: ViewImageParams):
     url = params.url
-    r = await HTTPX_CLIENT.get(url)
-    logger.info(f"调用工具查看图片：{url}，返回了结果，状态码：{r.status_code}")
-    if r.status_code != 200:
-        return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
+    logger.info("查看图片工具被调用，URL: {}", url)
 
-    data = base64.b64encode(r.content).decode()
-    mine_type = r.headers.get("Content-Type", "application/octet-stream")
+    if url.startswith("file://"):
+        file = url[7:]
+        path = Path(file)
+        data = base64.b64encode(path.read_bytes()).decode()
+        mime_type, _ = mimetypes.guess_file_type(path)
+        mime_type = mime_type or "application/octet-stream"
+    else:
+        r = await HTTPX_CLIENT.get(url)
+        if r.status_code != 200:
+            return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
+
+        data = base64.b64encode(r.content).decode()
+        mime_type = r.headers.get("Content-Type", "application/octet-stream")
+
     if cfg.image_caption:
         caption = await get_image_caption(
             {
                 "type": "blob",
                 "data": data,
-                "mimeType": mine_type,
+                "mimeType": mime_type,
                 "displayName": url,
             }
         )
@@ -54,7 +65,7 @@ async def view_image(params: ViewImageParams):
 
     image = ToolBinaryResult(
         data=data,
-        mime_type=mine_type,
+        mime_type=mime_type,
         type="image",
         description=url,
     )

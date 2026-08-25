@@ -28,7 +28,7 @@ chat:
     type: openai
     base_url: *opencode-base_url
   reasoning_effort: high
-  mcp_servers: &mcp_servers
+  mcp_servers:
     tavily:
       type: http
       tools: ["*"]
@@ -39,7 +39,7 @@ chat:
       type: http
       tools: ["*"]
       url: https://api.anysearch.com/mcp
-  excluded_tools: &excluded_tools
+  excluded_tools:
     - bash
     - list_bash
     - read_bash
@@ -64,8 +64,7 @@ chat:
       api_key: *agnes-ai-api_key
       base_url: *agnes-ai-base_url
     reasoning_effort: high
-    mcp_servers: *mcp_servers
-    excluded_tools: *excluded_tools
+    available_tools: []
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
