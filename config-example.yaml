@@ -21,6 +21,8 @@ opencode:
 siliconflow:
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxx
+sensenova:
+  api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 chat:
   model: *opencode-model
@@ -86,6 +88,9 @@ summary:
   provider:
     type: openai
     base_url: *opencode-base_url
+
+tool:
+  sensenova_api_key: *sensenova-api_key
 
 wordle:
   crystal_bonus_map:

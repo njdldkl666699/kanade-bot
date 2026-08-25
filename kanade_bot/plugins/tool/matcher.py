@@ -118,3 +118,19 @@ send_face = on_command(
     block=True,
 )
 register_matcher(send_face, "发送表情")
+
+image_generation = on_command(
+    "文生图",
+    aliases={"生成图片", "生图"},
+    priority=2,
+    block=True,
+)
+register_matcher(image_generation, "文生图")
+
+image_edit = on_command(
+    "图片编辑",
+    aliases={"编辑图片", "改图"},
+    priority=2,
+    block=True,
+)
+register_matcher(image_edit, "图片编辑")

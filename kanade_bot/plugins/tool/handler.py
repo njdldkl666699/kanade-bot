@@ -1,6 +1,11 @@
+import asyncio
 import base64
 import binascii
+import mimetypes
 import random
+import re
+from collections.abc import Iterable
+from pathlib import Path
 
 import emoji
 from mcstatus import JavaServer
@@ -17,12 +22,14 @@ from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
-from kanade_bot.utils.parse import parse_arg_message
+from kanade_bot.utils.onebot11 import get_image_path, send_poke, set_msg_emoji_like
+from kanade_bot.utils.parse import bool_from_str, parse_arg_message
 
-from .config import preset_reaction_cfg
+from .config import cfg, preset_reaction_cfg
 from .matcher import (
     add_a_schedule,
+    image_edit,
+    image_generation,
     list_schedules,
     mc_skin,
     mc_status,
@@ -40,8 +47,6 @@ from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 
 require("nonebot_plugin_localstore")
-
-from nonebot_plugin_localstore import get_plugin_cache_file
 
 
 @thunder_link_parse.handle()
@@ -105,6 +110,8 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         await mc_status.finish(MessageSegment.image(image))
 
     # 其他平台保存图片文件
+    from nonebot_plugin_localstore import get_plugin_cache_file
+
     image_path = get_plugin_cache_file("mc_status.png")
     image_path.write_bytes(image)
     await mc_status.finish("服务器状态已保存到 mc_status.png")
@@ -278,3 +285,213 @@ async def _(face_msg: OneBotMessage = CommandArg()):
         await send_face.finish("请提供一个有效的表情ID")
 
     await send_face.finish(MessageSegment.face(face_id))
+
+
+SENSENOVA_MODEL = "sensenova-u1.5-lite"
+SENSENOVA_GENERATIONS_URL = "https://token.sensenova.cn/v1/images/generations"
+SENSENOVA_EDITS_URL = "https://token.sensenova.cn/v1/images/edits"
+
+
+class ImageCreationError(ValueError):
+    """可直接反馈给用户的图片创作错误。"""
+
+
+def _parse_image_args(arg_text: str) -> tuple[str, str, bool]:
+    """解析“提示词 [尺寸] [是否润色]”，提示词允许包含空格。"""
+    tokens = arg_text.strip().split()
+    prompt_extend = False
+    size = "auto"
+
+    if tokens:
+        try:
+            prompt_extend = bool_from_str(tokens[-1])
+        except ValueError:
+            pass
+        else:
+            tokens.pop()
+
+    if tokens and (
+        tokens[-1].lower() == "auto"
+        or re.fullmatch(r"\d+x\d+", tokens[-1], re.IGNORECASE)
+    ):
+        size = tokens.pop()
+
+    prompt = " ".join(tokens).strip()
+    if not prompt:
+        raise ImageCreationError("请提供图片提示词。")
+    return prompt, size, prompt_extend
+
+
+def _image_segments(message: Iterable[MessageSegment] | None) -> list[MessageSegment]:
+    if message is None:
+        return []
+    return [segment for segment in message if segment.type == "image"]
+
+
+async def _image_data_urls(
+    bot: OneBot, message: Iterable[MessageSegment] | None
+) -> list[str]:
+    """将 OneBot 图片消息段下载并转换为 SenseNova 接受的 Data-URL。"""
+    urls: list[str] = []
+    for segment in _image_segments(message):
+        try:
+            path = await get_image_path(bot, segment)
+            data = await asyncio.to_thread(Path(path).read_bytes)
+        except Exception as exc:
+            raise ImageCreationError("读取图片失败，请重新发送图片。") from exc
+        mime = mimetypes.guess_type(str(path))[0] or "image/png"
+        urls.append(f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}")
+    return urls
+
+
+def _api_error(response) -> str:
+    try:
+        payload = response.json()
+        error = payload.get("error", payload)
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("msg") or error)
+        return str(error)
+    except (ValueError, TypeError):
+        return response.text[:200] or f"HTTP {response.status_code}"
+
+
+async def _request_image(url: str, payload: dict) -> list[MessageSegment]:
+    config = cfg
+    if not config.sensenova_api_key:
+        raise ImageCreationError("未配置 SenseNova API Key。")
+    try:
+        response = await HTTPX_CLIENT.post(
+            url,
+            headers={"Authorization": f"Bearer {config.sensenova_api_key}"},
+            json=payload,
+        )
+    except Exception as exc:
+        raise ImageCreationError("图片创作请求失败，请稍后重试。") from exc
+    if response.status_code >= 400:
+        raise ImageCreationError(f"图片创作失败：{_api_error(response)}")
+    try:
+        data = response.json().get("data", [])
+    except (ValueError, AttributeError) as exc:
+        raise ImageCreationError("图片创作返回数据格式错误。") from exc
+    if not isinstance(data, list) or not data:
+        raise ImageCreationError("图片创作未返回图片。")
+
+    result: list[MessageSegment] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if item.get("b64_json"):
+            try:
+                image = base64.b64decode(item["b64_json"], validate=True)
+            except (ValueError, binascii.Error, TypeError) as exc:
+                raise ImageCreationError("图片创作返回的图片数据无效。") from exc
+            result.append(MessageSegment.image(image))
+        elif item.get("url"):
+            result.append(MessageSegment.image(item["url"]))
+    if not result:
+        raise ImageCreationError("图片创作未返回可用图片。")
+    return result
+
+
+async def _create_image(prompt: str, size: str, prompt_extend: bool) -> list[MessageSegment]:
+    return await _request_image(
+        SENSENOVA_GENERATIONS_URL,
+        {
+            "model": SENSENOVA_MODEL,
+            "prompt": prompt,
+            "n": 1,
+            "size": size,
+            "output_format": "png",
+            "response_format": "b64_json",
+            "watermark": False,
+            "prompt_extend": prompt_extend,
+        },
+    )
+
+
+async def _edit_image(
+    images: list[str], prompt: str, size: str, prompt_extend: bool
+) -> list[MessageSegment]:
+    return await _request_image(
+        SENSENOVA_EDITS_URL,
+        {
+            "model": SENSENOVA_MODEL,
+            "images": [{"image_url": image} for image in images],
+            "prompt": prompt,
+            "n": 1,
+            "size": size,
+            "response_format": "b64_json",
+            "watermark": False,
+            "prompt_extend": prompt_extend,
+        },
+    )
+
+
+def _compose_images(images: list[MessageSegment]) -> OneBotMessage:
+    message = OneBotMessage()
+    for image in images:
+        message += image
+    return message
+
+
+@image_generation.handle()
+async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+    try:
+        prompt, size, prompt_extend = _parse_image_args(arg_msg.extract_plain_text())
+        images = await _create_image(prompt, size, prompt_extend)
+    except ImageCreationError as exc:
+        await image_generation.finish(str(exc))
+    await image_generation.finish(_compose_images(images))
+
+
+@image_edit.handle()
+async def _(
+    state: T_State,
+    bot: OneBot,
+    event: OneBotMessageEvent,
+    arg_msg: Message = CommandArg(),
+):
+    try:
+        prompt, size, prompt_extend = _parse_image_args(arg_msg.extract_plain_text())
+    except ImageCreationError as exc:
+        await image_edit.finish(str(exc))
+
+    try:
+        image_urls = await _image_data_urls(
+            bot, event.reply.message if event.reply else None
+        )
+        image_urls.extend(await _image_data_urls(bot, event.message))
+    except ImageCreationError as exc:
+        await image_edit.finish(str(exc))
+    if image_urls:
+        try:
+            images = await _edit_image(image_urls, prompt, size, prompt_extend)
+        except ImageCreationError as exc:
+            await image_edit.finish(str(exc))
+        await image_edit.finish(_compose_images(images))
+
+    state.update(prompt=prompt, size=size, prompt_extend=prompt_extend)
+    await image_edit.pause("请发送要编辑的图片（可一次发送多张）：")
+
+
+@image_edit.handle()
+async def _(state: T_State, bot: OneBot, event: OneBotMessageEvent):
+    try:
+        image_urls = await _image_data_urls(
+            bot, event.reply.message if event.reply else None
+        )
+        image_urls.extend(await _image_data_urls(bot, event.message))
+    except ImageCreationError as exc:
+        await image_edit.finish(str(exc))
+    if not image_urls:
+        await image_edit.finish("未找到图片，请发送图片后重试。")
+    try:
+        images = await _edit_image(
+            image_urls,
+            state["prompt"],
+            state.get("size", "auto"),
+            state.get("prompt_extend", False),
+        )
+    except ImageCreationError as exc:
+        await image_edit.finish(str(exc))
+    await image_edit.finish(_compose_images(images))

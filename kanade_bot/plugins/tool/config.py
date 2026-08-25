@@ -23,6 +23,8 @@ class ScopedConfig(AttrDocModel):
     """定时任务配置文件名。暂仅支持OneBot v11群聊。"""
     preset_reaction_config_file: str = "preset_reaction_config.json"
     """预设反应配置文件名"""
+    sensenova_api_key: str | None = None
+    """SenseNova 图片创作 API Key。"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
