@@ -1293,6 +1293,19 @@
           "description": "预设反应配置文件名",
           "title": "Preset Reaction Config File",
           "type": "string"
+        },
+        "sensenova_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SenseNova 图片创作 API Key。",
+          "title": "Sensenova Api Key"
         }
       },
       "title": "ScopedConfig",
@@ -2367,7 +2380,8 @@
         "fallback_icon_file": "grass_block.png",
         "template_file": "mcstatus_template.html",
         "schedule_configs_file": "schedule_configs.json",
-        "preset_reaction_config_file": "preset_reaction_config.json"
+        "preset_reaction_config_file": "preset_reaction_config.json",
+        "sensenova_api_key": null
       }
     },
     "uninfo_cache": {

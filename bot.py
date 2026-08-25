@@ -145,6 +145,13 @@ def patch_foreign_plugins():
     stat_matcher.block = True
     stat_matcher.priority = 2
 
+    ## nonebot_plugin_htmlrender
+    from nonebot_plugin_htmlrender import md_to_pic
+
+    # 修改默认宽度
+    MD_TO_PIC_WIDTH = 800
+    md_to_pic.__defaults__ = ("", "", "", MD_TO_PIC_WIDTH, "png", None, 2, 30000)
+
 
 def register_other_configs_and_generate_schema():
     """注册适配器和第三方插件的配置类，并生成合并后的配置Schema"""

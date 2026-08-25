@@ -59,9 +59,12 @@ def extract_session_info_sync(event: Event) -> SessionInfo:
 
 
 async def extract_session_info(event: Event, bot: Bot | None = None) -> SessionInfo:
-    """解析事件以提取会话信息"""
+    """解析事件以提取会话信息
+
+    相比同步版本，此函数在处理OneBot群消息时会尝试获取群名称。
+    """
     info = extract_session_info_sync(event)
     if bot and isinstance(event, OneBotGroupMessageEvent):
         group_info = await cast(OneBot, bot).get_group_info(group_id=event.group_id)
-        info.group_name = group_info.get("group_name") if group_info else None
+        info.group_name = group_info.get("group_name")
     return info

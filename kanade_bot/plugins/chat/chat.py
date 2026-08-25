@@ -50,6 +50,7 @@ async def _send_onebot_message(
     segments: list[MessageSegment],
     *,
     reply_id: int | None = None,
+    content_long: bool = False,
 ):
     # 根据消息段的数量决定发送方式
     if not segments:
@@ -71,17 +72,39 @@ async def _send_onebot_message(
 
     # 消息数>5但<=10，合并转发
     elif len(segments) <= 10:
-        bot_id, bot_nickname = await get_bot_info(bot)
+        info = await get_bot_info(bot)
         node_custom_message = OneBotMessage()
         for segment in segments:
-            node_custom_message += MessageSegment.node_custom(
-                bot_id, bot_nickname, OneBotMessage(segment)
-            )
+            node_custom_message += MessageSegment.node_custom(*info, OneBotMessage(segment))
         await ensure_send_forward_message(matcher, bot, event, node_custom_message)
 
-    # 消息数>10，合并为一条消息发送
+    # 消息数>10，合并相邻的文本消息段
     else:
-        await matcher.send(OneBotMessage(segments))
+        messages: list[OneBotMessage | str] = []
+        sentinel: str = ""
+        for segment in segments:
+            if segment.type == "text":
+                sentinel += segment.data["text"] + "\n\n"
+            else:
+                if sentinel := sentinel.strip():
+                    messages.append(sentinel)
+                    sentinel = ""
+                messages.append(OneBotMessage(segment))
+        if sentinel := sentinel.strip():
+            messages.append(sentinel)
+
+        # 内容不长，直接发送消息列表
+        if not content_long:
+            for message in messages:
+                await matcher.send(message)
+            return
+
+        # 内容长，作为合并转发消息发送
+        node_custom_message = OneBotMessage()
+        info = await get_bot_info(bot)
+        for message in messages:
+            node_custom_message += MessageSegment.node_custom(*info, message)
+        await ensure_send_forward_message(matcher, bot, event, node_custom_message)
 
 
 def _extract_segments_preserving_code(content: str) -> list[MessageSegment]:
@@ -192,12 +215,14 @@ async def send_message_in_chunks(
                 continue
             segments = _extract_segments_preserving_code(content)
             all_segments.extend(segments)
+
         await _send_onebot_message(
             matcher,
             cast(OneBot, bot),
             event,
             all_segments,
             reply_id=event.message_id,
+            content_long=any(len(content) > 800 for content in contents),
         )
     else:
         for content in contents:
@@ -210,7 +235,7 @@ def should_reply_event(event: Event):
     """确定是否应该回复事件
 
     用户或群聊在聊天黑名单中->不回复
-    群聊中引用了自己的消息，但是没有@ -> 不回复
+    群聊中引用了自己的消息，但是没有@ -> 不回复（修改adapter-onebot实现）
     """
     # 确定平台类型
     platform = get_platform_type(event)

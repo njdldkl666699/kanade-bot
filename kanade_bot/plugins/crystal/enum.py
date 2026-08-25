@@ -11,6 +11,8 @@ class HandlerKeyEnum(Enum):
     SUMMARIZE = "总结"
     GACHA = "抽卡"
     GACHA_10 = "十连抽"
+    IMAGE_GENERATION = "文生图"
+    IMAGE_EDIT = "图片编辑"
 
 
 class DaypartEnum(Enum):

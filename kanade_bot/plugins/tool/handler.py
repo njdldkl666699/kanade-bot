@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import emoji
+from httpx import Response
 from mcstatus import JavaServer
 from nonebot import logger, require
 from nonebot.adapters import Event, Message
@@ -47,6 +48,15 @@ from .mcstatus import render_mc_status
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
 
 require("nonebot_plugin_localstore")
+from nonebot_plugin_localstore import get_plugin_cache_file
+
+require("crystal")
+from kanade_bot.plugins.crystal import (
+    HandlerKeyEnum,
+    check_user_crystal,
+    finish_fail_consume,
+    succeed_consume,
+)
 
 
 @thunder_link_parse.handle()
@@ -110,7 +120,6 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
         await mc_status.finish(MessageSegment.image(image))
 
     # 其他平台保存图片文件
-    from nonebot_plugin_localstore import get_plugin_cache_file
 
     image_path = get_plugin_cache_file("mc_status.png")
     image_path.write_bytes(image)
@@ -311,8 +320,7 @@ def _parse_image_args(arg_text: str) -> tuple[str, str, bool]:
             tokens.pop()
 
     if tokens and (
-        tokens[-1].lower() == "auto"
-        or re.fullmatch(r"\d+x\d+", tokens[-1], re.IGNORECASE)
+        tokens[-1].lower() == "auto" or re.fullmatch(r"\d+x\d+", tokens[-1], re.IGNORECASE)
     ):
         size = tokens.pop()
 
@@ -328,9 +336,7 @@ def _image_segments(message: Iterable[MessageSegment] | None) -> list[MessageSeg
     return [segment for segment in message if segment.type == "image"]
 
 
-async def _image_data_urls(
-    bot: OneBot, message: Iterable[MessageSegment] | None
-) -> list[str]:
+async def _image_data_urls(bot: OneBot, message: Iterable[MessageSegment] | None) -> list[str]:
     """将 OneBot 图片消息段下载并转换为 SenseNova 接受的 Data-URL。"""
     urls: list[str] = []
     for segment in _image_segments(message):
@@ -339,12 +345,12 @@ async def _image_data_urls(
             data = await asyncio.to_thread(Path(path).read_bytes)
         except Exception as exc:
             raise ImageCreationError("读取图片失败，请重新发送图片。") from exc
-        mime = mimetypes.guess_type(str(path))[0] or "image/png"
+        mime = mimetypes.guess_file_type(path)[0] or "image/png"
         urls.append(f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}")
     return urls
 
 
-def _api_error(response) -> str:
+def _api_error(response: Response) -> str:
     try:
         payload = response.json()
         error = payload.get("error", payload)
@@ -364,8 +370,10 @@ async def _request_image(url: str, payload: dict) -> list[MessageSegment]:
             url,
             headers={"Authorization": f"Bearer {config.sensenova_api_key}"},
             json=payload,
+            timeout=60,
         )
     except Exception as exc:
+        logger.warning(f"请求 SenseNova API 失败: {exc}")
         raise ImageCreationError("图片创作请求失败，请稍后重试。") from exc
     if response.status_code >= 400:
         raise ImageCreationError(f"图片创作失败：{_api_error(response)}")
@@ -427,21 +435,27 @@ async def _edit_image(
     )
 
 
-def _compose_images(images: list[MessageSegment]) -> OneBotMessage:
-    message = OneBotMessage()
+def _compose_images(message_id: int, images: list[MessageSegment]):
+    message = MessageSegment.reply(message_id)
     for image in images:
         message += image
     return message
 
 
 @image_generation.handle()
-async def _(bot: OneBot, arg_msg: Message = CommandArg()):
+async def _(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
+    kpu = (HandlerKeyEnum.IMAGE_GENERATION, "onebot", event.get_user_id())
+    if not check_user_crystal(*kpu):
+        await finish_fail_consume(image_generation, *kpu)
+
     try:
         prompt, size, prompt_extend = _parse_image_args(arg_msg.extract_plain_text())
         images = await _create_image(prompt, size, prompt_extend)
     except ImageCreationError as exc:
         await image_generation.finish(str(exc))
-    await image_generation.finish(_compose_images(images))
+
+    succeed_consume(*kpu)
+    await image_generation.finish(_compose_images(event.message_id, images))
 
 
 @image_edit.handle()
@@ -451,15 +465,17 @@ async def _(
     event: OneBotMessageEvent,
     arg_msg: Message = CommandArg(),
 ):
+    kpu = (HandlerKeyEnum.IMAGE_EDIT, "onebot", event.get_user_id())
+    if not check_user_crystal(*kpu):
+        await finish_fail_consume(image_edit, *kpu)
+
     try:
         prompt, size, prompt_extend = _parse_image_args(arg_msg.extract_plain_text())
     except ImageCreationError as exc:
         await image_edit.finish(str(exc))
 
     try:
-        image_urls = await _image_data_urls(
-            bot, event.reply.message if event.reply else None
-        )
+        image_urls = await _image_data_urls(bot, event.reply.message if event.reply else None)
         image_urls.extend(await _image_data_urls(bot, event.message))
     except ImageCreationError as exc:
         await image_edit.finish(str(exc))
@@ -468,7 +484,8 @@ async def _(
             images = await _edit_image(image_urls, prompt, size, prompt_extend)
         except ImageCreationError as exc:
             await image_edit.finish(str(exc))
-        await image_edit.finish(_compose_images(images))
+        succeed_consume(*kpu)
+        await image_edit.finish(_compose_images(event.message_id, images))
 
     state.update(prompt=prompt, size=size, prompt_extend=prompt_extend)
     await image_edit.pause("请发送要编辑的图片（可一次发送多张）：")
@@ -477,9 +494,7 @@ async def _(
 @image_edit.handle()
 async def _(state: T_State, bot: OneBot, event: OneBotMessageEvent):
     try:
-        image_urls = await _image_data_urls(
-            bot, event.reply.message if event.reply else None
-        )
+        image_urls = await _image_data_urls(bot, event.reply.message if event.reply else None)
         image_urls.extend(await _image_data_urls(bot, event.message))
     except ImageCreationError as exc:
         await image_edit.finish(str(exc))
@@ -494,4 +509,6 @@ async def _(state: T_State, bot: OneBot, event: OneBotMessageEvent):
         )
     except ImageCreationError as exc:
         await image_edit.finish(str(exc))
-    await image_edit.finish(_compose_images(images))
+
+    succeed_consume(HandlerKeyEnum.IMAGE_EDIT, "onebot", event.get_user_id())
+    await image_edit.finish(_compose_images(event.message_id, images))
