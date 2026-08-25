@@ -6,12 +6,12 @@ from copilot import CopilotClient, RuntimeConnection
 from copilot.client import StopError
 from copilot.session import AzureProviderOptions
 from httpx import AsyncClient
-from nonebot import get_driver, logger
+from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
 from nonebot.adapters.onebot.v11 import Event as OneBotEvent
 
-from .schema import AttrDocModel
+from .schema import AttrDocModel, KanadeConfig
 
 type PlatformType = Literal["console", "onebot"]
 """消息平台类型"""
@@ -108,3 +108,15 @@ async def shutdown():
     except* StopError as eg:
         logger.warning(f"停止Copilot客户端时发生错误: {eg.message}")
     logger.info("Copilot客户端已关闭")
+
+
+@driver.on_shutdown
+async def clear_image_cache():
+    p = get_plugin_config(KanadeConfig).image_cache_dir_path
+    if p.exists() and p.is_dir():
+        for f in p.iterdir():
+            if f.is_file():
+                try:
+                    f.unlink()
+                except OSError as e:
+                    logger.warning(f"删除图片缓存文件 {f} 时发生错误: {e}")

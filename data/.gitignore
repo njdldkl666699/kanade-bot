@@ -7,3 +7,4 @@ music/lyrics/
 music/audios/
 data.db
 nonebot_plugin_orm/
+nonebot_plugin_wordcloud/
