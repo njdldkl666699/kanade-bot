@@ -252,7 +252,11 @@ class CopilotSessionManager:
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             # 因为我不知道的原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
-            await session.set_model(cfg.model, reasoning_effort=cfg.reasoning_effort)
+            await session.set_model(
+                cfg.model,
+                reasoning_effort=cfg.reasoning_effort,
+                model_capabilities=cfg.model_capabilities,
+            )
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:  # noqa: BLE001
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")
