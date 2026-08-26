@@ -30,6 +30,13 @@ chat:
     type: openai
     base_url: *opencode-base_url
   reasoning_effort: high
+  model_capabilities:
+    supports:
+      vision: false
+      reasoning_effort: true
+    limits:
+      max_context_window_tokens: 1048576
+      max_output_tokens: 65536
   mcp_servers:
     tavily:
       type: http

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from copilot import MCPServerConfig
+from copilot import MCPServerConfig, ModelCapabilitiesOverride
 from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel, PositiveInt
@@ -97,6 +97,8 @@ class ScopedConfig(AttrDocModel):
     """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
     reasoning_effort: ReasoningEffort | None = None
     """推理努力程度"""
+    model_capabilities: ModelCapabilitiesOverride | None = None
+    """模型能力覆盖配置"""
 
     available_tools: list[str] | None = None
     """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，

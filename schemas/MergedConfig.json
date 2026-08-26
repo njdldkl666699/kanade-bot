@@ -357,6 +357,162 @@
       "title": "MindleConfig",
       "type": "object"
     },
+    "ModelCapabilitiesOverride": {
+      "properties": {
+        "supports": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelSupportsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelLimitsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ModelCapabilitiesOverride",
+      "type": "object"
+    },
+    "ModelLimitsOverride": {
+      "properties": {
+        "max_prompt_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Prompt Tokens"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "max_context_window_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Context Window Tokens"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelVisionLimitsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ModelLimitsOverride",
+      "type": "object"
+    },
+    "ModelSupportsOverride": {
+      "properties": {
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Effort"
+        }
+      },
+      "title": "ModelSupportsOverride",
+      "type": "object"
+    },
+    "ModelVisionLimitsOverride": {
+      "properties": {
+        "supported_media_types": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supported Media Types"
+        },
+        "max_prompt_images": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Prompt Images"
+        },
+        "max_prompt_image_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Prompt Image Size"
+        }
+      },
+      "title": "ModelVisionLimitsOverride",
+      "type": "object"
+    },
     "ProtocolFrameworkType": {
       "enum": [
         "napcat",
@@ -753,6 +909,18 @@
           "default": null,
           "description": "推理努力程度",
           "title": "Reasoning Effort"
+        },
+        "model_capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelCapabilitiesOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型能力覆盖配置"
         },
         "available_tools": {
           "anyOf": [
@@ -1533,6 +1701,7 @@
         "model": "gpt-5-mini",
         "provider": null,
         "reasoning_effort": null,
+        "model_capabilities": null,
         "available_tools": null,
         "excluded_tools": null,
         "mcp_servers": null,

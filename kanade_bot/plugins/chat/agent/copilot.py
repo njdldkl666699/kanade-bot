@@ -67,6 +67,7 @@ class CopilotSessionManager:
             "model": cfg.model,
             "provider": cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,
             "reasoning_effort": cfg.reasoning_effort,
+            "model_capabilities": cfg.model_capabilities,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,
