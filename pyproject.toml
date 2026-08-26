@@ -9,7 +9,6 @@ dependencies = [
   "emoji>=2.15.0",
   "github-copilot-sdk>=1.0.0",
   "httpx>=0.28.1",
-  "magika>=1.0.3",
   "mcstatus>=13.0.1",
   "nonebot-adapter-console>=0.9.0",
   "nonebot-adapter-onebot @ git+https://gh-proxy.com/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git@master",

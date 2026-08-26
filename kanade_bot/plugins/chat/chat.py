@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.common import MAGIKA, PlatformType, get_platform_type
+from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import (
     OneBotMessageSegmentMeme,
     ensure_send_forward_message,
@@ -57,10 +57,10 @@ async def _send_onebot_message(
     if not segments:
         return
 
-    # 消息数==1，引用回复
-    if len(segments) == 1:
-        reply = MessageSegment.reply(event.message_id)
-        await matcher.send(reply + segments[0])
+    # # 消息数==1，引用回复
+    # if len(segments) == 1:
+    #     reply = MessageSegment.reply(event.message_id)
+    #     await matcher.send(reply + segments[0])
 
     # 消息数<=5，按条发送
     elif len(segments) <= 5:
@@ -90,14 +90,12 @@ async def _send_onebot_message(
         if sentinel := sentinel.strip():
             messages.append(sentinel)
 
-        if len(messages) == 1 and isinstance(m := messages[0], str):
-            r = MAGIKA.identify_bytes(m.encode())
-            if r.output.label == "markdown":
-                # Markdown文本，渲染为图片
-                image = MessageSegment.image(await md_to_pic(m))
-                reply = MessageSegment.reply(event.message_id)
-                await matcher.send(reply + image)
-                return
+        # 内容很长的纯文本消息，转换为图片发送
+        if len(messages) == 1 and isinstance(m := messages[0], str) and content_long:
+            image = MessageSegment.image(await md_to_pic(m))
+            reply = MessageSegment.reply(event.message_id)
+            await matcher.send(reply + image)
+            return
 
         # 内容不长，直接发送消息列表
         if not content_long:
@@ -214,25 +212,19 @@ async def send_message_in_chunks(
             event.get_user_id(),
         )
 
-    if isinstance(event, OneBotMessageEvent):
-        all_segments: list[MessageSegment] = []
-        for content in contents:
-            if not (content := content.strip()):
-                continue
+    for content in contents:
+        if not (content := content.strip()):
+            continue
+        if isinstance(event, OneBotMessageEvent):
             segments = _extract_segments_preserving_code(content)
-            all_segments.extend(segments)
-
-        await _send_onebot_message(
-            matcher,
-            cast(OneBot, bot),
-            event,
-            all_segments,
-            content_long=any(len(content) > 800 for content in contents),
-        )
-    else:
-        for content in contents:
-            if not (content := content.strip()):
-                continue
+            await _send_onebot_message(
+                matcher,
+                cast(OneBot, bot),
+                event,
+                segments,
+                content_long=any(len(content) > 800 for content in contents),
+            )
+        else:
             await matcher.send(content)
 
 
