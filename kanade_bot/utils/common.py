@@ -6,6 +6,7 @@ from copilot import CopilotClient, RuntimeConnection
 from copilot.client import StopError
 from copilot.session import AzureProviderOptions
 from httpx import AsyncClient
+from magika import Magika
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import Event as ConsoleEvent
@@ -80,6 +81,10 @@ class ProviderConfig(AttrDocModel):
     max_output_tokens: int | None = None
     """Overrides the resolved model's default max output tokens. When hit, the
     model stops generating and returns a truncated response."""
+
+
+MAGIKA = Magika()
+"""全局Magika实例"""
 
 
 HTTPX_CLIENT = AsyncClient(timeout=20)

@@ -1,7 +1,7 @@
 import base64
-import mimetypes
 from pathlib import Path
 
+import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from nonebot import logger
@@ -42,8 +42,7 @@ async def view_image(params: ViewImageParams):
         file = url[7:]
         path = Path(file)
         data = base64.b64encode(path.read_bytes()).decode()
-        mime_type, _ = mimetypes.guess_file_type(path)
-        mime_type = mime_type or "application/octet-stream"
+        mime_type = magic.from_file(path, mime=True)
     else:
         r = await HTTPX_CLIENT.get(url)
         if r.status_code != 200:

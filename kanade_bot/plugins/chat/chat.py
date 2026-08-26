@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.common import PlatformType, get_platform_type
+from kanade_bot.utils.common import MAGIKA, PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import (
     OneBotMessageSegmentMeme,
     ensure_send_forward_message,
@@ -27,8 +27,10 @@ from .ban import is_banned
 from .config import cfg, chat_configs
 
 require("crystal")
-
 from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
+
+require("nonebot_plugin_htmlrender")
+from nonebot_plugin_htmlrender import md_to_pic
 
 if cfg.rag.enabled:
     from .rag import query
@@ -49,7 +51,6 @@ async def _send_onebot_message(
     event: OneBotMessageEvent,
     segments: list[MessageSegment],
     *,
-    reply_id: int | None = None,
     content_long: bool = False,
 ):
     # 根据消息段的数量决定发送方式
@@ -58,12 +59,8 @@ async def _send_onebot_message(
 
     # 消息数==1，引用回复
     if len(segments) == 1:
-        segment = segments[0]
-        if not reply_id:
-            await matcher.send(segment)
-        else:
-            reply = MessageSegment.reply(reply_id)
-            await matcher.send(reply + segment)
+        reply = MessageSegment.reply(event.message_id)
+        await matcher.send(reply + segments[0])
 
     # 消息数<=5，按条发送
     elif len(segments) <= 5:
@@ -92,6 +89,15 @@ async def _send_onebot_message(
                 messages.append(OneBotMessage(segment))
         if sentinel := sentinel.strip():
             messages.append(sentinel)
+
+        if len(messages) == 1 and isinstance(m := messages[0], str):
+            r = MAGIKA.identify_bytes(m.encode())
+            if r.output.label == "markdown":
+                # Markdown文本，渲染为图片
+                image = MessageSegment.image(await md_to_pic(m))
+                reply = MessageSegment.reply(event.message_id)
+                await matcher.send(reply + image)
+                return
 
         # 内容不长，直接发送消息列表
         if not content_long:
@@ -221,7 +227,6 @@ async def send_message_in_chunks(
             cast(OneBot, bot),
             event,
             all_segments,
-            reply_id=event.message_id,
             content_long=any(len(content) > 800 for content in contents),
         )
     else:

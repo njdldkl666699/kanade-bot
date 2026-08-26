@@ -149,7 +149,7 @@ def patch_foreign_plugins():
     from nonebot_plugin_htmlrender import md_to_pic
 
     # 修改默认宽度
-    MD_TO_PIC_WIDTH = 800
+    MD_TO_PIC_WIDTH = 720
     md_to_pic.__defaults__ = ("", "", "", MD_TO_PIC_WIDTH, "png", None, 2, 30000)
 
 

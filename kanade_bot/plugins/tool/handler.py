@@ -1,13 +1,13 @@
 import asyncio
 import base64
 import binascii
-import mimetypes
 import random
 import re
 from collections.abc import Iterable
-from pathlib import Path
+from io import BytesIO
 
 import emoji
+import magic
 from httpx import Response
 from mcstatus import JavaServer
 from nonebot import logger, require
@@ -21,6 +21,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment, PokeNotifyEvent
 from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
+from PIL import Image
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import get_image_path, send_poke, set_msg_emoji_like
@@ -342,10 +343,23 @@ async def _image_data_urls(bot: OneBot, message: Iterable[MessageSegment] | None
     for segment in _image_segments(message):
         try:
             path = await get_image_path(bot, segment)
-            data = await asyncio.to_thread(Path(path).read_bytes)
+            data = await asyncio.to_thread(path.read_bytes)
         except Exception as exc:
             raise ImageCreationError("读取图片失败，请重新发送图片。") from exc
-        mime = mimetypes.guess_file_type(path)[0] or "image/png"
+
+        mime = magic.from_buffer(data, mime=True)
+        if mime == "image/gif":
+            # 取 GIF 的第一帧并转换为 PNG
+            try:
+                with Image.open(BytesIO(data)) as img:
+                    frame = img.convert("RGBA")
+                    output = BytesIO()
+                    frame.save(output, format="PNG")
+                    data = output.getvalue()
+                mime = "image/png"
+            except Exception as e:
+                raise ImageCreationError("无法处理 GIF 图片，请尝试使用 PNG 或 JPG 格式。") from e
+
         urls.append(f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}")
     return urls
 
