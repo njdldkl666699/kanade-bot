@@ -1,0 +1,6 @@
+listen: ":8080"
+timeout: 5m
+upstream:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-your-key"
+  model_supports_images: false
