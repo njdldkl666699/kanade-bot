@@ -31,11 +31,6 @@ class KanadeConfig(AttrDocModel):
     """JSON Schema输出目录"""
     image_cache_dir: str = "kanade_images/"
     """图片缓存目录"""
-    onebot_protocol_framework: ProtocolFrameworkType = "other"
-    """OneBot协议框架类型（用于适配不同实现差异）
-
-    当前实现下，other与napcat一致，snowluma进行额外适配。
-    """
 
     @property
     def schema_output_dir_path(self) -> Path:

@@ -14,7 +14,6 @@ nickname: ["宵崎奏"]
 superusers: ["user"]
 
 console_strict_tome: true
-onebot_protocol_framework: snowluma
 
 localstore_use_cwd: true
 

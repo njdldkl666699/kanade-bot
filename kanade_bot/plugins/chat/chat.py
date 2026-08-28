@@ -14,11 +14,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType, get_platform_type
-from kanade_bot.utils.onebot11 import (
-    OneBotMessageSegmentMeme,
-    ensure_send_forward_message,
-    get_bot_info,
-)
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
 from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
 from kanade_bot.utils.session import extract_session_info
 
@@ -73,7 +69,7 @@ async def _send_onebot_message(
         node_custom_message = OneBotMessage()
         for segment in segments:
             node_custom_message += MessageSegment.node_custom(*info, OneBotMessage(segment))
-        await ensure_send_forward_message(matcher, bot, event, node_custom_message)
+        await matcher.send(node_custom_message)
 
     # 消息数>10，合并相邻的文本消息段
     else:
@@ -108,7 +104,7 @@ async def _send_onebot_message(
         info = await get_bot_info(bot)
         for message in messages:
             node_custom_message += MessageSegment.node_custom(*info, message)
-        await ensure_send_forward_message(matcher, bot, event, node_custom_message)
+        await matcher.send(node_custom_message)
 
 
 def _extract_segments_preserving_code(content: str) -> list[MessageSegment]:

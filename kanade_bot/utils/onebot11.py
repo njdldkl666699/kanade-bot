@@ -1,26 +1,11 @@
-from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, override
 
 from nonebot import get_plugin_config
-from nonebot.adapters.onebot.v11 import (
-    Bot,
-    GroupMessageEvent,
-    Message,
-    MessageEvent,
-    MessageSegment,
-    NoticeEvent,
-)
-from nonebot.matcher import Matcher
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment, NoticeEvent
 
-from .schema import KanadeConfig, ProtocolFrameworkType
-
-
-@lru_cache(maxsize=1)
-def _get_protocol_framework() -> ProtocolFrameworkType:
-    """获取OneBot协议框架类型"""
-    return get_plugin_config(KanadeConfig).onebot_protocol_framework
+from .schema import KanadeConfig
 
 
 def OneBotMessageSegmentMeme(file: str | bytes | BytesIO | Path) -> MessageSegment:
@@ -112,50 +97,3 @@ class BotOfflineNoticeEvent(NoticeEvent):
     @override
     def get_session_id(self) -> str:
         return str(self.user_id)
-
-
-async def send_forward_msg(
-    bot: Bot,
-    message_type: Literal["private", "group"],
-    group_id: int | None = None,
-    user_id: int | None = None,
-    messages: Message | None = None,
-    message: Message | None = None,
-    auto_escape: bool = False,
-):
-    """发送合并转发消息"""
-    return await bot.call_api(
-        "send_forward_msg",
-        message_type=message_type,
-        group_id=group_id,
-        user_id=user_id,
-        messages=messages,
-        message=message,
-        auto_escape=auto_escape,
-    )
-
-
-async def ensure_send_forward_message(
-    matcher: type[Matcher],
-    bot: Bot,
-    event: MessageEvent,
-    node_custom_message: Message,
-):
-    if _get_protocol_framework() != "snowluma":
-        return await matcher.send(node_custom_message)
-
-    # 部分OneBot 11实现不支持使用send_msg发送转发消息，
-    # 使用其扩展接口send_forward_msg
-    message_type = "private"
-    group_id: int | None = None
-    user_id = event.user_id
-    if isinstance(event, GroupMessageEvent):
-        message_type = "group"
-        group_id = event.group_id
-    return await send_forward_msg(
-        bot,
-        message_type=message_type,
-        group_id=group_id,
-        user_id=user_id,
-        message=node_custom_message,
-    )

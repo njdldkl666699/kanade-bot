@@ -126,7 +126,7 @@ async def _(event: Event, message: Message = EventMessage()):
 
 
 @random_duanzi.handle()
-async def _(bot: Bot, event: Event, arg_msg: Message = CommandArg()):
+async def _(bot: Bot, arg_msg: Message = CommandArg()):
     args = parse_duanzi_args(arg_msg)
     index, chaos_face, custom_face_id_or_emoji = args
 
@@ -137,7 +137,6 @@ async def _(bot: Bot, event: Event, arg_msg: Message = CommandArg()):
         await send_duanzi_onebot(
             random_duanzi,
             bot,
-            cast(OneBotMessageEvent, event),
             duanzi,
             node_threshold=500,
             chaos_face=chaos_face,

@@ -3,11 +3,11 @@ import random
 
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Message
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.matcher import Matcher
 
-from kanade_bot.utils.onebot11 import ensure_send_forward_message, get_bot_info
+from kanade_bot.utils.onebot11 import get_bot_info
 from kanade_bot.utils.parse import bool_from_str, parse_arg_message
 
 from .config import Config
@@ -90,7 +90,6 @@ def _face_or_emoji_to_onebot_segment(face_id_or_emoji: str | int) -> MessageSegm
 async def send_duanzi_onebot(
     matcher: type[Matcher],
     bot: Bot,
-    event: MessageEvent,
     duanzi: str,
     *,
     node_threshold: int = 500,
@@ -128,7 +127,7 @@ async def send_duanzi_onebot(
     # 超过长度阈值则发送为合并转发消息
     bot_id, bot_nickname = await get_bot_info(bot)
     node_custom = MessageSegment.node_custom(bot_id, bot_nickname, duanzi)
-    await ensure_send_forward_message(matcher, bot, event, OneBotMessage(node_custom))
+    await matcher.send(node_custom)
 
 
 def get_or_random_duanzi(index: int | None = None) -> str | None:
