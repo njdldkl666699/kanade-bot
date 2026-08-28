@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v5.3.2"
+version = "v5.3.3"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13"
