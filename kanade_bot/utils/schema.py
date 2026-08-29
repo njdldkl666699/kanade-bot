@@ -106,6 +106,8 @@ class BaseAgentConfig(AttrDocModel):
             {
                 "on_permission_request": PermissionHandler.approve_all,
                 "large_output": {"enabled": False},
+                # dataclasses.dataclass总是会被Pydantic序列化，这里我们不希望序列化
+                "model_capabilities": self.model_capabilities,
             }
         )
         return data
