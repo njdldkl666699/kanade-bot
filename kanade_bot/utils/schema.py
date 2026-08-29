@@ -99,7 +99,8 @@ class BaseAgentConfig(AttrDocModel):
 
         作用为移除`system_prompt_file`字段，并设置额外的默认值
         """
-        data = self.model_dump(exclude_unset=True)
+        base_fields = set(BaseAgentConfig.model_fields.keys())
+        data = self.model_dump(exclude_unset=True, include=base_fields)
         data.pop("system_prompt_file", None)
         data.update(
             {
