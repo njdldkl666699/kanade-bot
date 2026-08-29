@@ -21,14 +21,12 @@ opencode:
 siliconflow:
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxx
-sensenova:
-  api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-chat:
-  model: *opencode-model
+sensenova: &sensenova
+  model: &sensenova-model deepseek-v4-flash
   provider:
     type: openai
-    base_url: *opencode-base_url
+    base_url: &sensenova-base_url https://token.sensenova.cn/v1/
+    api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxx
   reasoning_effort: high
   model_capabilities:
     supports:
@@ -37,6 +35,9 @@ chat:
     limits:
       max_context_window_tokens: 1048576
       max_output_tokens: 65536
+
+chat:
+  <<: *sensenova
   mcp_servers:
     tavily:
       type: http
@@ -91,10 +92,7 @@ help:
     `Message`: {message}
 
 summary:
-  model: *opencode-model
-  provider:
-    type: openai
-    base_url: *opencode-base_url
+  <<: *sensenova
 
 tool:
   sensenova_api_key: *sensenova-api_key

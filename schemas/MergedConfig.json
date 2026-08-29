@@ -119,10 +119,17 @@
       "description": "图片转述模型配置",
       "properties": {
         "model": {
-          "default": "gpt-5-mini",
-          "description": "图片转述模型ID",
-          "title": "Model",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型ID",
+          "title": "Model"
         },
         "provider": {
           "anyOf": [
@@ -134,7 +141,7 @@
             }
           ],
           "default": null,
-          "description": "图片转述模型提供商配置，如果为None则使用Copilot内置模型的默认值"
+          "description": "模型提供商配置，如果为None则使用Copilot内置模型的默认值"
         },
         "reasoning_effort": {
           "anyOf": [
@@ -155,6 +162,18 @@
           "default": null,
           "description": "推理努力程度",
           "title": "Reasoning Effort"
+        },
+        "model_capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelCapabilitiesOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型能力覆盖配置"
         },
         "system_prompt_file": {
           "default": "ImageCaption.md",
@@ -865,10 +884,17 @@
     "kanade_bot__plugins__chat__config__ScopedConfig": {
       "properties": {
         "model": {
-          "default": "gpt-5-mini",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "模型ID",
-          "title": "Model",
-          "type": "string"
+          "title": "Model"
         },
         "provider": {
           "anyOf": [
@@ -913,6 +939,12 @@
           ],
           "default": null,
           "description": "模型能力覆盖配置"
+        },
+        "system_prompt_file": {
+          "default": "Kanade-v4.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
         },
         "available_tools": {
           "anyOf": [
@@ -968,12 +1000,6 @@
           "default": null,
           "description": "MCP服务器配置",
           "title": "Mcp Servers"
-        },
-        "system_prompt_file": {
-          "default": "Kanade-v4.md",
-          "description": "系统提示词文件名",
-          "title": "System Prompt File",
-          "type": "string"
         },
         "system_prompt_extras": {
           "additionalProperties": {
@@ -1377,10 +1403,17 @@
     "kanade_bot__plugins__summary__config__ScopedConfig": {
       "properties": {
         "model": {
-          "default": "gpt-5-mini",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "模型ID",
-          "title": "Model",
-          "type": "string"
+          "title": "Model"
         },
         "provider": {
           "anyOf": [
@@ -1392,13 +1425,100 @@
             }
           ],
           "default": null,
-          "description": "模型提供商配置，如果为None则使用Copilot内置模型"
+          "description": "模型提供商配置，如果为None则使用Copilot内置模型的默认值"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度",
+          "title": "Reasoning Effort"
+        },
+        "model_capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelCapabilitiesOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型能力覆盖配置"
         },
         "system_prompt_file": {
           "default": "Summarizer.md",
           "description": "系统提示词文件名",
           "title": "System Prompt File",
           "type": "string"
+        },
+        "available_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，\n未指定的Copilot CLI内置工具和MCP工具将被排除。\n此选项优先级高于 `excluded_tools`（排除工具列表）。",
+          "title": "Available Tools"
+        },
+        "excluded_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。",
+          "title": "Excluded Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MCPStdioServerConfig"
+                  },
+                  {
+                    "$ref": "#/$defs/MCPHTTPServerConfig"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置",
+          "title": "Mcp Servers"
         },
         "bot_name": {
           "default": "宵崎奏",
@@ -1690,14 +1810,14 @@
     "chat": {
       "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
       "default": {
-        "model": "gpt-5-mini",
+        "model": null,
         "provider": null,
         "reasoning_effort": null,
         "model_capabilities": null,
+        "system_prompt_file": "Kanade-v4.md",
         "available_tools": null,
         "excluded_tools": null,
         "mcp_servers": null,
-        "system_prompt_file": "Kanade-v4.md",
         "system_prompt_extras": {},
         "memory_database_file": "memories.sqlite3",
         "memory_max_records_per_scope": 256,
@@ -2511,9 +2631,14 @@
     "summary": {
       "$ref": "#/$defs/kanade_bot__plugins__summary__config__ScopedConfig",
       "default": {
-        "model": "gpt-5-mini",
+        "model": null,
         "provider": null,
+        "reasoning_effort": null,
+        "model_capabilities": null,
         "system_prompt_file": "Summarizer.md",
+        "available_tools": null,
+        "excluded_tools": null,
+        "mcp_servers": null,
         "bot_name": "宵崎奏",
         "min_size": 10,
         "max_size": 2048,

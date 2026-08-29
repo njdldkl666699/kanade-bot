@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from copilot import CopilotSession, SessionEvent
 from copilot._diagnostics import log_timing
-from copilot.session import Attachment, PermissionHandler
+from copilot.session import Attachment
 from copilot.session import logger as copilot_logger
 from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
 from nonebot import get_driver, logger
@@ -62,21 +62,13 @@ class CopilotSessionManager:
             tools.extend(memory_tools)
 
         return {
-            "on_permission_request": PermissionHandler.approve_all,
             "client_name": "kanade-bot",
-            "model": cfg.model,
-            "provider": cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,
-            "reasoning_effort": cfg.reasoning_effort,
-            "model_capabilities": cfg.model_capabilities,
             "system_message": {
                 "mode": "replace",
                 "content": session_system_prompt,
             },
             "tools": tools,
-            "available_tools": cfg.available_tools,
-            "excluded_tools": cfg.excluded_tools,
-            "mcp_servers": cfg.mcp_servers,
-            "large_output": {"enabled": False},
+            **cfg.model_dump_session_config(),
         }
 
     def __init__(self):
@@ -252,11 +244,12 @@ class CopilotSessionManager:
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             # 因为我不知道的原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
-            await session.set_model(
-                cfg.model,
-                reasoning_effort=cfg.reasoning_effort,
-                model_capabilities=cfg.model_capabilities,
-            )
+            if m := cfg.model:
+                await session.set_model(
+                    m,
+                    reasoning_effort=cfg.reasoning_effort,
+                    model_capabilities=cfg.model_capabilities,
+                )
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:  # noqa: BLE001
             logger.info(f"恢复会话{session_id}失败，将创建新会话: {e}")

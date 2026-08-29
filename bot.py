@@ -16,6 +16,19 @@ from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 from scripts.util import load_configs
 
 
+def _mask_values(obj, placeholder="..."):
+    """递归遍历，将所有非字典、非列表的值替换为占位符"""
+    if isinstance(obj, dict):
+        # 字典：递归处理每个 value，保留 key
+        return {key: _mask_values(value, placeholder) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        # 如果字典里还有列表，也一并处理（保持结构完整）
+        return [_mask_values(item, placeholder) for item in obj]
+    else:
+        # 叶子节点（字符串、数字、布尔等），全部换成占位符
+        return placeholder
+
+
 def init_nonebot(
     *,
     env: Env = Env(),
@@ -48,7 +61,7 @@ def init_nonebot(
     logger.configure(extra={"nonebot_log_level": config.log_level}, patcher=nonebot._log_patcher)
     logger.opt(colors=True).info(f"Current <y><b>Env: {escape_tag(env.environment)}</b></y>")
     logger.opt(colors=True).debug(
-        f"Loaded <y><b>Config</b></y>: {escape_tag(str(model_dump(config)))}"
+        f"Loaded <y><b>Config</b></y>: {escape_tag(str(_mask_values(model_dump(config))))}"
     )
 
     DriverClass = nonebot._resolve_combine_expr(config.driver)

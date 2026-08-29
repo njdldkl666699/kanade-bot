@@ -1,16 +1,13 @@
 from pathlib import Path
 from typing import Literal
 
-from copilot import MCPServerConfig, ModelCapabilitiesOverride
-from copilot.session import ReasoningEffort
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel, PositiveInt
 
-from kanade_bot.utils.common import PlatformType, ProviderConfig
-from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
+from kanade_bot.utils.common import PlatformType
+from kanade_bot.utils.schema import AttrDocModel, BaseAgentConfig, ConfigRegistry, generate_schema
 
 require("nonebot_plugin_localstore")
-require("model_updater")
 
 from nonebot_plugin_localstore import (
     get_plugin_cache_file,
@@ -18,6 +15,7 @@ from nonebot_plugin_localstore import (
     get_plugin_data_file,
 )
 
+require("model_updater")
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
@@ -63,26 +61,11 @@ class RAGConfig(AttrDocModel):
         return get_plugin_config_file(self.document_file)
 
 
-class ImageCaptionConfig(AttrDocModel):
+class ImageCaptionConfig(BaseAgentConfig):
     """图片转述模型配置"""
 
-    model: str = "gpt-5-mini"
-    """图片转述模型ID"""
-    provider: ProviderConfig | None = None
-    """图片转述模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
-    reasoning_effort: ReasoningEffort | None = None
-    """推理努力程度"""
     system_prompt_file: str = "ImageCaption.md"
     """系统提示词文件名"""
-
-    available_tools: list[str] | None = None
-    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
-    未指定的Copilot CLI内置工具和MCP工具将被排除。
-    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
-    excluded_tools: list[str] | None = None
-    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
-    mcp_servers: dict[str, MCPServerConfig] | None = None
-    """MCP服务器配置"""
 
     @property
     def system_prompt_file_path(self) -> Path:
@@ -90,25 +73,7 @@ class ImageCaptionConfig(AttrDocModel):
         return get_plugin_config_file(self.system_prompt_file)
 
 
-class ScopedConfig(AttrDocModel):
-    model: str = "gpt-5-mini"
-    """模型ID"""
-    provider: ProviderConfig | None = None
-    """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
-    reasoning_effort: ReasoningEffort | None = None
-    """推理努力程度"""
-    model_capabilities: ModelCapabilitiesOverride | None = None
-    """模型能力覆盖配置"""
-
-    available_tools: list[str] | None = None
-    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
-    未指定的Copilot CLI内置工具和MCP工具将被排除。
-    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
-    excluded_tools: list[str] | None = None
-    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
-    mcp_servers: dict[str, MCPServerConfig] | None = None
-    """MCP服务器配置"""
-
+class ScopedConfig(BaseAgentConfig):
     system_prompt_file: str = "Kanade-v4.md"
     """系统提示词文件名"""
     system_prompt_extras: dict[str, str] = {}

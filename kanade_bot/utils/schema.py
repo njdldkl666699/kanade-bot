@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
+from copilot import MCPServerConfig, ModelCapabilitiesOverride, PermissionHandler
+from copilot.session import AzureProviderOptions, ReasoningEffort
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
 from nonebot.config import Env
@@ -19,7 +21,93 @@ class AttrDocModel(BaseModel):
     model_config = {"use_attribute_docstrings": True}
 
 
-type ProtocolFrameworkType = Literal["napcat", "snowluma", "other"]
+class ProviderConfig(AttrDocModel):
+    """自定义API提供商配置
+
+    此模型用于Pydantic校验，运行时通过`.model_dump()`方法获取字典形式的配置。
+
+    修改自`copilot.session.ProviderConfig`，仅保留了可生成schema的字段。
+    """
+
+    type: Literal["openai", "azure", "anthropic"] | None = None
+    wire_api: Literal["completions", "responses"] | None = None
+
+    transport: Literal["http", "websockets"] | None = None
+    """Transport for OpenAI Responses requests. Defaults to "http". Set 
+    "websockets" to deliver Responses API requests over a persistent WebSocket
+    connection instead of HTTP. Applies to OpenAI-compatible providers using
+    wire_api "responses"."""
+    base_url: str | None = None
+    api_key: str | None = None
+
+    bearer_token: str | None = None
+    """Bearer token for authentication. Sets the Authorization header directly.
+    Use this for services requiring bearer token auth instead of API key.
+    Takes precedence over api_key when both are set."""
+    azure: AzureProviderOptions | None = None
+    """Azure-specific options"""
+    headers: dict[str, str] | None = None
+
+    model_id: str | None = None
+    """Well-known model name used by the runtime to look up agent configuration
+    (tools, prompts, reasoning behavior) and default token limits. Also used
+    as the wire model when wire_model is not set.
+    Falls back to SessionConfig.model."""
+
+    wire_model: str | None = None
+    """Model name sent to the provider API for inference. Use this when the
+    provider's model name (e.g. an Azure deployment name or a custom
+    fine-tune name) differs from model_id.
+    Falls back to model_id, then SessionConfig.model."""
+
+    max_prompt_tokens: int | None = None
+    """Overrides the resolved model's default max prompt tokens. The runtime
+    triggers conversation compaction before sending a request when the prompt
+    (system message, history, tool definitions, user message) would exceed
+    this limit."""
+
+    max_output_tokens: int | None = None
+    """Overrides the resolved model's default max output tokens. When hit, the
+    model stops generating and returns a truncated response."""
+
+
+class BaseAgentConfig(AttrDocModel):
+    """基础Agent配置"""
+
+    model: str | None = None
+    """模型ID"""
+    provider: ProviderConfig | None = None
+    """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
+    reasoning_effort: ReasoningEffort | None = None
+    """推理努力程度"""
+    model_capabilities: ModelCapabilitiesOverride | None = None
+    """模型能力覆盖配置"""
+    system_prompt_file: str
+    """系统提示词文件名"""
+
+    available_tools: list[str] | None = None
+    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
+    未指定的Copilot CLI内置工具和MCP工具将被排除。
+    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
+    excluded_tools: list[str] | None = None
+    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
+    mcp_servers: dict[str, MCPServerConfig] | None = None
+    """MCP服务器配置"""
+
+    def model_dump_session_config(self) -> dict[str, Any]:
+        """将配置转换为Copilot SessionConfig字典
+
+        作用为移除`system_prompt_file`字段，并设置额外的默认值
+        """
+        data = self.model_dump(exclude_unset=True)
+        data.pop("system_prompt_file", None)
+        data.update(
+            {
+                "on_permission_request": PermissionHandler.approve_all,
+                "large_output": {"enabled": False},
+            }
+        )
+        return data
 
 
 class KanadeConfig(AttrDocModel):

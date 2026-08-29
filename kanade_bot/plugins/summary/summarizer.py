@@ -3,7 +3,7 @@ from collections import deque
 from typing import ClassVar
 
 from copilot import CopilotSession
-from copilot.session import PermissionHandler, SystemMessageConfig
+from copilot.session import SystemMessageConfig
 from copilot.session_events import AssistantMessageData
 from nonebot import get_driver, get_plugin_config, logger
 
@@ -28,14 +28,6 @@ class Summarizer:
     system_message: ClassVar[SystemMessageConfig] = {
         "mode": "replace",
         "content": system_prompt,
-    }
-
-    SESSION_CONFIG: ClassVar = {
-        "on_permission_request": PermissionHandler.approve_all,
-        "model": cfg.model,
-        "reasoning_effort": "medium",
-        "system_message": system_message,
-        "provider": cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,
     }
 
     def __init__(self):
@@ -109,19 +101,16 @@ class Summarizer:
             return None
         # 获取要总结的消息切片，取最后 size 条记录
         messages_slice = list(self._message_records[session_id])[-size:]
-
-        if is_group:
-            prefix = f"群聊 {group_or_user_name}: \n\n"
-        else:
-            prefix = f"私聊 {group_or_user_name}: \n\n"
-
+        prefix = f"{'群' if is_group else '私'}聊 {group_or_user_name}: \n\n"
         prompt = prefix + "\n\n".join(messages_slice)
-        copilot_session_id = f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}"
 
         session: CopilotSession | None = None
         try:
             session = await COPILOT_CLIENT.create_session(
-                session_id=copilot_session_id, **self.SESSION_CONFIG
+                session_id=f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}",
+                system_message=self.system_message,
+                client_name="kanade-bot-summary",
+                **cfg.model_dump_session_config(),
             )
             session_event = await session.send_and_wait(prompt, timeout=timeout)
             await session.disconnect()

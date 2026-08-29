@@ -1,4 +1,5 @@
-from copilot import PermissionHandler
+import uuid
+
 from copilot.session import Attachment
 from copilot.session_events import AssistantMessageData
 from nonebot import logger
@@ -29,19 +30,13 @@ async def get_image_caption(attachment: Attachment) -> str | None:
         system_prompt = FALLBACK_SYSTEM_PROMPT
 
     session = await COPILOT_CLIENT.create_session(
-        on_permission_request=PermissionHandler.approve_all,
+        session_id=f"image-caption-{uuid.uuid4()}",
         client_name="kanade-bot-image-caption",
-        model=cfg.model,
-        provider=cfg.provider.model_dump(exclude_unset=True) if cfg.provider else None,  # pyright: ignore[reportArgumentType]
-        reasoning_effort=cfg.reasoning_effort,
         system_message={
             "mode": "replace",
             "content": system_prompt,
         },
-        available_tools=cfg.available_tools,
-        excluded_tools=cfg.excluded_tools,
-        mcp_servers=cfg.mcp_servers,
-        large_output={"enabled": False},
+        **cfg.model_dump_session_config(),
     )
     try:
         async with session:

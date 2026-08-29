@@ -3,19 +3,14 @@ from pathlib import Path
 from nonebot import require
 from pydantic import BaseModel
 
-from kanade_bot.utils.common import ProviderConfig
-from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
+from kanade_bot.utils.schema import BaseAgentConfig, ConfigRegistry
 
 require("nonebot_plugin_localstore")
 
 from nonebot_plugin_localstore import get_plugin_cache_file, get_plugin_config_file
 
 
-class ScopedConfig(AttrDocModel):
-    model: str = "gpt-5-mini"
-    """模型ID"""
-    provider: ProviderConfig | None = None
-    """模型提供商配置，如果为None则使用Copilot内置模型"""
+class ScopedConfig(BaseAgentConfig):
     system_prompt_file: str = "Summarizer.md"
     """系统提示词文件名"""
     bot_name: str = "宵崎奏"
