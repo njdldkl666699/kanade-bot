@@ -1,9 +1,8 @@
 import time
-import tomllib
-from functools import lru_cache
-from pathlib import Path
 
 from nonebot import get_driver, get_plugin_config, logger, require
+
+from kanade_bot.utils.common import get_project_version
 
 from .config import Config
 
@@ -12,14 +11,6 @@ require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import md_to_pic
 
 cfg = get_plugin_config(Config).help
-
-
-@lru_cache(maxsize=1)
-def get_project_version() -> str:
-    """获取项目版本号"""
-    pyproject_content = Path("pyproject.toml").read_text(encoding="utf-8")
-    project_data = tomllib.loads(pyproject_content)
-    return project_data["project"]["version"]
 
 
 def get_help_md(doc_name: str) -> str | None:

@@ -1,4 +1,7 @@
+import tomllib
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -31,11 +34,25 @@ def asia_shanghai_now() -> datetime:
     return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
+@lru_cache(maxsize=1)
+def get_project_version() -> str:
+    """获取项目版本号"""
+    pyproject_content = Path("pyproject.toml").read_text(encoding="utf-8")
+    project_data = tomllib.loads(pyproject_content)
+    return project_data["project"]["version"]
+
+
 HTTPX_CLIENT = AsyncClient(timeout=20)
 """全局HTTPX客户端单例"""
 
 
-COPILOT_CLIENT = CopilotClient(connection=RuntimeConnection.for_inprocess())
+COPILOT_CLIENT = CopilotClient(
+    connection=RuntimeConnection.for_inprocess(),
+    client_info={
+        "application_name": "kanade_bot",
+        "application_version": get_project_version(),
+    },
+)
 """全局Copilot客户端单例
 
 负责与Copilot服务进行通信，创建和恢复会话等操作

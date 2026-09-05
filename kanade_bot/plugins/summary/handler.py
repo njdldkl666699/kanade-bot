@@ -136,7 +136,7 @@ async def _(
         size,
         is_group=bool(group_name),
         group_or_user_name=group_or_user_name,
-        timeout=300,
+        timeout=600,
     )
 
     if isinstance(bot, OneBot):
