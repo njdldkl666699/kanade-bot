@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from copilot import CopilotClient, RuntimeConnection
+from copilot import CopilotClient
 from copilot.client import StopError
 from httpx import AsyncClient
 from nonebot import get_driver, get_plugin_config, logger
@@ -47,7 +47,7 @@ HTTPX_CLIENT = AsyncClient(timeout=20)
 
 
 COPILOT_CLIENT = CopilotClient(
-    connection=RuntimeConnection.for_inprocess(),
+    # connection=RuntimeConnection.for_inprocess(),
     client_info={
         "application_name": "kanade_bot",
         "application_version": get_project_version(),
