@@ -62,6 +62,10 @@ summary:
   min_size: 10
   max_size: 2048
 
+tool:
+  image_provider: agnes
+  agnes_base_url: https://api.agnes-ai.cn/v1
+
 wordle:
   default_length: 5
   default_dictionary: CET4

@@ -13,7 +13,7 @@ openrouter:
   base_url: &openrouter-base_url https://openrouter.ai/api/v1
   api_key: &openrouter-api_key sk-or-v1-xxxxxxxxxxx
 agnes-ai:
-  base_url: &agnes-ai-base_url https://apihub.agnes-ai.cn/v1
+  base_url: &agnes-ai-base_url https://api.agnes-ai.cn/v1
   api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxx
 opencode:
   model: &opencode-model deepseek-v4-flash-free
@@ -96,6 +96,7 @@ summary:
 
 tool:
   sensenova_api_key: *sensenova-api_key
+  agnes_api_key: *agnes-ai-api_key
 
 wordle:
   crystal_bonus_map:

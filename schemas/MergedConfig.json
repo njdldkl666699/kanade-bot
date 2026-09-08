@@ -1574,6 +1574,16 @@
           "title": "Preset Reaction Config File",
           "type": "string"
         },
+        "image_provider": {
+          "default": "sensenova",
+          "description": "图片创作（文生图/图片编辑）使用的提供商，可选`sensenova`或`agnes`。视频生成仅支持`agnes`。",
+          "enum": [
+            "sensenova",
+            "agnes"
+          ],
+          "title": "Image Provider",
+          "type": "string"
+        },
         "sensenova_api_key": {
           "anyOf": [
             {
@@ -1586,6 +1596,25 @@
           "default": null,
           "description": "SenseNova 图片创作 API Key。",
           "title": "Sensenova Api Key"
+        },
+        "agnes_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agnes AI API Key，用于图片创作和视频生成。",
+          "title": "Agnes Api Key"
+        },
+        "agnes_base_url": {
+          "default": "https://api.agnes-ai.cn/v1",
+          "description": "Agnes AI API Base URL，需以`/v1`结尾。",
+          "title": "Agnes Base Url",
+          "type": "string"
         }
       },
       "title": "ScopedConfig",
@@ -2662,7 +2691,10 @@
         "template_file": "mcstatus_template.html",
         "schedule_configs_file": "schedule_configs.json",
         "preset_reaction_config_file": "preset_reaction_config.json",
-        "sensenova_api_key": null
+        "image_provider": "sensenova",
+        "sensenova_api_key": null,
+        "agnes_api_key": null,
+        "agnes_base_url": "https://api.agnes-ai.cn/v1"
       }
     },
     "uninfo_cache": {

@@ -13,6 +13,7 @@ class HandlerKeyEnum(Enum):
     GACHA_10 = "十连抽"
     IMAGE_GENERATION = "文生图"
     IMAGE_EDIT = "图片编辑"
+    VIDEO_GENERATION = "视频生成"
 
 
 class DaypartEnum(Enum):

@@ -134,3 +134,11 @@ image_edit = on_command(
     block=True,
 )
 register_matcher(image_edit, "图片编辑")
+
+video_generation = on_command(
+    "视频生成",
+    aliases={"生成视频", "文生视频", "图生视频"},
+    priority=2,
+    block=True,
+)
+register_matcher(video_generation, "视频生成")

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from nonebot import get_plugin_config, require
 from nonebot.adapters.onebot.v11 import Message
@@ -23,8 +24,15 @@ class ScopedConfig(AttrDocModel):
     """定时任务配置文件名。暂仅支持OneBot v11群聊。"""
     preset_reaction_config_file: str = "preset_reaction_config.json"
     """预设反应配置文件名"""
+
+    image_provider: Literal["sensenova", "agnes"] = "sensenova"
+    """图片创作（文生图/图片编辑）使用的提供商，可选`sensenova`或`agnes`。视频生成仅支持`agnes`。"""
     sensenova_api_key: str | None = None
     """SenseNova 图片创作 API Key。"""
+    agnes_api_key: str | None = None
+    """Agnes AI API Key，用于图片创作和视频生成。"""
+    agnes_base_url: str = "https://api.agnes-ai.cn/v1"
+    """Agnes AI API Base URL，需以`/v1`结尾。"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
