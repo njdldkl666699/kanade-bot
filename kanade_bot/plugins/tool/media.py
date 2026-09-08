@@ -425,7 +425,6 @@ async def _download_video(url: str) -> bytes:
 
 async def generate_video_message(
     kpu: tuple,
-    event: OneBotMessageEvent,
     prompt: str,
     seconds: str,
     ratio: str,
@@ -442,6 +441,4 @@ async def generate_video_message(
     video_url = await _create_and_wait_video(payload)
 
     succeed_consume(*kpu)
-    message = MessageSegment.reply(event.message_id)
-    message += MessageSegment.video(await _download_video(video_url))
-    return message
+    return MessageSegment.video(await _download_video(video_url))

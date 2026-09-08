@@ -403,7 +403,7 @@ async def _(
         await video_generation.pause(VIDEO_IMAGE_MODE_PROMPTS[mode])
 
     try:
-        message = await generate_video_message(kpu, event, prompt, seconds, ratio, mode, image_urls)
+        message = await generate_video_message(kpu, prompt, seconds, ratio, mode, image_urls)
     except CreationError as exc:
         await video_generation.finish(str(exc))
     await video_generation.finish(message)
@@ -422,7 +422,6 @@ async def _(state: T_State, bot: OneBot, event: OneBotMessageEvent):
     try:
         message = await generate_video_message(
             (HandlerKeyEnum.VIDEO_GENERATION, "onebot", event.get_user_id()),
-            event,
             state["prompt"],
             state["seconds"],
             state["ratio"],
