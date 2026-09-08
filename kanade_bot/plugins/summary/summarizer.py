@@ -2,7 +2,6 @@ import json
 from collections import deque
 from typing import ClassVar
 
-from copilot import CopilotSession
 from copilot.session import SystemMessageConfig
 from copilot.session_events import AssistantMessageData
 from nonebot import get_driver, get_plugin_config, logger
@@ -90,7 +89,7 @@ class Summarizer:
         is_group: bool = False,
         group_or_user_name: str | None = None,
         timeout: float = 60,
-    ) -> str | None:
+    ) -> str:
         """发送消息并等待响应，返回响应文本
 
         :param session_id: 会话ID
@@ -98,31 +97,25 @@ class Summarizer:
         :returns: 模型生成的总结文本，如果发生错误，则返回 None
         """
         if session_id not in self._message_records:
-            return None
+            raise ValueError(f"会话 {session_id} 没有任何消息记录，无法生成总结")
         # 获取要总结的消息切片，取最后 size 条记录
         messages_slice = list(self._message_records[session_id])[-size:]
         prefix = f"{'群' if is_group else '私'}聊 {group_or_user_name}: \n\n"
         prompt = prefix + "\n\n".join(messages_slice)
 
-        session: CopilotSession | None = None
-        try:
-            session = await COPILOT_CLIENT.create_session(
-                session_id=f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}",
-                system_message=self.system_message,
-                client_name="kanade-bot-summary",
-                **cfg.model_dump_session_config(),
-            )
-            session_event = await session.send_and_wait(prompt, timeout=timeout)
-            await session.disconnect()
-        except Exception as e:  # noqa: BLE001
-            logger.exception(f"总结会话{session_id}发生错误: {e}")
-            session_event = None
+        session = await COPILOT_CLIENT.create_session(
+            session_id=f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}",
+            system_message=self.system_message,
+            client_name="kanade-bot-summary",
+            **cfg.model_dump_session_config(),
+        )
+        session_event = await session.send_and_wait(prompt, timeout=timeout)
+        await session.disconnect()
 
         if not session_event:
-            return None
+            raise RuntimeError("总结会话没有收到任何响应")
         if not isinstance(session_event.data, AssistantMessageData):
-            logger.warning(f"总结会话{session_id}的响应内容不是文本，数据: {session_event.data}")
-            return None
+            raise TypeError("总结会话的响应内容不是文本")
 
         return session_event.data.content
 

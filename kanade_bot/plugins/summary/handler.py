@@ -147,10 +147,12 @@ async def _(
             except ActionFailed as e:
                 logger.warning("删除总结提示消息失败: {}", e)
 
-        summary = await summary_future
-        if not summary:
+        try:
+            summary = await summary_future
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"总结会话{session_info.session_id}发生错误: {e}")
             await try_delete_msg()
-            await summarize.finish("总结失败")
+            await summarize.finish(f"总结失败: {e}")
 
         image = await md_to_pic(summary)
         await try_delete_msg()
@@ -158,14 +160,20 @@ async def _(
         await summarize.finish(OneBotMessageSegment.image(image))
 
     elif isinstance(bot, ConsoleBot):
-        summary = await summary_future
+        try:
+            summary = await summary_future
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"总结会话{session_info.session_id}发生错误: {e}")
+            await bot.recall_message(
+                message_id=response.message_id,
+                channel_id=response.channel_id,
+            )
+            await summarize.finish(f"总结失败: {e}")
+
         await bot.recall_message(
             message_id=response.message_id,
             channel_id=response.channel_id,
         )
-
-        if not summary:
-            await summarize.finish("总结失败")
 
         succeed_consume(key, platform, user_id)
         await summarize.finish(summary)

@@ -2,7 +2,7 @@ import asyncio
 from io import BytesIO
 from typing import Literal
 
-from httpx import TimeoutException
+from httpx import HTTPError
 from nonebot import get_plugin_config
 from PIL import Image
 from pydantic import BaseModel
@@ -145,7 +145,7 @@ async def get_compressed_image(
 ) -> bytes | None:
     try:
         resp = await HTTPX_CLIENT.get(url)
-    except TimeoutException:
+    except HTTPError:
         return None
 
     raw = resp.content
