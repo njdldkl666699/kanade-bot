@@ -11,6 +11,8 @@ from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.adapters.onebot.v11.event import Reply
 
+from kanade_bot.utils.common import QQ_EMOJI_INDEXES
+
 from .onebot11 import get_image_path
 from .session import extract_session_info
 
@@ -216,6 +218,10 @@ async def parse_onebot_message_for_ai(
                 name = card or nickname or qq
             finally:
                 text_parts.append(f"@{name} ")
+        elif segment.type == "face":
+            id = str(segment.data["id"])
+            description = QQ_EMOJI_INDEXES.get(id, id)
+            text_parts.append(f"[表情 {description}]")
         else:
             text_parts.append(segment.to_rich_text().strip())
 

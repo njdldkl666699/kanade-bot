@@ -9,7 +9,6 @@ import magic
 from httpx import HTTPError, Response
 from nonebot import logger, require
 from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from PIL import Image
 
