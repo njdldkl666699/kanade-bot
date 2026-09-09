@@ -3,15 +3,12 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
 
-import httpx
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, MessageSegment
 from nonebot.params import CommandArg
 from PIL import Image, UnidentifiedImageError
 
-from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import get_image_path
 
 from .matcher import back, fan, flow, mid, mirror, rotate, speed

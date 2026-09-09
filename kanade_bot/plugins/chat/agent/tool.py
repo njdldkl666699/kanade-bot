@@ -4,7 +4,7 @@ from pathlib import Path
 import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
-from httpx import HTTPError
+from httpx import AsyncClient, HTTPError
 from nonebot import get_bot, logger
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
@@ -81,10 +81,13 @@ class TTSParams(BaseModel):
     text: str = Field(description="要发送为语音的文本内容")
 
 
+tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=60)
+
+
 async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
-    if not (base_url := cfg.tts.base_url):
+    if not tts_client.base_url:
         return
-    health = await HTTPX_CLIENT.get(base_url + "/health")
+    health = await tts_client.get("/health")
     if health.status_code != 200:
         logger.warning("TTS服务不可用，状态码: {}", health.status_code)
         return
@@ -98,15 +101,14 @@ async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -
     async def send_voice(params: TTSParams):
         # OpenAI Speech接口
         try:
-            r = await HTTPX_CLIENT.post(
-                base_url + "/v1/audio/speech",
+            r = await tts_client.post(
+                "/v1/audio/speech",
                 headers={"Content-Type": "application/json"},
                 json={
                     "input": params.text,
                     "model": cfg.tts.model,
                     "voice": cfg.tts.voice,
                 },
-                timeout=60,
             )
         except HTTPError as e:
             logger.exception("文本转语音请求失败: {}", e)
