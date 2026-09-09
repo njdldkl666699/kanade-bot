@@ -4,10 +4,12 @@ from pathlib import Path
 import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
-from nonebot import logger
+from nonebot import get_bot, logger
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg, chat_configs
 from .image_caption import get_image_caption
@@ -72,6 +74,66 @@ async def view_image(params: ViewImageParams):
         text_result_for_llm="图片查看结果",
         binary_results_for_llm=[image],
     )
+
+
+class TTSParams(BaseModel):
+    text: str = Field(description="要发送为语音的文本内容")
+
+
+def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
+    if not cfg.tts.url:
+        return
+
+    @define_tool(
+        "send_voice",
+        description="向当前会话发送一段语音。将文本转换为语音后，自动返回给当前会话。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def send_voice(params: TTSParams):
+        if not cfg.tts.url:
+            return "文本转语音功能未启用。"
+
+        # OpenAI Speech接口
+        r = await HTTPX_CLIENT.post(
+            cfg.tts.url,
+            json={
+                "text": params.text,
+                "model": cfg.tts.model,
+                "voice": cfg.tts.voice,
+            },
+        )
+        if r.status_code != 200:
+            return f"文本转语音请求失败，状态码: {r.status_code}"
+
+        try:
+            bot = get_bot(bot_id)
+        except (KeyError, ValueError):
+            logger.exception("无法获取Bot实例，bot_id: {}", bot_id)
+            return "无法获取Bot实例，无法发送语音消息。"
+        if not isinstance(bot, Bot):
+            return "当前类型的Bot不支持发送语音消息。"
+
+        # 发送语音消息
+        m = Message(MessageSegment.record(r.content))
+        if user_id := session_info.user_id:
+            await bot.send_msg(
+                message=m,
+                user_id=int(user_id),
+                message_type="private",
+            )
+        elif group_id := session_info.group_id:
+            await bot.send_msg(
+                message=m,
+                group_id=int(group_id),
+                message_type="group",
+            )
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送语音消息。"
+
+        return f"当前文本已转换为语音并发送给会话 {session_info.session_id}。"
+
+    return send_voice
 
 
 class SaveMemoryParams(BaseModel):

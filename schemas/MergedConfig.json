@@ -796,6 +796,52 @@
       "title": "RAGConfig",
       "type": "object"
     },
+    "TTSConfig": {
+      "description": "文本转语音模型配置",
+      "properties": {
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TTS服务的URL，如果为None则不启用TTS",
+          "title": "Url"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TTS使用的模型名称，不配置则使用服务端默认模型",
+          "title": "Model"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TTS使用的声音类型，不配置则使用服务端默认模型",
+          "title": "Voice"
+        }
+      },
+      "title": "TTSConfig",
+      "type": "object"
+    },
     "TestSiteCfg": {
       "properties": {
         "name": {
@@ -1061,6 +1107,14 @@
             "openai_api_key": null,
             "openai_base_url": null,
             "openai_model": "text-embedding-3-small"
+          }
+        },
+        "tts": {
+          "$ref": "#/$defs/TTSConfig",
+          "default": {
+            "url": null,
+            "model": null,
+            "voice": null
           }
         },
         "configs_file": {
@@ -1865,6 +1919,11 @@
           "openai_base_url": null,
           "openai_model": "text-embedding-3-small",
           "query_n_results": 3
+        },
+        "tts": {
+          "model": null,
+          "url": null,
+          "voice": null
         },
         "configs_file": "chat_configs.json",
         "fail_image_file": "chat_fail.jpg",

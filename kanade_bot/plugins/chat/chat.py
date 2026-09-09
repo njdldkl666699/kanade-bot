@@ -186,6 +186,7 @@ async def send_message_in_chunks(
         contents = await copilot.send_and_wait(
             session_info,
             prompt,
+            bot_id=onebot.self_id if onebot else None,
             rag_docs=rag_docs,
             reply_text=reply_text,
             attachments=attachments,

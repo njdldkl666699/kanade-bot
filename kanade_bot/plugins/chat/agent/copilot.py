@@ -18,7 +18,7 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .memory import MemoryContext, MemoryStore
-from .tool import build_memory_tools, list_memes, view_image
+from .tool import build_memory_tools, build_tts_tool, list_memes, view_image
 
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
@@ -49,13 +49,21 @@ class CopilotSessionManager:
     """系统提示词"""
     logger.trace(f"系统提示词:\n{system_prompt}")
 
-    def _session_config(self, session_info: SessionInfo) -> dict[str, Any]:
+    def _session_config(
+        self,
+        session_info: SessionInfo,
+        bot_id: str | None = None,
+    ) -> dict[str, Any]:
         """返回会话配置字典"""
         session_system_prompt = self.system_prompt
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
             session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
 
         tools = [list_memes, view_image]
+
+        if tool := build_tts_tool(session_info, bot_id):
+            tools.append(tool)
+
         memory_context = self._update_memory_context(session_info)
         memory_tools = build_memory_tools(memory_context, self._memory_store)
         if memory_tools:
@@ -237,13 +245,14 @@ class CopilotSessionManager:
         self,
         session_id: str,
         session_info: SessionInfo,
+        bot_id: str | None = None,
     ) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
-        session_config = self._session_config(session_info)
+        session_config = self._session_config(session_info, bot_id=bot_id)
         new_session = False
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
-            # 因为我不知道的原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
+            # 因为SDK原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
             if m := cfg.model:
                 await session.set_model(
                     m,
@@ -262,6 +271,7 @@ class CopilotSessionManager:
         session_info: SessionInfo,
         prompt: str,
         *,
+        bot_id: str | None = None,
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         attachments: list[Attachment] | None = None,
@@ -283,7 +293,7 @@ class CopilotSessionManager:
             new_session = False
             if not session:
                 session, new_session = await self._resume_or_create_session(
-                    session_id, session_info
+                    session_id, session_info, bot_id
                 )
                 async with self._global_lock:
                     self._sessions[session_id] = session

@@ -73,6 +73,17 @@ class ImageCaptionConfig(BaseAgentConfig):
         return get_plugin_config_file(self.system_prompt_file)
 
 
+class TTSConfig(AttrDocModel):
+    """文本转语音模型配置"""
+
+    url: str | None = None
+    """TTS服务的URL，如果为None则不启用TTS"""
+    model: str | None = None
+    """TTS使用的模型名称，不配置则使用服务端默认模型"""
+    voice: str | None = None
+    """TTS使用的声音类型，不配置则使用服务端默认模型"""
+
+
 class ScopedConfig(BaseAgentConfig):
     system_prompt_file: str = "Kanade-v4.md"
     """系统提示词文件名"""
@@ -99,6 +110,7 @@ class ScopedConfig(BaseAgentConfig):
     不启用且主模型不支持图片输入，则无法处理图片消息。
     """
     rag: RAGConfig = RAGConfig()
+    tts: TTSConfig = TTSConfig()
 
     configs_file: str = "chat_configs.json"
     """聊天配置文件名"""

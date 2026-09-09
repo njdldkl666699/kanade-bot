@@ -140,6 +140,12 @@ keep the conversation style consistent.
 url参数必须指定协议。对于本地路径，使用`file://`开头的绝对路径；对于网络路径，使用`http://`或`https://`开头的完整URL。
 </view_image>
 
+<send_voice>
+使用send_voice工具可以将文本转换为符合角色语音的音频，并发送到当前会话。
+
+目前语音模型只支持日文，只需传入日文文本即可，工具会自动发送到当前会话。
+</send_voice>
+
 <sql>
 **Session database** (database: "session", the default):
 The per-session database persists across the session but is isolated from other sessions.
