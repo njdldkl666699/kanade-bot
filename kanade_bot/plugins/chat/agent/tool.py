@@ -4,6 +4,7 @@ from pathlib import Path
 import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
+from httpx import HTTPError
 from nonebot import get_bot, logger
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
@@ -95,15 +96,20 @@ def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool
             return "文本转语音功能未启用。"
 
         # OpenAI Speech接口
-        r = await HTTPX_CLIENT.post(
-            cfg.tts.url,
-            headers={"Content-Type": "application/json"},
-            json={
-                "input": params.text,
-                "model": cfg.tts.model,
-                "voice": cfg.tts.voice,
-            },
-        )
+        try:
+            r = await HTTPX_CLIENT.post(
+                cfg.tts.url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "input": params.text,
+                    "model": cfg.tts.model,
+                    "voice": cfg.tts.voice,
+                },
+                timeout=60,
+            )
+        except HTTPError as e:
+            logger.exception("文本转语音请求失败: {}", e)
+            return f"文本转语音请求失败: {e}"
         if r.status_code != 200:
             return f"文本转语音请求失败，状态码: {r.status_code}"
 
