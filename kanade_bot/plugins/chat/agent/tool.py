@@ -99,7 +99,7 @@ def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool
             cfg.tts.url,
             headers={"Content-Type": "application/json"},
             json={
-                "text": params.text,
+                "input": params.text,
                 "model": cfg.tts.model,
                 "voice": cfg.tts.voice,
             },
