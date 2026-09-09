@@ -97,6 +97,7 @@ def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool
         # OpenAI Speech接口
         r = await HTTPX_CLIENT.post(
             cfg.tts.url,
+            headers={"Content-Type": "application/json"},
             json={
                 "text": params.text,
                 "model": cfg.tts.model,
