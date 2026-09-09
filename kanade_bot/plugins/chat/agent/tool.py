@@ -81,8 +81,12 @@ class TTSParams(BaseModel):
     text: str = Field(description="要发送为语音的文本内容")
 
 
-def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
-    if not cfg.tts.url:
+async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
+    if not (base_url := cfg.tts.base_url):
+        return
+    health = await HTTPX_CLIENT.get(base_url + "/health")
+    if health.status_code != 200:
+        logger.warning("TTS服务不可用，状态码: {}", health.status_code)
         return
 
     @define_tool(
@@ -92,13 +96,10 @@ def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool
         defer="never",
     )
     async def send_voice(params: TTSParams):
-        if not cfg.tts.url:
-            return "文本转语音功能未启用。"
-
         # OpenAI Speech接口
         try:
             r = await HTTPX_CLIENT.post(
-                cfg.tts.url,
+                base_url + "/v1/audio/speech",
                 headers={"Content-Type": "application/json"},
                 json={
                     "input": params.text,
@@ -123,17 +124,17 @@ def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool
 
         # 发送语音消息
         m = Message(MessageSegment.record(r.content))
-        if user_id := session_info.user_id:
-            await bot.send_msg(
-                message=m,
-                user_id=int(user_id),
-                message_type="private",
-            )
-        elif group_id := session_info.group_id:
+        if group_id := session_info.group_id:
             await bot.send_msg(
                 message=m,
                 group_id=int(group_id),
                 message_type="group",
+            )
+        elif user_id := session_info.user_id:
+            await bot.send_msg(
+                message=m,
+                user_id=int(user_id),
+                message_type="private",
             )
         else:
             return "当前会话没有可用的用户ID或群组ID，无法发送语音消息。"

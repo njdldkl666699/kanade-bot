@@ -799,7 +799,7 @@
     "TTSConfig": {
       "description": "文本转语音模型配置",
       "properties": {
-        "url": {
+        "base_url": {
           "anyOf": [
             {
               "type": "string"
@@ -809,8 +809,8 @@
             }
           ],
           "default": null,
-          "description": "TTS服务的URL，如果为None则不启用TTS",
-          "title": "Url"
+          "description": "TTS服务的Base URL，如果为None则不启用TTS",
+          "title": "Base Url"
         },
         "model": {
           "anyOf": [
@@ -1112,7 +1112,7 @@
         "tts": {
           "$ref": "#/$defs/TTSConfig",
           "default": {
-            "url": null,
+            "base_url": null,
             "model": null,
             "voice": null
           }
@@ -1921,8 +1921,8 @@
           "query_n_results": 3
         },
         "tts": {
+          "base_url": null,
           "model": null,
-          "url": null,
           "voice": null
         },
         "configs_file": "chat_configs.json",

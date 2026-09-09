@@ -33,7 +33,7 @@ chat:
     collection_name: kanade_wiki_collection
     document_file: kanade_wiki.json
   tts:
-    url: "http://localhost:39212/v1/audio/speech"
+    base_url: "http://localhost:39212/v1/audio/speech"
 
 gacha:
   show_trained: true

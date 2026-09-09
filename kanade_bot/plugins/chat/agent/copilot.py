@@ -49,7 +49,7 @@ class CopilotSessionManager:
     """系统提示词"""
     logger.trace(f"系统提示词:\n{system_prompt}")
 
-    def _session_config(
+    async def _session_config(
         self,
         session_info: SessionInfo,
         bot_id: str | None = None,
@@ -61,7 +61,7 @@ class CopilotSessionManager:
 
         tools = [list_memes, view_image]
 
-        if tool := build_tts_tool(session_info, bot_id):
+        if tool := await build_tts_tool(session_info, bot_id):
             tools.append(tool)
 
         memory_context = self._update_memory_context(session_info)
@@ -248,7 +248,7 @@ class CopilotSessionManager:
         bot_id: str | None = None,
     ) -> tuple[CopilotSession, bool]:
         """尝试恢复会话，恢复失败则创建新会话，并确保会话配置正确，返回会话对象和是否是新会话的标志"""
-        session_config = self._session_config(session_info, bot_id=bot_id)
+        session_config = await self._session_config(session_info, bot_id=bot_id)
         new_session = False
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)

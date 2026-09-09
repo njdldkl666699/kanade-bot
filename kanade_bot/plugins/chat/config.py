@@ -76,8 +76,8 @@ class ImageCaptionConfig(BaseAgentConfig):
 class TTSConfig(AttrDocModel):
     """文本转语音模型配置"""
 
-    url: str | None = None
-    """TTS服务的URL，如果为None则不启用TTS"""
+    base_url: str | None = None
+    """TTS服务的Base URL，如果为None则不启用TTS"""
     model: str | None = None
     """TTS使用的模型名称，不配置则使用服务端默认模型"""
     voice: str | None = None
