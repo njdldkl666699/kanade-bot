@@ -81,7 +81,7 @@ class TTSParams(BaseModel):
     text: str = Field(description="要发送为语音的文本内容")
 
 
-tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=60)
+tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
 
 
 async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
