@@ -15,7 +15,12 @@ from nonebot.matcher import Matcher
 
 from kanade_bot.utils.common import PlatformType, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
-from kanade_bot.utils.parse import parse_message_for_ai, parse_onebot_message_for_ai
+from kanade_bot.utils.parse import (
+    TextFormat,
+    guess_format,
+    parse_message_for_ai,
+    parse_onebot_message_for_ai,
+)
 from kanade_bot.utils.session import extract_session_info
 
 from .agent.copilot import copilot
@@ -48,6 +53,7 @@ async def _send_onebot_message(
     segments: list[MessageSegment],
     *,
     content_long: bool = False,
+    content_format: TextFormat = "plaintext",
 ):
     # 根据消息段的数量决定发送方式
     if not segments:
@@ -86,20 +92,24 @@ async def _send_onebot_message(
         if sentinel := sentinel.strip():
             messages.append(sentinel)
 
-        # 内容很长的纯文本消息，转换为图片发送
-        if len(messages) == 1 and isinstance(m := messages[0], str) and content_long:
-            image = MessageSegment.image(await md_to_pic(m))
-            reply = MessageSegment.reply(event.message_id)
-            await matcher.send(reply + image)
-            return
-
         # 内容不长，直接发送消息列表
         if not content_long:
             for message in messages:
                 await matcher.send(message)
             return
 
-        # 内容长，作为合并转发消息发送
+        # 内容长的Markdown消息，转换为图片发送
+        if (
+            len(messages) == 1
+            and isinstance(m := messages[0], str)
+            and content_format == "markdown"
+        ):
+            image = MessageSegment.image(await md_to_pic(m))
+            reply = MessageSegment.reply(event.message_id)
+            await matcher.send(reply + image)
+            return
+
+        # 内容长的纯文本，作为合并转发消息发送
         node_custom_message = OneBotMessage()
         info = await get_bot_info(bot)
         for message in messages:
@@ -212,6 +222,7 @@ async def send_message_in_chunks(
     for content in contents:
         if not (content := content.strip()):
             continue
+
         if isinstance(event, OneBotMessageEvent):
             segments = _extract_segments_preserving_code(content)
             await _send_onebot_message(
@@ -219,7 +230,8 @@ async def send_message_in_chunks(
                 cast(OneBot, bot),
                 event,
                 segments,
-                content_long=any(len(content) > 800 for content in contents),
+                content_long=len(content) > 600 or len(content.splitlines()) > 20,
+                content_format=guess_format(content),
             )
         else:
             await matcher.send(content)

@@ -1,7 +1,8 @@
 import base64
-from typing import Any, SupportsIndex
+from typing import Any, Literal, SupportsIndex
 
 from copilot.session import Attachment
+from markdown_it import MarkdownIt
 from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -83,6 +84,50 @@ def build_sender_info(name: str | None, id: str | None) -> str:
     if id:
         parts.append(f"[id={id}]")
     return "".join(parts)
+
+
+md = MarkdownIt()
+
+ALLOWED_BLOCK_TOKENS = {
+    "paragraph_open",
+    "paragraph_close",
+    "inline",
+}
+"""纯文本段落中允许出现的 block token"""
+
+ALLOWED_INLINE_TOKENS = {
+    "text",
+    "softbreak",
+    "hardbreak",
+}
+"""纯文本中允许出现的 inline token"""
+
+
+type TextFormat = Literal["markdown", "plaintext"]
+
+
+def guess_format(text: str) -> TextFormat:
+    """
+    启发式判断：返回文本类型。
+
+    判断依据：是否出现了 Markdown 特有的语法结构。
+    注意：如果纯文本中恰好写了 **粗体**，它也会被判定为 markdown，
+    因为从语法上讲它就是 Markdown。
+    """
+    tokens = md.parse(text)
+
+    for token in tokens:
+        # 检查块级 token
+        if token.type not in ALLOWED_BLOCK_TOKENS:
+            return "markdown"
+
+        # 检查行内 token
+        if token.type == "inline" and token.children:
+            for child in token.children:
+                if child.type not in ALLOWED_INLINE_TOKENS:
+                    return "markdown"
+
+    return "plaintext"
 
 
 async def get_forward_message_events(
