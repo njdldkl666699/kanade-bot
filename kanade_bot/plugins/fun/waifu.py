@@ -109,14 +109,7 @@ class LoliconResponse(BaseModel):
     """色图数组"""
 
 
-LOLI_API_URL = "https://www.loliapi.com/bg/?type=url"
-
 LOLICON_API_URL = "https://api.lolicon.app/setu/v2"
-
-
-async def random_loli_waifu() -> str:
-    url_resp = await HTTPX_CLIENT.get(LOLI_API_URL)
-    return url_resp.text
 
 
 async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
@@ -137,17 +130,21 @@ async def query_lolicon_waifus(json_str: str = "{}") -> list[str]:
     return urls
 
 
+LOLI_API_URL = "https://www.loliapi.com/bg/?type=url"
+
+
+async def random_loli_waifu() -> str:
+    url_resp = await HTTPX_CLIENT.get(LOLI_API_URL)
+    return url_resp.text
+
+
 async def get_compressed_image(
     url: str,
     *,
     quality: int = 80,
     lossless: bool = False,
-) -> bytes | None:
-    try:
-        resp = await HTTPX_CLIENT.get(url)
-    except HTTPError:
-        return None
-
+) -> bytes:
+    resp = await HTTPX_CLIENT.get(url)
     raw = resp.content
     if len(raw) < 2 * 1024 * 1024:
         return raw

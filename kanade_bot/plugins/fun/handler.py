@@ -1,12 +1,13 @@
 from typing import cast
 
+from httpx import HTTPError
 from nonebot import get_driver, get_plugin_config, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
 from nonebot.adapters.console.event import PublicMessageEvent as ConsolePublicMessageEvent
-from nonebot.adapters.onebot.v11 import ActionFailed, GroupMessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Bot as OneBot
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageEvent
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
@@ -210,6 +211,23 @@ async def _(arg_msg: Message = CommandArg()):
     await remove_a_duanzi.finish("删除完成")
 
 
+async def random_loli_waifu_with_retry(retries: int = 3) -> bytes:
+    """获取随机老婆图片，失败时重试"""
+    ex = ValueError("达到最大重试次数，仍然无法获取图片")
+    for _ in range(retries):
+        try:
+            url = await random_loli_waifu()
+            image = await get_compressed_image(url)
+            if image:
+                return image
+            else:
+                raise ValueError("图片链接内容无效")
+        except (HTTPError, ValueError) as e:
+            ex = e
+            continue
+    raise ex
+
+
 @today_waifu.handle()
 async def _(event: ConsoleMessageEvent):
     platform = "console"
@@ -218,10 +236,10 @@ async def _(event: ConsoleMessageEvent):
     if p:
         await today_waifu.finish(str(p))
 
-    url = await random_loli_waifu()
-    image = await get_compressed_image(url)
-    if not image:
-        await today_waifu.finish("获取图片失败，请稍后再试")
+    try:
+        image = await random_loli_waifu_with_retry()
+    except Exception as e:  # noqa: BLE001
+        await today_waifu.finish(f"获取图片失败：{e}")
 
     p = waifu_cache.set_bytes(platform, user_id, image)
     await today_waifu.finish(str(p))
@@ -235,10 +253,10 @@ async def _(event: OneBotMessageEvent):
     if cache:
         await today_waifu.finish(MessageSegment.image(cache))
 
-    url = await random_loli_waifu()
-    image = await get_compressed_image(url)
-    if not image:
-        await today_waifu.finish("获取图片失败，请稍后再试")
+    try:
+        image = await random_loli_waifu_with_retry()
+    except Exception as e:  # noqa: BLE001
+        await today_waifu.finish(f"获取图片失败：{e}")
 
     waifu_cache.set_bytes(platform, user_id, image)
     await today_waifu.finish(MessageSegment.image(image))
@@ -295,16 +313,12 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
 
     json_str = arg_msg.extract_plain_text().strip()
     if not json_str:
-        url = await random_loli_waifu()
-        image = await get_compressed_image(url)
-        succeed_consume(key, platform, user_id)
-
-        if not image:
-            await random_waifu.finish(f"获取图片失败，链接：{url}")
         try:
-            await random_waifu.finish(MessageSegment.image(image))
-        except ActionFailed:
-            await random_waifu.finish(f"发送图片失败，链接：{url}")
+            image = await random_loli_waifu_with_retry()
+            await random_waifu.send(MessageSegment.image(image))
+        except Exception as e:  # noqa: BLE001
+            await random_waifu.finish(f"获取图片失败：{e}")
+        succeed_consume(key, platform, user_id)
 
     # 隐藏功能
     urls = await query_lolicon_waifus(json_str)

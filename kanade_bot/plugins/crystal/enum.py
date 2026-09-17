@@ -19,7 +19,8 @@ class HandlerKeyEnum(Enum):
 class DaypartEnum(Enum):
     """每日签到的时间段枚举"""
 
-    DAWN = "凌晨好"
+    PREDAWN = "凌晨好"
+    DAWN = "清晨好"
     MORNING = "早上好"
     NOON = "中午好"
     AFTERNOON = "下午好"
@@ -31,12 +32,13 @@ class DaypartEnum(Enum):
 
 # [start, end) 的时间段范围，跨越午夜的时间段需要拆分为两个范围
 DAYPART_TIME_RANGES = {
-    DaypartEnum.DAWN: [(time(0), time(6))],
-    DaypartEnum.MORNING: [(time(5), time(11))],
-    DaypartEnum.NOON: [(time(11), time(13))],
+    DaypartEnum.PREDAWN: [(time(1), time(5))],
+    DaypartEnum.DAWN: [(time(4), time(8))],
+    DaypartEnum.MORNING: [(time(7), time(11))],
+    DaypartEnum.NOON: [(time(10), time(14))],
     DaypartEnum.AFTERNOON: [(time(13), time(17))],
-    DaypartEnum.DUSK: [(time(17), time(19))],
-    DaypartEnum.EVENING: [(time(18), time(23))],
-    DaypartEnum.MIDNIGHT: [(time(23), time.max), (time(0), time(1))],
-    DaypartEnum.NIGHT: [(time(21), time.max), (time(0), time(4))],
+    DaypartEnum.DUSK: [(time(16), time(20))],
+    DaypartEnum.EVENING: [(time(19), time(23))],
+    DaypartEnum.MIDNIGHT: [(time(22), time.max), (time(0), time(2))],
+    DaypartEnum.NIGHT: [(time(20), time.max), (time(0), time(4))],
 }

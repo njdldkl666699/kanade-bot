@@ -93,10 +93,10 @@ class CheckInConfig(AttrDocModel):
     - `total_crystal`: `int` 当前水晶总数
     """
 
-    wrong_daypart_templates: list[str] = ["嗯…现在是{daypart}的时间呢。"]
+    wrong_daypart_templates: list[str] = ["嗯…现在是{dayparts}的时间呢。"]
     """时间段不正确的消息模板列表。
     
-    - `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语
+    - `dayparts`: `list[DailyCheckInDaypartEnum]` 当前时间对应的时间段列表
     """
 
     max_times_templates: list[str] = ["{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"]

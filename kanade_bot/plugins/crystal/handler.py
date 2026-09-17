@@ -50,7 +50,8 @@ for daypart, matcher in check_ins.items():
         current_dayparts = get_current_dayparts()
         if daypart not in current_dayparts:
             template = random.choice(cfg.wrong_daypart_templates)
-            message = template.format(daypart=current_dayparts[0].value)
+            dayparts_str = "、".join([dp.value for dp in current_dayparts])
+            message = template.format(dayparts=dayparts_str)
             await matcher.finish(message)
 
         check_in_dayparts = check_in_cache.get(platform, user_id)
