@@ -53,9 +53,9 @@
         },
         "wrong_daypart_templates": {
           "default": [
-            "嗯…现在是{daypart}的时间呢。"
+            "嗯…现在是{dayparts}的时间呢。"
           ],
-          "description": "时间段不正确的消息模板列表。\n\n- `daypart`: `DailyCheckInDaypartEnum.value` 当前时间段的问候语",
+          "description": "时间段不正确的消息模板列表。\n\n- `dayparts`: `list[DailyCheckInDaypartEnum]` 当前时间对应的时间段列表",
           "items": {
             "type": "string"
           },
@@ -134,7 +134,7 @@
           "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
         ],
         "wrong_daypart_templates": [
-          "嗯…现在是{daypart}的时间呢。"
+          "嗯…现在是{dayparts}的时间呢。"
         ],
         "max_times_templates": [
           "{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"

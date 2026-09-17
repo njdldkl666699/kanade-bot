@@ -18,7 +18,7 @@
       "嗯…{daypart}，好像之前就签到了。当前水晶：{total_crystal}。",
       "…{daypart}的时间签过了。现在水晶是 {total_crystal}。明天再继续吧。"
     ],
-    "wrong_daypart_templates": ["嗯…现在是{daypart}的时间呢。"],
+    "wrong_daypart_templates": ["嗯…现在是{dayparts}的时间呢。"],
     "max_times_templates": ["{daypart}。现在水晶是 {total_crystal}。明天再继续吧。"],
     "weekly_bonus": 700,
     "weekly_bonus_templates": ["恭喜你本周全勤签到！额外赠送{weekly_bonus}水晶。"]
