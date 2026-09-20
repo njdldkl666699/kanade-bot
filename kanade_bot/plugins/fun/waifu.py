@@ -2,7 +2,6 @@ import asyncio
 from io import BytesIO
 from typing import Literal
 
-from httpx import HTTPError
 from nonebot import get_plugin_config
 from PIL import Image
 from pydantic import BaseModel

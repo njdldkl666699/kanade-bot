@@ -2,31 +2,75 @@
 superusers:
   - "user"
 log_level: DEBUG
-nickname:
-  - 宵崎奏
+nickname: [宵崎奏]
 
 # 是否启用无头模式，如果为true，则不会启动TUI界面。
 console_headless_mode: true
 
-# 模型配置
+# Provider配置
 openrouter:
-  base_url: &openrouter-base_url https://openrouter.ai/api/v1
-  api_key: &openrouter-api_key sk-or-v1-xxxxxxxxxxx
-agnes-ai:
-  base_url: &agnes-ai-base_url https://api.agnes-ai.cn/v1
-  api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxx
+  type: openai
+  base_url: https://openrouter.ai/api/v1
+  api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxxx
 opencode:
-  model: &opencode-model deepseek-v4-flash-free
-  base_url: &opencode-base_url https://opencode.ai/zen/v1/
+  type: openai
+  base_url: https://opencode.ai/zen/v1/
+  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
 siliconflow:
-  base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
-  api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxx
+  type: openai
+  base_url: https://api.siliconflow.cn/v1
+  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
+agnes-ai: &agnes-ai
+  type: openai
+  base_url: https://api.agnes-ai.cn/v1
+  api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 sensenova: &sensenova
-  model: &sensenova-model deepseek-v4-flash
+  type: openai
+  base_url: https://token.sensenova.cn/v1/
+  api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxx
+
+# 模型配置
+agnes-3.0-flash: &agnes-3.0-flash
+  model: agnes-3.0-flash
+  provider: *agnes-ai
+  reasoning_effort: high
+  model_capabilities:
+    supports:
+      vision: true
+      reasoning_effort: true
+    limits:
+      max_context_window_tokens: 524288
+      max_output_tokens: 65536
+
+sensenova-deepseek-v4-flash: &sensenova-deepseek-v4-flash
+  model: deepseek-v4-flash
+  provider: *sensenova
+  reasoning_effort: max
+  model_capabilities:
+    supports:
+      vision: false
+      reasoning_effort: true
+    limits:
+      max_context_window_tokens: 1048576
+      max_output_tokens: 131072
+
+sensenova-6.8-flash-lite: &sensenova-6.8-flash-lite
+  model: 6.8-flash-lite
+  provider: *sensenova
+  reasoning_effort: high
+  model_capabilities:
+    supports:
+      vision: true
+      reasoning_effort: true
+    limits:
+      max_context_window_tokens: 262144
+      max_output_tokens: 65536
+
+ccp-deepseek-v4-flash: &ccp-deepseek-v4-flash
+  model: deepseek-v4-flash
   provider:
     type: openai
-    base_url: &sensenova-base_url https://token.sensenova.cn/v1/
-    api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxx
+    base_url: http://localhost:39211/v1
   reasoning_effort: high
   model_capabilities:
     supports:
@@ -37,7 +81,7 @@ sensenova: &sensenova
       max_output_tokens: 65536
 
 chat:
-  <<: *sensenova
+  <<: *ccp-deepseek-v4-flash
   mcp_servers:
     tavily:
       type: http
@@ -68,13 +112,7 @@ chat:
     - grep
     - skill
   image_caption:
-    model: agnes-2.5-flash
-    provider:
-      type: openai
-      api_key: *agnes-ai-api_key
-      base_url: *agnes-ai-base_url
-    reasoning_effort: high
-    available_tools: []
+    <<: *sensenova-6.8-flash-lite
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
@@ -92,7 +130,7 @@ help:
     `Message`: {message}
 
 summary:
-  <<: *sensenova
+  <<: *sensenova-deepseek-v4-flash
 
 tool:
   sensenova_api_key: *sensenova-api_key

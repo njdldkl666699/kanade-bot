@@ -200,7 +200,7 @@ async def send_message_in_chunks(
             rag_docs=rag_docs,
             reply_text=reply_text,
             attachments=attachments,
-            timeout=300,
+            timeout=600,
         )
     except Exception as e:  # noqa: BLE001
         logger.exception("发送消息时发生错误: {}", e)
