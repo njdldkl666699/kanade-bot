@@ -18,8 +18,8 @@ opencode:
   api_key: sk-xxxxxxxxxxxxxxxxxxxxx
 siliconflow:
   type: openai
-  base_url: https://api.siliconflow.cn/v1
-  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
+  base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
+  api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 agnes-ai: &agnes-ai
   type: openai
   base_url: https://api.agnes-ai.cn/v1
@@ -30,7 +30,7 @@ sensenova: &sensenova
   api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 
 # 模型配置
-agnes-3.0-flash: &agnes-3.0-flash
+agnes-3.0-flash: &agnes-3-0-flash
   model: agnes-3.0-flash
   provider: *agnes-ai
   reasoning_effort: high
@@ -45,17 +45,17 @@ agnes-3.0-flash: &agnes-3.0-flash
 sensenova-deepseek-v4-flash: &sensenova-deepseek-v4-flash
   model: deepseek-v4-flash
   provider: *sensenova
-  reasoning_effort: max
+  reasoning_effort: high
   model_capabilities:
     supports:
       vision: false
       reasoning_effort: true
     limits:
       max_context_window_tokens: 1048576
-      max_output_tokens: 131072
+      max_output_tokens: 65536
 
-sensenova-6.8-flash-lite: &sensenova-6.8-flash-lite
-  model: 6.8-flash-lite
+sensenova-6.8-flash-lite: &sensenova-6-8-flash-lite
+  model: sensenova-6.8-flash-lite
   provider: *sensenova
   reasoning_effort: high
   model_capabilities:
@@ -112,7 +112,7 @@ chat:
     - grep
     - skill
   image_caption:
-    <<: *sensenova-6.8-flash-lite
+    <<: *sensenova-6-8-flash-lite
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
