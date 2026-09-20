@@ -146,6 +146,13 @@ url参数必须指定协议。对于本地路径，使用`file://`开头的绝�
 目前语音模型只支持日文，只需传入日文文本即可，工具会自动发送到当前会话。
 </send_voice>
 
+<send_html_image>
+你可以通过编写html代码来生成图片，并将其发送到当前会话。
+
+- 此工具使用标准Playwright渲染HTML并截图，支持CSS和JavaScript。
+- 除了标准HTML，你也可以直接编写单个svg标签来生成svg图片。
+</send_html_image>
+
 <sql>
 **Session database** (database: "session", the default):
 The per-session database persists across the session but is isolated from other sessions.

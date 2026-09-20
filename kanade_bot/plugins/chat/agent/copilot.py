@@ -18,7 +18,13 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .memory import MemoryContext, MemoryStore
-from .tool import build_memory_tools, build_tts_tool, list_memes, view_image
+from .tool import (
+    build_memory_tools,
+    build_send_html_image_tool,
+    build_tts_tool,
+    list_memes,
+    view_image,
+)
 
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
@@ -59,7 +65,9 @@ class CopilotSessionManager:
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
             session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
 
-        tools = [list_memes, view_image]
+        draw_send_html = build_send_html_image_tool(session_info, bot_id)
+
+        tools = [list_memes, view_image, draw_send_html]
 
         if tool := await build_tts_tool(session_info, bot_id):
             tools.append(tool)

@@ -5,7 +5,7 @@ import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from httpx import AsyncClient, HTTPError
-from nonebot import get_bot, logger
+from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
 
@@ -15,6 +15,9 @@ from kanade_bot.utils.session import SessionInfo
 from ..config import cfg, chat_configs
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryScopeType, MemoryStore
+
+require("nonebot_plugin_htmlrender")
+from nonebot_plugin_htmlrender import html_to_pic
 
 
 @define_tool(
@@ -264,3 +267,48 @@ def build_memory_tools(context: MemoryContext, store: MemoryStore) -> list[Tool]
         return f"已删除 {params.scope} 记忆 ID={params.memory_id}。"
 
     return [save_memory, recall_memory, forget_memory]
+
+
+class DrawSendHtmlParams(BaseModel):
+    html: str = Field(description="要渲染的HTML内容")
+    wait_ms: int = Field(default=0, description="渲染后等待的毫秒数，默认0")
+
+
+def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool:
+    @define_tool(
+        "send_html_image",
+        description="将HTML内容渲染为图片并发送给当前会话。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def send_html_image(params: DrawSendHtmlParams):
+        image = await html_to_pic(params.html, wait=params.wait_ms)
+
+        try:
+            bot = get_bot(bot_id)
+        except (KeyError, ValueError):
+            logger.exception("无法获取Bot实例，bot_id: {}", bot_id)
+            return "无法获取Bot实例，无法发送图片消息。"
+        if not isinstance(bot, Bot):
+            return "当前类型的Bot不支持发送图片消息。"
+
+        # 发送图片消息
+        m = Message(MessageSegment.image(image))
+        if group_id := session_info.group_id:
+            await bot.send_msg(
+                message=m,
+                group_id=int(group_id),
+                message_type="group",
+            )
+        elif user_id := session_info.user_id:
+            await bot.send_msg(
+                message=m,
+                user_id=int(user_id),
+                message_type="private",
+            )
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送图片消息。"
+
+        return f"HTML内容已渲染为图片并发送给会话 {session_info.session_id}。"
+
+    return send_html_image
