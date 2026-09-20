@@ -269,9 +269,18 @@ def build_memory_tools(context: MemoryContext, store: MemoryStore) -> list[Tool]
     return [save_memory, recall_memory, forget_memory]
 
 
+class ViewportSize(BaseModel):
+    width: int = Field(..., description="视口宽度，单位像素")
+    height: int = Field(..., description="视口高度，单位像素")
+
+
 class DrawSendHtmlParams(BaseModel):
     html: str = Field(description="要渲染的HTML内容")
-    wait_ms: int = Field(default=0, description="渲染后等待的毫秒数，默认0")
+    viewport: ViewportSize | None = Field(
+        default=None, description="渲染视口大小，默认为None表示自适应"
+    )
+    wait_ms: int = Field(default=0, description="networkidle后等待的毫秒数，默认0")
+    full_page: bool | None = Field(default=True, description="是否截图整个页面，默认为True")
 
 
 def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool:
@@ -282,7 +291,12 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
         defer="never",
     )
     async def send_html_image(params: DrawSendHtmlParams):
-        image = await html_to_pic(params.html, wait=params.wait_ms)
+        image = await html_to_pic(
+            params.html,
+            wait=params.wait_ms,
+            full_page=params.full_page,
+            viewport=params.viewport.model_dump() if params.viewport else None,
+        )
 
         try:
             bot = get_bot(bot_id)
