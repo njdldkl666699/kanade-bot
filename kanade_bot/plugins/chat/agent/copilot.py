@@ -22,6 +22,7 @@ from .memory import MemoryContext, MemoryStore
 from .tool import (
     build_memory_tools,
     build_send_html_image_tool,
+    build_send_text_file_tool,
     build_tts_tool,
     list_memes,
     view_image,
@@ -71,8 +72,9 @@ class CopilotSessionManager:
             session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
 
         draw_send_html = build_send_html_image_tool(session_info, bot_id)
+        send_text_file = build_send_text_file_tool(session_info, bot_id)
 
-        tools = [list_memes, view_image, draw_send_html]
+        tools = [list_memes, view_image, draw_send_html, send_text_file]
 
         if tool := await build_tts_tool(session_info, bot_id):
             tools.append(tool)

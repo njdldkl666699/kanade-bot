@@ -10,7 +10,7 @@ from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import upload_group_file
+from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
 from kanade_bot.utils.schema import KanadeConfig
 from kanade_bot.utils.session import SessionInfo
 
@@ -369,7 +369,8 @@ def build_send_text_file_tool(session_info: SessionInfo, bot_id: str | None = No
                 name=params.name,
             )
         elif user_id := session_info.user_id:
-            await bot.send_private_file(
+            await upload_private_file(
+                bot,
                 user_id=int(user_id),
                 file_path=file_path,
                 name=params.name,
