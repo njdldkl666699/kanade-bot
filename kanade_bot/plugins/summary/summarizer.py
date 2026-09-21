@@ -1,9 +1,11 @@
+import asyncio
 import json
 from collections import deque
 from typing import ClassVar
 
+from copilot import CopilotSession, SessionEvent
 from copilot.session import SystemMessageConfig
-from copilot.session_events import AssistantMessageData
+from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
 from nonebot import get_driver, get_plugin_config, logger
 
 from kanade_bot.utils.common import COPILOT_CLIENT, asia_shanghai_now
@@ -11,6 +13,48 @@ from kanade_bot.utils.common import COPILOT_CLIENT, asia_shanghai_now
 from .config import Config
 
 cfg = get_plugin_config(Config).summary
+
+
+async def _send_and_wait_contents(
+    session: CopilotSession,
+    prompt: str,
+    *,
+    timeout: float = 120.0,
+) -> list[str]:
+    """发送消息到会话，等待完成后返回全部助手消息内容。
+
+    不同于`CopilotSession.send_and_wait`的只返回最后一个助手消息，
+    这个方法会收集本轮对话产生的全部AssistantMessageData内容。
+
+    handler 是注册在 `session.on` 上的同步回调，由 JSON-RPC 读取线程分发，
+    并不在事件循环线程上；这里只做收集与事件置位，无需流式跨线程桥接。
+    """
+    idle_event = asyncio.Event()
+    error_event: Exception | None = None
+    contents: list[str] = []
+
+    def handler(event: SessionEvent) -> None:
+        nonlocal error_event
+        match event.data:
+            case AssistantMessageData() as data:
+                contents.append(data.content)
+            case SessionIdleData():
+                idle_event.set()
+            case SessionErrorData() as data:
+                error_event = RuntimeError(f"Session error: {data.message or str(data)}")
+                idle_event.set()
+
+    unsubscribe = session.on(handler)
+    try:
+        await session.send(prompt)
+        await asyncio.wait_for(idle_event.wait(), timeout=timeout)
+        if error_event:
+            raise error_event
+        return contents
+    except TimeoutError:
+        raise TimeoutError(f"Timeout after {timeout}s waiting for session.idle")
+    finally:
+        unsubscribe()
 
 
 class Summarizer:
@@ -88,13 +132,13 @@ class Summarizer:
         *,
         is_group: bool = False,
         group_or_user_name: str | None = None,
-        timeout: float = 60,
+        timeout: float = 120,
     ) -> str:
         """发送消息并等待响应，返回响应文本
 
         :param session_id: 会话ID
         :param size: 要总结的消息条数，不足则总结全部
-        :returns: 模型生成的总结文本，如果发生错误，则返回 None
+        :returns: 模型生成的总结文本（全部助手消息以空行拼接），发生错误时抛出异常
         """
         if session_id not in self._message_records:
             raise ValueError(f"会话 {session_id} 没有任何消息记录，无法生成总结")
@@ -109,15 +153,16 @@ class Summarizer:
             client_name="kanade-bot-summary",
             **cfg.model_dump_session_config(),
         )
-        session_event = await session.send_and_wait(prompt, timeout=timeout)
-        await session.disconnect()
+        try:
+            contents = await _send_and_wait_contents(session, prompt, timeout=timeout)
+        finally:
+            await session.disconnect()
 
-        if not session_event:
+        if not contents:
             raise RuntimeError("总结会话没有收到任何响应")
-        if not isinstance(session_event.data, AssistantMessageData):
-            raise TypeError("总结会话的响应内容不是文本")
 
-        return session_event.data.content
+        # 拼接全部助手消息为完整总结文本
+        return "\n\n".join(contents)
 
 
 summarizer = Summarizer()

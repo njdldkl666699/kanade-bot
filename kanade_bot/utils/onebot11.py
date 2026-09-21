@@ -74,7 +74,7 @@ async def get_image_path(bot: Bot, image_segment: MessageSegment) -> Path:
 
     # 若get_image返回的是网络路径，则下载到本地缓存目录
     url = r_file
-    cache_dir = get_plugin_config(KanadeConfig).image_cache_dir_path
+    cache_dir = get_plugin_config(KanadeConfig).autoclear_cache_dir_path
     pic_path = cache_dir / file
     r = await HTTPX_CLIENT.get(url)
     r.raise_for_status()
@@ -97,3 +97,50 @@ class BotOfflineNoticeEvent(NoticeEvent):
     @override
     def get_session_id(self) -> str:
         return str(self.user_id)
+
+
+async def upload_group_file(
+    bot: Bot,
+    group_id: int,
+    file_path: Path,
+    name: str | None = None,
+    folder: str | None = None,
+):
+    """上传群文件
+
+    :param group_id: 群号
+    :param file_path: 本地文件路径
+    :param name: 文件名（不包含路径），默认为file_path的文件名
+    :param folder: 上传到群文件的目录，默认为根目录
+    """
+    if not name:
+        name = file_path.name
+    return await bot.call_api(
+        "upload_group_file",
+        group_id=group_id,
+        file=str(file_path),
+        name=name,
+        folder=folder or "",
+    )
+
+
+async def upload_private_file(
+    bot: Bot,
+    user_id: int,
+    file_path: Path,
+    name: str | None = None,
+):
+    """上传私聊文件
+
+    :param user_id: 用户ID
+    :param file_path: 本地文件路径
+    :param name: 文件名（不包含路径），默认为file_path的文件名
+    """
+    if not name:
+        name = file_path.name
+    return await bot.call_api(
+        "upload_private_file",
+        user_id=user_id,
+        file=str(file_path),
+        name=name,
+    )

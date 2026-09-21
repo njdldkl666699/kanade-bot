@@ -153,6 +153,14 @@ url参数必须指定协议。对于本地路径，使用`file://`开头的绝�
 - 除了标准HTML，你也可以直接编写单个svg标签来生成svg图片。
 </send_html_image>
 
+<send_text_file>
+当要发送的文本内容过长时，可以使用此工具将文本内容保存为文件，并发送到当前会话。
+
+推荐使用场景：
+- 发送代码、日志等内容；十几行以内较短的代码片段推荐直接在消息中发送
+- 发送万字以上的长篇文章、小说等内容
+</send_text_file>
+
 <sql>
 **Session database** (database: "session", the default):
 The per-session database persists across the session but is isolated from other sessions.

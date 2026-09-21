@@ -120,8 +120,8 @@ class KanadeConfig(AttrDocModel):
     """是否生成JSON Schema文件"""
     schema_output_dir: str = "schemas/"
     """JSON Schema输出目录"""
-    image_cache_dir: str = "kanade_images/"
-    """图片缓存目录"""
+    autoclear_cache_dir: str = "auto_clear/"
+    """自动清理的缓存目录"""
 
     @property
     def schema_output_dir_path(self) -> Path:
@@ -129,11 +129,11 @@ class KanadeConfig(AttrDocModel):
         return Path(self.schema_output_dir)
 
     @property
-    def image_cache_dir_path(self) -> Path:
-        """图片缓存目录路径"""
+    def autoclear_cache_dir_path(self) -> Path:
+        """自动清理的缓存目录路径"""
         from nonebot_plugin_localstore import BASE_CACHE_DIR
 
-        p = BASE_CACHE_DIR / self.image_cache_dir
+        p = BASE_CACHE_DIR / self.autoclear_cache_dir
         p.mkdir(parents=True, exist_ok=True)
         return p
 

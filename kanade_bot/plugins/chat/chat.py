@@ -206,7 +206,7 @@ async def send_message_in_chunks(
                 rag_docs=rag_docs,
                 reply_text=reply_text,
                 attachments=attachments,
-                timeout=600,
+                timeout=300,
             )
         ) as contents:
             async for content in contents:

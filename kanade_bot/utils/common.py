@@ -118,12 +118,12 @@ async def load_qq_emoji_index():
 
 
 @driver.on_shutdown
-async def clear_image_cache():
-    p = get_plugin_config(KanadeConfig).image_cache_dir_path
+async def clear_cache():
+    p = get_plugin_config(KanadeConfig).autoclear_cache_dir_path
     if p.exists() and p.is_dir():
         for f in p.iterdir():
             if f.is_file():
                 try:
                     f.unlink()
                 except OSError as e:
-                    logger.warning(f"删除图片缓存文件 {f} 时发生错误: {e}")
+                    logger.warning(f"删除缓存文件 {f} 时发生错误: {e}")

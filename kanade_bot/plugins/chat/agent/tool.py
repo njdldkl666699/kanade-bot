@@ -5,11 +5,13 @@ import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from httpx import AsyncClient, HTTPError
-from nonebot import get_bot, logger, require
+from nonebot import get_bot, get_plugin_config, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.onebot11 import upload_group_file
+from kanade_bot.utils.schema import KanadeConfig
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg, chat_configs
@@ -78,75 +80,6 @@ async def view_image(params: ViewImageParams):
         text_result_for_llm="图片查看结果",
         binary_results_for_llm=[image],
     )
-
-
-class TTSParams(BaseModel):
-    text: str = Field(description="要发送为语音的文本内容")
-
-
-tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
-
-
-async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
-    if not tts_client.base_url:
-        return
-    health = await tts_client.get("/health")
-    if health.status_code != 200:
-        logger.warning("TTS服务不可用，状态码: {}", health.status_code)
-        return
-
-    @define_tool(
-        "send_voice",
-        description="向当前会话发送一段语音。将文本转换为语音后，自动返回给当前会话。",
-        skip_permission=True,
-        defer="never",
-    )
-    async def send_voice(params: TTSParams):
-        # OpenAI Speech接口
-        try:
-            r = await tts_client.post(
-                "/v1/audio/speech",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "input": params.text,
-                    "model": cfg.tts.model,
-                    "voice": cfg.tts.voice,
-                },
-            )
-        except HTTPError as e:
-            logger.exception("文本转语音请求失败: {}", e)
-            return f"文本转语音请求失败: {e}"
-        if r.status_code != 200:
-            return f"文本转语音请求失败，状态码: {r.status_code}"
-
-        try:
-            bot = get_bot(bot_id)
-        except (KeyError, ValueError):
-            logger.error("无法获取Bot实例，bot_id: {}", bot_id)
-            return "无法获取Bot实例，无法发送语音消息。"
-        if not isinstance(bot, Bot):
-            return "当前类型的Bot不支持发送语音消息。"
-
-        # 发送语音消息
-        m = Message(MessageSegment.record(r.content))
-        if group_id := session_info.group_id:
-            await bot.send_msg(
-                message=m,
-                group_id=int(group_id),
-                message_type="group",
-            )
-        elif user_id := session_info.user_id:
-            await bot.send_msg(
-                message=m,
-                user_id=int(user_id),
-                message_type="private",
-            )
-        else:
-            return "当前会话没有可用的用户ID或群组ID，无法发送语音消息。"
-
-        return f"当前文本已转换为语音并发送给会话 {session_info.session_id}。"
-
-    return send_voice
 
 
 class SaveMemoryParams(BaseModel):
@@ -269,6 +202,75 @@ def build_memory_tools(context: MemoryContext, store: MemoryStore) -> list[Tool]
     return [save_memory, recall_memory, forget_memory]
 
 
+class TTSParams(BaseModel):
+    text: str = Field(description="要发送为语音的文本内容")
+
+
+tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
+
+
+async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
+    if not tts_client.base_url:
+        return
+    health = await tts_client.get("/health")
+    if health.status_code != 200:
+        logger.warning("TTS服务不可用，状态码: {}", health.status_code)
+        return
+
+    @define_tool(
+        "send_voice",
+        description="向当前会话发送一段语音。将文本转换为语音后，自动返回给当前会话。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def send_voice(params: TTSParams):
+        # OpenAI Speech接口
+        try:
+            r = await tts_client.post(
+                "/v1/audio/speech",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "input": params.text,
+                    "model": cfg.tts.model,
+                    "voice": cfg.tts.voice,
+                },
+            )
+        except HTTPError as e:
+            logger.exception("文本转语音请求失败: {}", e)
+            return f"文本转语音请求失败: {e}"
+        if r.status_code != 200:
+            return f"文本转语音请求失败，状态码: {r.status_code}"
+
+        try:
+            bot = get_bot(bot_id)
+        except (KeyError, ValueError):
+            logger.error("无法获取Bot实例，bot_id: {}", bot_id)
+            return "无法获取Bot实例，无法发送语音消息。"
+        if not isinstance(bot, Bot):
+            return "当前类型的Bot不支持发送语音消息。"
+
+        # 发送语音消息
+        m = Message(MessageSegment.record(r.content))
+        if group_id := session_info.group_id:
+            await bot.send_msg(
+                message=m,
+                group_id=int(group_id),
+                message_type="group",
+            )
+        elif user_id := session_info.user_id:
+            await bot.send_msg(
+                message=m,
+                user_id=int(user_id),
+                message_type="private",
+            )
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送语音消息。"
+
+        return f"当前文本已转换为语音并发送给会话 {session_info.session_id}。"
+
+    return send_voice
+
+
 class ViewportSize(BaseModel):
     width: int = Field(..., description="视口宽度，单位像素")
     height: int = Field(..., description="视口高度，单位像素")
@@ -330,3 +332,51 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
         return f"HTML内容已渲染为图片并发送给会话 {session_info.session_id}。"
 
     return send_html_image
+
+
+class SendTextFileParams(BaseModel):
+    name: str = Field(description="保存的文件名，包含扩展名，例如 example.txt")
+    content: str = Field(description="要保存为文件的文本内容")
+
+
+def build_send_text_file_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool:
+    cache_dir = get_plugin_config(KanadeConfig).autoclear_cache_dir_path
+
+    @define_tool(
+        "send_text_file",
+        description="将文本内容保存为文件并发送给当前会话。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def send_file(params: SendTextFileParams):
+        try:
+            bot = get_bot(bot_id)
+        except (KeyError, ValueError):
+            logger.error("无法获取Bot实例，bot_id: {}", bot_id)
+            return "无法获取Bot实例，无法发送文件消息。"
+        if not isinstance(bot, Bot):
+            return "当前类型的Bot不支持发送文件消息。"
+
+        file_path = cache_dir / params.name
+        file_path.write_text(params.content, encoding="utf-8")
+
+        # 发送文件消息
+        if group_id := session_info.group_id:
+            await upload_group_file(
+                bot,
+                group_id=int(group_id),
+                file_path=file_path,
+                name=params.name,
+            )
+        elif user_id := session_info.user_id:
+            await bot.send_private_file(
+                user_id=int(user_id),
+                file_path=file_path,
+                name=params.name,
+            )
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
+
+        return f"文本内容已保存为文件 {params.name} 并发送给会话 {session_info.session_id}。"
+
+    return send_file
