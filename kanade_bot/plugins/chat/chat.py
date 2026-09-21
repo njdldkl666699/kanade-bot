@@ -1,5 +1,6 @@
 import random
 import re
+from contextlib import aclosing
 from pathlib import Path
 from typing import cast
 
@@ -192,49 +193,56 @@ async def send_message_in_chunks(
 
     session_info = await extract_session_info(event, bot)
 
+    replied = False
     try:
-        contents = await copilot.send_and_wait(
-            session_info,
-            prompt,
-            bot_id=onebot.self_id if onebot else None,
-            rag_docs=rag_docs,
-            reply_text=reply_text,
-            attachments=attachments,
-            timeout=600,
-        )
+        # 流式消费：每条助手消息一到达就立即处理发送，无需等待全部生成完毕。
+        # aclosing确保中途异常退出时也会关闭生成器：
+        # 退订事件、清空消息缓冲区、释放会话锁
+        async with aclosing(
+            copilot.send_and_wait(
+                session_info,
+                prompt,
+                bot_id=onebot.self_id if onebot else None,
+                rag_docs=rag_docs,
+                reply_text=reply_text,
+                attachments=attachments,
+                timeout=600,
+            )
+        ) as contents:
+            async for content in contents:
+                if not replied:
+                    replied = True
+                    # 扣减水晶（一轮对话只扣减一次）
+                    if not auto_reply:
+                        succeed_consume(
+                            HandlerKeyEnum.CHAT,
+                            get_platform_type(event),
+                            event.get_user_id(),
+                        )
+
+                if not (content := content.strip()):
+                    continue
+
+                if isinstance(event, OneBotMessageEvent):
+                    segments = _extract_segments_preserving_code(content)
+                    await _send_onebot_message(
+                        matcher,
+                        cast(OneBot, bot),
+                        event,
+                        segments,
+                        content_long=len(content) > 600 or len(content.splitlines()) > 20,
+                        content_format=guess_format(content),
+                    )
+                else:
+                    await matcher.send(content)
     except Exception as e:  # noqa: BLE001
         logger.exception("发送消息时发生错误: {}", e)
         # await _send_fail_message(matcher)
         await matcher.finish(f"发送消息时发生错误：{e}")
 
-    if not contents:
+    if not replied:
         logger.warning(f"会话{session_info.session_id}没有收到任何回复")
         await matcher.finish("没有收到任何回复，请稍后再试")
-
-    # 扣减水晶
-    if not auto_reply:
-        succeed_consume(
-            HandlerKeyEnum.CHAT,
-            get_platform_type(event),
-            event.get_user_id(),
-        )
-
-    for content in contents:
-        if not (content := content.strip()):
-            continue
-
-        if isinstance(event, OneBotMessageEvent):
-            segments = _extract_segments_preserving_code(content)
-            await _send_onebot_message(
-                matcher,
-                cast(OneBot, bot),
-                event,
-                segments,
-                content_long=len(content) > 600 or len(content.splitlines()) > 20,
-                content_format=guess_format(content),
-            )
-        else:
-            await matcher.send(content)
 
 
 def should_reply_event(event: Event):

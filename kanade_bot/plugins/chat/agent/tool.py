@@ -122,7 +122,7 @@ async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -
         try:
             bot = get_bot(bot_id)
         except (KeyError, ValueError):
-            logger.exception("无法获取Bot实例，bot_id: {}", bot_id)
+            logger.error("无法获取Bot实例，bot_id: {}", bot_id)
             return "无法获取Bot实例，无法发送语音消息。"
         if not isinstance(bot, Bot):
             return "当前类型的Bot不支持发送语音消息。"
@@ -277,7 +277,7 @@ class ViewportSize(BaseModel):
 class DrawSendHtmlParams(BaseModel):
     html: str = Field(description="要渲染的HTML内容")
     viewport: ViewportSize | None = Field(
-        default=None, description="渲染视口大小，默认为None表示自适应"
+        default=None, description="渲染视口大小，默认为None表示1280x720的默认视口"
     )
     wait_ms: int = Field(default=0, description="networkidle后等待的毫秒数，默认0")
     full_page: bool | None = Field(default=True, description="是否截图整个页面，默认为True")
@@ -291,17 +291,21 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
         defer="never",
     )
     async def send_html_image(params: DrawSendHtmlParams):
-        image = await html_to_pic(
-            params.html,
-            wait=params.wait_ms,
-            full_page=params.full_page,
-            viewport=params.viewport.model_dump() if params.viewport else None,
-        )
+        try:
+            image = await html_to_pic(
+                params.html,
+                wait=params.wait_ms,
+                full_page=params.full_page,
+                viewport=params.viewport.model_dump() if params.viewport else None,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("HTML渲染为图片失败: {}", e)
+            return f"HTML渲染为图片失败: {e}"
 
         try:
             bot = get_bot(bot_id)
         except (KeyError, ValueError):
-            logger.exception("无法获取Bot实例，bot_id: {}", bot_id)
+            logger.error("无法获取Bot实例，bot_id: {}", bot_id)
             return "无法获取Bot实例，无法发送图片消息。"
         if not isinstance(bot, Bot):
             return "当前类型的Bot不支持发送图片消息。"
