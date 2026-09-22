@@ -5,6 +5,14 @@ record_file: ""
 # 可选：仅当请求体顶层缺失这些字段时注入（不覆盖已有值）
 inject_request:
   max_tokens: 4096
+# 可选：上游状态码重试（statuses 为空时不重试）。
+# 等待时长优先采用上游 Retry-After 头（封顶 backoff_max，可用 respect_retry_after 关闭），
+# 未提供时按 backoff_initial 指数翻倍；重试期间客户端断开会立即中止。
+retry:
+  statuses: [429, 502, 503, 504]
+  max_attempts: 5
+  backoff_initial: 10s
+  backoff_max: 60s
 upstream:
   base_url: "https://api.openai.com/v1"
   api_key: "sk-your-key"

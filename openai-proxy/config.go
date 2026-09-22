@@ -18,6 +18,22 @@ type Config struct {
 	// Copilot 运行时不会把 BYOK 配置的 max_output_tokens 写入上游请求体，
 	// 可用此机制补齐。
 	InjectRequest map[string]any `yaml:"inject_request"`
+	// Retry 上游状态码重试策略。statuses 为空时不重试。
+	Retry RetryConfig `yaml:"retry"`
+}
+
+type RetryConfig struct {
+	// Statuses 触发重试的上游状态码（如 [429, 503]）。
+	Statuses []int `yaml:"statuses"`
+	// MaxAttempts 含首次在内的总尝试次数。
+	MaxAttempts int `yaml:"max_attempts"`
+	// BackoffInitial 首次重试前的等待时长，此后每次指数翻倍。
+	BackoffInitial time.Duration `yaml:"backoff_initial"`
+	// BackoffMax 单次等待的上限。
+	BackoffMax time.Duration `yaml:"backoff_max"`
+	// RespectRetryAfter 优先采用上游 Retry-After 头（封顶 backoff_max）。
+	// 默认 true；未收到该头时回退到指数退避。
+	RespectRetryAfter *bool `yaml:"respect_retry_after"`
 }
 
 type UpstreamConfig struct {

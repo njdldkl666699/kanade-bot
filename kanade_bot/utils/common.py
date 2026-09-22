@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from copilot import CopilotClient
-from copilot.client import StopError
 from httpx import AsyncClient, HTTPError
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.adapters import Event
@@ -46,37 +44,6 @@ def get_project_version() -> str:
 HTTPX_CLIENT = AsyncClient(timeout=20)
 """全局HTTPX客户端单例"""
 
-
-COPILOT_CLIENT = CopilotClient(
-    # connection=RuntimeConnection.for_inprocess(),
-    client_info={
-        "application_name": "kanade_bot",
-        "application_version": get_project_version(),
-    },
-)
-"""全局Copilot客户端单例
-
-负责与Copilot服务进行通信，创建和恢复会话等操作
-"""
-
-driver = get_driver()
-
-
-@driver.on_startup
-async def startup():
-    await COPILOT_CLIENT.start()
-    logger.info("Copilot客户端已启动")
-
-
-@driver.on_shutdown
-async def shutdown():
-    try:
-        await COPILOT_CLIENT.stop()
-    except* StopError as eg:
-        logger.warning(f"停止Copilot客户端时发生错误: {eg.message}")
-    logger.info("Copilot客户端已关闭")
-
-
 QQ_EMOJI_INDEX_URLS = [
     "https://wget.la/https://raw.githubusercontent.com/koishijs/QFace/master/public/assets/qq_emoji/_index.json",
     "https://ghfast.top/https://raw.githubusercontent.com/koishijs/QFace/master/public/assets/qq_emoji/_index.json",
@@ -84,9 +51,10 @@ QQ_EMOJI_INDEX_URLS = [
     "https://raw.githubusercontent.com/koishijs/QFace/master/public/assets/qq_emoji/_index.json",
 ]
 
-
 QQ_EMOJI_INDEXES: dict[str, str] = {}
 """QQ表情索引字典，键为表情ID，值为表情描述"""
+
+driver = get_driver()
 
 
 @driver.on_startup

@@ -1,60 +1,16 @@
-import asyncio
 import json
 from collections import deque
 from typing import ClassVar
 
-from copilot import CopilotSession, SessionEvent
 from copilot.session import SystemMessageConfig
-from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
 from nonebot import get_driver, get_plugin_config, logger
 
-from kanade_bot.utils.common import COPILOT_CLIENT, asia_shanghai_now
+from kanade_bot.utils.common import asia_shanghai_now
+from kanade_bot.utils.copilot import COPILOT_CLIENT, copilot_send_and_wait_contents
 
 from .config import Config
 
 cfg = get_plugin_config(Config).summary
-
-
-async def _send_and_wait_contents(
-    session: CopilotSession,
-    prompt: str,
-    *,
-    timeout: float = 120.0,
-) -> list[str]:
-    """发送消息到会话，等待完成后返回全部助手消息内容。
-
-    不同于`CopilotSession.send_and_wait`的只返回最后一个助手消息，
-    这个方法会收集本轮对话产生的全部AssistantMessageData内容。
-
-    handler 是注册在 `session.on` 上的同步回调，由 JSON-RPC 读取线程分发，
-    并不在事件循环线程上；这里只做收集与事件置位，无需流式跨线程桥接。
-    """
-    idle_event = asyncio.Event()
-    error_event: Exception | None = None
-    contents: list[str] = []
-
-    def handler(event: SessionEvent) -> None:
-        nonlocal error_event
-        match event.data:
-            case AssistantMessageData() as data:
-                contents.append(data.content)
-            case SessionIdleData():
-                idle_event.set()
-            case SessionErrorData() as data:
-                error_event = RuntimeError(f"Session error: {data.message or str(data)}")
-                idle_event.set()
-
-    unsubscribe = session.on(handler)
-    try:
-        await session.send(prompt)
-        await asyncio.wait_for(idle_event.wait(), timeout=timeout)
-        if error_event:
-            raise error_event
-        return contents
-    except TimeoutError:
-        raise TimeoutError(f"Timeout after {timeout}s waiting for session.idle")
-    finally:
-        unsubscribe()
 
 
 class Summarizer:
@@ -154,7 +110,7 @@ class Summarizer:
             **cfg.model_dump_session_config(),
         )
         try:
-            contents = await _send_and_wait_contents(session, prompt, timeout=timeout)
+            contents = await copilot_send_and_wait_contents(session, prompt, timeout=timeout)
         finally:
             await session.disconnect()
 
