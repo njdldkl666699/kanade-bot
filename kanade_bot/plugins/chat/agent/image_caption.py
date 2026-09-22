@@ -4,7 +4,7 @@ from copilot.session import Attachment
 from copilot.session_events import AssistantMessageData
 from nonebot import logger
 
-from kanade_bot.utils.common import COPILOT_CLIENT
+from kanade_bot.utils.copilot import COPILOT_CLIENT
 
 from ..config import cfg as chat_cfg
 
