@@ -42,17 +42,17 @@ agnes-3.0-flash: &agnes-3-0-flash
       max_context_window_tokens: 524288
       max_output_tokens: 65536
 
-sensenova-deepseek-v4-flash: &sensenova-deepseek-v4-flash
-  model: deepseek-v4-flash
+sensenova-deepseek-flash: &sensenova-deepseek-flash
+  model: deepseek-flash
   provider: *sensenova
   reasoning_effort: high
   model_capabilities:
     supports:
-      vision: false
+      vision: true
       reasoning_effort: true
     limits:
       max_context_window_tokens: 1048576
-      max_output_tokens: 65536
+      max_output_tokens: 393216
 
 sensenova-6.8-flash-lite: &sensenova-6-8-flash-lite
   model: sensenova-6.8-flash-lite
@@ -66,22 +66,22 @@ sensenova-6.8-flash-lite: &sensenova-6-8-flash-lite
       max_context_window_tokens: 262144
       max_output_tokens: 65536
 
-ccp-deepseek-v4-flash: &ccp-deepseek-v4-flash
-  model: deepseek-v4-flash
+op-deepseek-flash: &op-deepseek-flash
+  model: deepseek-flash
   provider:
     type: openai
     base_url: http://localhost:39211/v1
   reasoning_effort: high
   model_capabilities:
     supports:
-      vision: false
+      vision: true
       reasoning_effort: true
     limits:
       max_context_window_tokens: 1048576
-      max_output_tokens: 65536
+      max_output_tokens: 393216
 
 chat:
-  <<: *ccp-deepseek-v4-flash
+  <<: *op-deepseek-flash
   mcp_servers:
     tavily:
       type: http
@@ -111,8 +111,9 @@ chat:
     - glob
     - grep
     - skill
-  image_caption:
-    <<: *sensenova-6-8-flash-lite
+  # image_caption:
+  #   <<: *sensenova-6-8-flash-lite
+  #   available_tools: []
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
@@ -130,7 +131,8 @@ help:
     `Message`: {message}
 
 summary:
-  <<: *sensenova-deepseek-v4-flash
+  <<: *op-deepseek-flash
+  available_tools: []
 
 tool:
   sensenova_api_key: *sensenova-api_key

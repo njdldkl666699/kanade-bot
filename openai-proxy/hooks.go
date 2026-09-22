@@ -14,6 +14,37 @@ type RequestHook interface {
 	BeforeRequest(context.Context, []byte, http.Header) ([]byte, error)
 }
 
+// InjectFieldsHook injects top-level fields into the request body when they
+// are missing. Fields already present in the body are left untouched.
+type InjectFieldsHook struct {
+	Fields map[string]any
+}
+
+func (h InjectFieldsHook) BeforeRequest(_ context.Context, body []byte, _ http.Header) ([]byte, error) {
+	if len(h.Fields) == 0 {
+		return body, nil
+	}
+	var root map[string]any
+	if err := json.Unmarshal(body, &root); err != nil {
+		return nil, fmt.Errorf("decode request body: %w", err)
+	}
+	changed := false
+	for key, value := range h.Fields {
+		if _, exists := root[key]; !exists {
+			root[key] = value
+			changed = true
+		}
+	}
+	if !changed {
+		return body, nil
+	}
+	out, err := json.Marshal(root)
+	if err != nil {
+		return nil, fmt.Errorf("encode chat completion request: %w", err)
+	}
+	return out, nil
+}
+
 // ResponseHook runs after an upstream response has been fully read. It may
 // return a replacement response body. Streaming responses are buffered only
 // when at least one response hook is installed.
@@ -27,7 +58,7 @@ type RemoveUserImagesHook struct{}
 func (RemoveUserImagesHook) BeforeRequest(_ context.Context, body []byte, _ http.Header) ([]byte, error) {
 	var root map[string]any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, fmt.Errorf("decode chat completion request: %w", err)
+		return nil, fmt.Errorf("decode request body: %w", err)
 	}
 	messages, ok := root["messages"].([]any)
 	if !ok {

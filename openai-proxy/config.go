@@ -12,6 +12,12 @@ type Config struct {
 	Listen   string         `yaml:"listen"`
 	Upstream UpstreamConfig `yaml:"upstream"`
 	Timeout  time.Duration  `yaml:"timeout"`
+	// RecordFile 追加记录每个上游请求（JSONL）。为空时不记录。
+	RecordFile string `yaml:"record_file"`
+	// InjectRequest 仅在请求体顶层缺失时注入的字段（如 max_tokens: 4096）。
+	// Copilot 运行时不会把 BYOK 配置的 max_output_tokens 写入上游请求体，
+	// 可用此机制补齐。
+	InjectRequest map[string]any `yaml:"inject_request"`
 }
 
 type UpstreamConfig struct {

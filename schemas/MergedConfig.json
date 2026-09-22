@@ -1890,6 +1890,12 @@
       "title": "Apscheduler Log Level",
       "type": "integer"
     },
+    "autoclear_cache_dir": {
+      "default": "auto_clear/",
+      "description": "自动清理的缓存目录",
+      "title": "Autoclear Cache Dir",
+      "type": "string"
+    },
     "chat": {
       "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
       "default": {
@@ -2213,12 +2219,6 @@
       "default": null,
       "description": "Playwright浏览器代理的绕过地址。",
       "title": "Htmlrender Proxy Host Bypass"
-    },
-    "image_cache_dir": {
-      "default": "kanade_images/",
-      "description": "图片缓存目录",
-      "title": "Image Cache Dir",
-      "type": "string"
     },
     "localstore_cache_dir": {
       "anyOf": [

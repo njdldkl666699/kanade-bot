@@ -17,8 +17,16 @@ func main() {
 	if !cfg.Upstream.ModelSupportsImages {
 		proxy.AddRequestHook(RemoveUserImagesHook{})
 	}
+	if len(cfg.InjectRequest) > 0 {
+		proxy.AddRequestHook(InjectFieldsHook{Fields: cfg.InjectRequest})
+		log.Printf("injecting missing request fields: %v", cfg.InjectRequest)
+	}
+	if cfg.RecordFile != "" {
+		proxy.AddRequestHook(&RequestRecorderHook{Path: cfg.RecordFile})
+		log.Printf("recording requests to %s", cfg.RecordFile)
+	}
 	server := &http.Server{Addr: cfg.Listen, Handler: proxy}
-	log.Printf("chat completions proxy listening on %s, upstream=%s", cfg.Listen, cfg.Upstream.BaseURL)
+	log.Printf("openai-compatible proxy listening on %s, upstream=%s", cfg.Listen, cfg.Upstream.BaseURL)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

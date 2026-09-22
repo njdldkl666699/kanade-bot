@@ -1,4 +1,4 @@
-module chat-completions-proxy
+module openai-proxy
 
 go 1.23
 

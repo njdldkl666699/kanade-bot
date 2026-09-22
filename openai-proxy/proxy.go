@@ -25,7 +25,9 @@ func (p *Proxy) AddRequestHook(h RequestHook)   { p.requestHooks = append(p.requ
 func (p *Proxy) AddResponseHook(h ResponseHook) { p.responseHooks = append(p.responseHooks, h) }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+	// 接受任意 /v1/* 端点（chat/completions、responses 等），
+	// 转发到 upstream.base_url + 对应子路径。
+	if r.Method != http.MethodPost || !strings.HasPrefix(r.URL.Path, "/v1/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -47,7 +49,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	target, err := upstreamURL(p.cfg.Upstream.BaseURL, "/chat/completions")
+	// /v1/chat/completions -> base + /chat/completions；/v1/responses -> base + /responses
+	subPath := strings.TrimPrefix(r.URL.Path, "/v1")
+	target, err := upstreamURL(p.cfg.Upstream.BaseURL, subPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

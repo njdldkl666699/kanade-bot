@@ -1,0 +1,11 @@
+listen: ":8080"
+timeout: 5m
+# 可选：将每个上游请求追加记录为 JSONL（敏感请求头会脱敏），留空则不记录
+record_file: ""
+# 可选：仅当请求体顶层缺失这些字段时注入（不覆盖已有值）
+inject_request:
+  max_tokens: 4096
+upstream:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-your-key"
+  model_supports_images: false
