@@ -104,3 +104,41 @@ At minimum, one of:
 ## Workaround
 
 Run a local OpenAI-compatible proxy between the SDK and the provider that injects the missing field into the request body (e.g. `inject max_tokens: 4096` when absent). Verified working with SenseNova.
+
+---
+
+**Title:** `modelCapabilities.limits.maxContextWindowTokens` is ignored by the runtime; only the undocumented `provider.maxContextWindowTokens` works
+
+## Description
+
+`create_session(model_capabilities=ModelCapabilitiesOverride(limits=ModelLimitsOverride(max_context_window_tokens=...)))` is documented as "Override individual model capabilities resolved by the runtime", but it has no effect on the session's context-window management: `session.history.compact` keeps reporting `contextWindow.tokenLimit = 128000` (the BYOK fallback default), so auto-compaction triggers far too early for long-context BYOK models.
+
+Two additional problems compound this:
+
+1. The Python SDK serializes `ModelLimitsOverride` to **camelCase** (`maxContextWindowTokens`), while the runtime's own `api.schema.json` declares `ModelCapabilitiesOverrideLimits` properties in **snake_case** (`max_context_window_tokens`) — so even if the runtime honored the override, the wire names would not match. Sending snake_case manually (by monkey-patching `_capabilities_to_dict`) changes nothing, so the parameter appears to be entirely non-functional.
+2. The only working path — the BYOK `ProviderConfig` top-level `maxContextWindowTokens` — is **not exposed** by the Python SDK: `ProviderConfig` (TypedDict) lacks the field and `_convert_provider_to_wire_format` drops it from the dict.
+
+## Environment
+
+- `github-copilot-sdk` (Python): **1.0.14** (latest on PyPI at the time)
+- Runtime bundle: CLI **1.0.85**
+- OS: Linux x64
+
+## Evidence (all variants, same BYOK model `deepseek-flash`)
+
+| Configuration path                                                                             | `history.compact` → `contextWindow.tokenLimit` |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| (none — baseline)                                                                              | 128000                                         |
+| `model_capabilities` limits `maxContextWindowTokens` (SDK default, camelCase wire)             | 128000 ❌                                       |
+| `model_capabilities` limits `max_context_window_tokens` (snake_case wire via monkey-patch)     | 128000 ❌                                       |
+| `provider.modelCapabilities.limits.max_context_window_tokens` (wire injected via monkey-patch) | 128000 ❌                                       |
+| `provider.maxContextWindowTokens` (wire injected via monkey-patch)                             | **1048576 ✅**                                  |
+
+## Expected behavior
+
+- `session.open`'s `modelCapabilities.limits.maxContextWindowTokens` should override the resolved context window used for compaction/truncation/token display (and the Python SDK's wire casing should match what the runtime deserializes); or
+- the Python SDK should expose `provider.max_context_window_tokens` (`ProviderConfig` field + wire conversion), since that is the only knob the runtime honors today.
+
+## Workaround
+
+Monkey-patch `CopilotClient._convert_provider_to_wire_format` to pass `maxContextWindowTokens` through on the provider object. Verified working (`tokenLimit = 1048576`). Repro script: `tests/copilot_sdk/test_max_context_window.py`.

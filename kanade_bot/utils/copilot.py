@@ -19,6 +19,31 @@ from nonebot import get_driver, logger
 
 from kanade_bot.utils.common import get_project_version
 
+
+def _patch_provider_wire_conversion() -> None:
+    """让SDK的provider wire转换透传 max_context_window_tokens。
+
+    SDK 1.0.14 的 `_convert_provider_to_wire_format` 只转换固定字段列表，
+    不含 `max_context_window_tokens`，即使provider dict里带了也会被丢弃；
+    而运行时（CLI 1.0.85）恰恰只认BYOK ProviderConfig顶层的
+    `maxContextWindowTokens`（`session.open`的`modelCapabilities`参数会被忽略）。
+    在创建全局客户端前打补丁，使 `provider.max_context_window_tokens`
+    （由`BaseAgentConfig.model_dump_session_config()`自动回填）能够到达运行时。
+    升级SDK后若官方已支持（wire转换包含该字段）可移除本补丁。
+    """
+    original = CopilotClient._convert_provider_to_wire_format
+
+    def convert(self, provider):
+        wire = original(self, provider)
+        if (mcw := provider.get("max_context_window_tokens")) is not None:
+            wire["maxContextWindowTokens"] = mcw
+        return wire
+
+    CopilotClient._convert_provider_to_wire_format = convert
+
+
+_patch_provider_wire_conversion()
+
 COPILOT_CLIENT = CopilotClient(
     # connection=RuntimeConnection.for_inprocess(),
     client_info={

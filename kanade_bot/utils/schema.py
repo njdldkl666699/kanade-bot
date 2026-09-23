@@ -70,6 +70,16 @@ class ProviderConfig(AttrDocModel):
     """Overrides the resolved model's default max output tokens. When hit, the
     model stops generating and returns a truncated response."""
 
+    max_context_window_tokens: int | None = None
+    """BYOK provider顶层的上下文窗口大小覆盖（wire `maxContextWindowTokens`）
+
+    实测（SDK 1.0.14 / CLI 1.0.85，2026-09-23）这是唯一能改变运行时会话
+    管理行为（compaction的`token_limit`、自动压缩触发阈值）的途径；
+    `model_capabilities.limits.max_context_window_tokens`（session.open的
+    `modelCapabilities`参数，camelCase与snake_case均试过）会被运行时忽略，
+    BYOK未知模型默认回退到128000。未显式设置时，会自动从
+    `model_capabilities.limits.max_context_window_tokens`回填。"""
+
 
 class BaseAgentConfig(AttrDocModel):
     """基础Agent配置"""
@@ -114,6 +124,19 @@ class BaseAgentConfig(AttrDocModel):
         """
         base_fields = set(BaseAgentConfig.model_fields.keys())
         data = self.model_dump(exclude_unset=True, include=base_fields)
+        # 运行时只认BYOK provider顶层的 maxContextWindowTokens（见
+        # ProviderConfig.max_context_window_tokens 字段说明），model_capabilities
+        # 路径不生效，这里自动回填，避免各模型配置重复拆写（provider多为YAML锚点共享）
+        if (
+            self.model_capabilities is not None
+            and self.model_capabilities.limits is not None
+            and self.model_capabilities.limits.max_context_window_tokens is not None
+        ):
+            provider = data.get("provider")
+            if provider is not None and "max_context_window_tokens" not in provider:
+                provider["max_context_window_tokens"] = (
+                    self.model_capabilities.limits.max_context_window_tokens
+                )
         data.pop("system_prompt_file", None)
         data.update(
             {

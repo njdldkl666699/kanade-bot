@@ -898,6 +898,19 @@
           "default": null,
           "description": "Overrides the resolved model's default max output tokens. When hit, the\nmodel stops generating and returns a truncated response.",
           "title": "Max Output Tokens"
+        },
+        "max_context_window_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "BYOK provider顶层的上下文窗口大小覆盖（wire `maxContextWindowTokens`）\n\n实测（SDK 1.0.14 / CLI 1.0.85，2026-09-23）这是唯一能改变运行时会话\n管理行为（compaction的`token_limit`、自动压缩触发阈值）的途径；\n`model_capabilities.limits.max_context_window_tokens`（session.open的\n`modelCapabilities`参数，camelCase与snake_case均试过）会被运行时忽略，\nBYOK未知模型默认回退到128000。未显式设置时，会自动从\n`model_capabilities.limits.max_context_window_tokens`回填。",
+          "title": "Max Context Window Tokens"
         }
       },
       "title": "ProviderConfig",
