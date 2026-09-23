@@ -1,5 +1,6 @@
 import base64
 from pathlib import Path
+from urllib.parse import urlparse
 
 import magic
 from copilot import define_tool
@@ -33,7 +34,9 @@ def list_memes():
 
 
 class ViewImageParams(BaseModel):
-    url: str = Field(description="图片URL")
+    url: str = Field(
+        description="带有协议的图片URL。对于本地路径，使用`file://`开头的绝对路径；对于网络路径，使用`http://`或`https://`开头的完整URL。"
+    )
 
 
 @define_tool(
@@ -396,3 +399,83 @@ def build_send_file_tool(
         return f"文件 {file_path.name} 已发送给会话 {session_info.session_id}。"
 
     return send_file
+
+
+class DownloadFileParams(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    url: str = Field(min_length=1, description="要下载的资源链接，仅支持http/https协议")
+    file_name: str = Field(
+        min_length=1,
+        max_length=255,
+        description="保存使用的文件名，仅文件名本身，不能包含任何路径部分；建议携带扩展名",
+    )
+    path: str = Field(
+        min_length=1,
+        description=(
+            "保存到的本地目录，仅允许白名单内的目录（工作目录、额外允许目录、系统临时目录）"
+        ),
+    )
+
+
+DOWNLOAD_MAX_SIZE = 256 * 1024 * 1024
+"""单文件下载大小上限（字节），防止超大文件写满磁盘"""
+
+
+def build_download_file_tool(path_policy: PathPolicy) -> Tool:
+    @define_tool(
+        "download_file",
+        description=(
+            "下载网络链接的资源（如图片、音频等文件）并保存到本地目录。"
+            "保存目录必须在允许的白名单内，返回保存后的绝对路径和文件大小。"
+        ),
+        skip_permission=True,
+        defer="never",
+    )
+    async def download_file(params: DownloadFileParams):
+        if urlparse(params.url).scheme not in ("http", "https"):
+            return f"仅支持http/https链接，未下载: {params.url}"
+
+        # 文件名必须纯净，防止借助文件名做路径穿越绕过目录白名单
+        if Path(params.file_name).name != params.file_name:
+            return f"文件名不合法（不能包含路径部分）: {params.file_name}"
+
+        target_dir = path_policy.resolve(params.path)
+        if not path_policy.is_allowed(target_dir):
+            return f"目录不在允许的白名单内，未下载: {target_dir}"
+        target = target_dir / params.file_name
+
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            return f"创建目录失败: {e}"
+
+        logger.info("开始下载资源: {} -> {}", params.url, target)
+        size = 0
+        try:
+            async with HTTPX_CLIENT.stream(
+                "GET", params.url, timeout=120, follow_redirects=True
+            ) as r:
+                if r.status_code != 200:
+                    return f"下载失败，URL: {params.url}，状态码: {r.status_code}"
+                with target.open("wb") as f:
+                    async for chunk in r.aiter_bytes():
+                        size += len(chunk)
+                        if size > DOWNLOAD_MAX_SIZE:
+                            raise ValueError(
+                                f"资源超过大小上限{DOWNLOAD_MAX_SIZE // 1024 // 1024}MB"
+                            )
+                        f.write(chunk)
+        except (HTTPError, ValueError) as e:
+            target.unlink(missing_ok=True)
+            logger.warning("下载资源失败: {}，{}", params.url, e)
+            return f"下载失败: {e}"
+        except BaseException:
+            # 任务被取消等情况：清理残留文件后原样传播
+            target.unlink(missing_ok=True)
+            raise
+
+        logger.info("资源下载完成: {}，{}字节", target, size)
+        return f"已下载到 {target}（{size}字节）"
+
+    return download_file

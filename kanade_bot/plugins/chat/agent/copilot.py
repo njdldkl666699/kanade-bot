@@ -27,6 +27,7 @@ from ..config import cfg
 from .memory import MemoryContext, MemoryStore
 from .permissions import PathPolicy, make_fs_permission_handler
 from .tool import (
+    build_download_file_tool,
     build_memory_tools,
     build_send_file_tool,
     build_send_html_image_tool,
@@ -101,6 +102,7 @@ class CopilotSessionManager:
             view_image,
             build_send_html_image_tool(session_info, bot_id),
             build_send_file_tool(session_info, path_policy, bot_id),
+            build_download_file_tool(path_policy),
         ]
 
         if tool := await build_tts_tool(session_info, bot_id):
