@@ -18,12 +18,13 @@ console_strict_tome: true
 localstore_use_cwd: true
 
 chat:
-  model: gpt-5-mini
-  reasoning_effort: medium
+  agent:
+    model: gpt-5-mini
+    reasoning_effort: medium
+    system_prompt_file: Kanade-v4.md
+    system_prompt_extras:
+      kanade_wiki: Kanade-wiki.md
   memory_max_records_per_scope: 256
-  system_prompt_file: Kanade-v4.md
-  system_prompt_extras:
-    kanade_wiki: Kanade-wiki.md
   session_messages_max_size: 256
   rag:
     enabled: false

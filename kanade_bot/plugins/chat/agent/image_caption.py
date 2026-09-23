@@ -1,5 +1,6 @@
 import uuid
 
+from copilot import PermissionHandler
 from copilot.session import Attachment
 from copilot.session_events import AssistantMessageData
 from nonebot import logger
@@ -36,6 +37,7 @@ async def get_image_caption(attachment: Attachment) -> str | None:
             "mode": "replace",
             "content": system_prompt,
         },
+        on_permission_request=PermissionHandler.approve_all,
         **cfg.model_dump_session_config(),
     )
     try:

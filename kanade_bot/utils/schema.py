@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from copilot import MCPServerConfig, ModelCapabilitiesOverride, PermissionHandler
+from copilot import MCPServerConfig, ModelCapabilitiesOverride
 from copilot.session import AzureProviderOptions, ReasoningEffort
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
@@ -93,6 +93,19 @@ class BaseAgentConfig(AttrDocModel):
     """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
     mcp_servers: dict[str, MCPServerConfig] | None = None
     """MCP服务器配置"""
+    disabled_mcp_servers: list[str] | None = None
+    """要禁用的MCP服务器名称列表，禁用的服务器不会被启动和认证。
+    内置的GitHub MCP服务器名为`github-mcp-server`，BYOK会话默认注入其
+    18个工具（约占请求体28KB），不需要时可在此禁用。"""
+
+    additional_directories: list[str] | None = None
+    """文件访问额外允许的目录列表（additionalDirectories）
+
+    会通过`model_dump_session_config()`传给Copilot运行时，这些目录会被加入
+    会话的允许目录列表（其中的读取不再触发权限请求）；聊天Agent的文件权限
+    处理器（plugins/chat/agent/permissions.py）也将其纳入读写白名单。
+    会话工作目录与系统临时目录始终允许，白名单之外的文件写入、读取以及
+    涉及越界路径的shell命令会被聊天Agent驳回。支持`~`开头的路径。"""
 
     def model_dump_session_config(self) -> dict[str, Any]:
         """将配置转换为Copilot SessionConfig字典
@@ -104,7 +117,6 @@ class BaseAgentConfig(AttrDocModel):
         data.pop("system_prompt_file", None)
         data.update(
             {
-                "on_permission_request": PermissionHandler.approve_all,
                 "large_output": {"enabled": False},
                 # dataclasses.dataclass总是会被Pydantic序列化，这里我们不希望序列化
                 "model_capabilities": self.model_capabilities,

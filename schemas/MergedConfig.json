@@ -1,5 +1,171 @@
 {
   "$defs": {
+    "AgentConfig": {
+      "description": "聊天Agent配置",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型ID",
+          "title": "Model"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型提供商配置，如果为None则使用Copilot内置模型的默认值"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度",
+          "title": "Reasoning Effort"
+        },
+        "model_capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelCapabilitiesOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型能力覆盖配置"
+        },
+        "system_prompt_file": {
+          "default": "Kanade-v4.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
+        },
+        "available_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，\n未指定的Copilot CLI内置工具和MCP工具将被排除。\n此选项优先级高于 `excluded_tools`（排除工具列表）。",
+          "title": "Available Tools"
+        },
+        "excluded_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。",
+          "title": "Excluded Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MCPStdioServerConfig"
+                  },
+                  {
+                    "$ref": "#/$defs/MCPHTTPServerConfig"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置",
+          "title": "Mcp Servers"
+        },
+        "disabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的MCP服务器名称列表，禁用的服务器不会被启动和认证。\n内置的GitHub MCP服务器名为`github-mcp-server`，BYOK会话默认注入其\n18个工具（约占请求体28KB），不需要时可在此禁用。",
+          "title": "Disabled Mcp Servers"
+        },
+        "additional_directories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "文件访问额外允许的目录列表（additionalDirectories）\n\n会通过`model_dump_session_config()`传给Copilot运行时，这些目录会被加入\n会话的允许目录列表（其中的读取不再触发权限请求）；聊天Agent的文件权限\n处理器（plugins/chat/agent/permissions.py）也将其纳入读写白名单。\n会话工作目录与系统临时目录始终允许，白名单之外的文件写入、读取以及\n涉及越界路径的shell命令会被聊天Agent驳回。支持`~`开头的路径。",
+          "title": "Additional Directories"
+        },
+        "system_prompt_extras": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "系统提示词额外内容，键为占位符，值为替换内容的文件名\n\n例如：{\"kanade_wiki\": \"Kanade-wiki.md\"}表示在系统提示词中遇到{{kanade_wiki}}时，\n会将其替换为Kanade-wiki.md文件的内容",
+          "title": "System Prompt Extras",
+          "type": "object"
+        }
+      },
+      "title": "AgentConfig",
+      "type": "object"
+    },
     "AzureProviderOptions": {
       "description": "Azure-specific provider configuration",
       "properties": {
@@ -235,6 +401,38 @@
           "default": null,
           "description": "MCP服务器配置",
           "title": "Mcp Servers"
+        },
+        "disabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的MCP服务器名称列表，禁用的服务器不会被启动和认证。\n内置的GitHub MCP服务器名为`github-mcp-server`，BYOK会话默认注入其\n18个工具（约占请求体28KB），不需要时可在此禁用。",
+          "title": "Disabled Mcp Servers"
+        },
+        "additional_directories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "文件访问额外允许的目录列表（additionalDirectories）\n\n会通过`model_dump_session_config()`传给Copilot运行时，这些目录会被加入\n会话的允许目录列表（其中的读取不再触发权限请求）；聊天Agent的文件权限\n处理器（plugins/chat/agent/permissions.py）也将其纳入读写白名单。\n会话工作目录与系统临时目录始终允许，白名单之外的文件写入、读取以及\n涉及越界路径的shell命令会被聊天Agent驳回。支持`~`开头的路径。",
+          "title": "Additional Directories"
         }
       },
       "title": "ImageCaptionConfig",
@@ -929,132 +1127,21 @@
     },
     "kanade_bot__plugins__chat__config__ScopedConfig": {
       "properties": {
-        "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "模型ID",
-          "title": "Model"
-        },
-        "provider": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProviderConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "模型提供商配置，如果为None则使用Copilot内置模型的默认值"
-        },
-        "reasoning_effort": {
-          "anyOf": [
-            {
-              "enum": [
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "推理努力程度",
-          "title": "Reasoning Effort"
-        },
-        "model_capabilities": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ModelCapabilitiesOverride"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "模型能力覆盖配置"
-        },
-        "system_prompt_file": {
-          "default": "Kanade-v4.md",
-          "description": "系统提示词文件名",
-          "title": "System Prompt File",
-          "type": "string"
-        },
-        "available_tools": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，\n未指定的Copilot CLI内置工具和MCP工具将被排除。\n此选项优先级高于 `excluded_tools`（排除工具列表）。",
-          "title": "Available Tools"
-        },
-        "excluded_tools": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。",
-          "title": "Excluded Tools"
-        },
-        "mcp_servers": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/MCPStdioServerConfig"
-                  },
-                  {
-                    "$ref": "#/$defs/MCPHTTPServerConfig"
-                  }
-                ]
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "MCP服务器配置",
-          "title": "Mcp Servers"
-        },
-        "system_prompt_extras": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "default": {},
-          "description": "系统提示词额外内容，键为占位符，值为替换内容的文件名\n\n例如：{\"kanade_wiki\": \"Kanade-wiki.md\"}表示在系统提示词中遇到{{kanade_wiki}}时，\n会将其替换为Kanade-wiki.md文件的内容",
-          "title": "System Prompt Extras",
-          "type": "object"
+        "agent": {
+          "$ref": "#/$defs/AgentConfig",
+          "default": {
+            "model": null,
+            "provider": null,
+            "reasoning_effort": null,
+            "model_capabilities": null,
+            "system_prompt_file": "Kanade-v4.md",
+            "available_tools": null,
+            "excluded_tools": null,
+            "mcp_servers": null,
+            "disabled_mcp_servers": null,
+            "additional_directories": null,
+            "system_prompt_extras": {}
+          }
         },
         "memory_database_file": {
           "default": "memories.sqlite3",
@@ -1574,6 +1661,38 @@
           "description": "MCP服务器配置",
           "title": "Mcp Servers"
         },
+        "disabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "要禁用的MCP服务器名称列表，禁用的服务器不会被启动和认证。\n内置的GitHub MCP服务器名为`github-mcp-server`，BYOK会话默认注入其\n18个工具（约占请求体28KB），不需要时可在此禁用。",
+          "title": "Disabled Mcp Servers"
+        },
+        "additional_directories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "文件访问额外允许的目录列表（additionalDirectories）\n\n会通过`model_dump_session_config()`传给Copilot运行时，这些目录会被加入\n会话的允许目录列表（其中的读取不再触发权限请求）；聊天Agent的文件权限\n处理器（plugins/chat/agent/permissions.py）也将其纳入读写白名单。\n会话工作目录与系统临时目录始终允许，白名单之外的文件写入、读取以及\n涉及越界路径的shell命令会被聊天Agent驳回。支持`~`开头的路径。",
+          "title": "Additional Directories"
+        },
         "bot_name": {
           "default": "宵崎奏",
           "description": "总结中AI的名称，用于区分用户和AI的发言",
@@ -1899,15 +2018,19 @@
     "chat": {
       "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
       "default": {
-        "model": null,
-        "provider": null,
-        "reasoning_effort": null,
-        "model_capabilities": null,
-        "system_prompt_file": "Kanade-v4.md",
-        "available_tools": null,
-        "excluded_tools": null,
-        "mcp_servers": null,
-        "system_prompt_extras": {},
+        "agent": {
+          "additional_directories": null,
+          "available_tools": null,
+          "disabled_mcp_servers": null,
+          "excluded_tools": null,
+          "mcp_servers": null,
+          "model": null,
+          "model_capabilities": null,
+          "provider": null,
+          "reasoning_effort": null,
+          "system_prompt_extras": {},
+          "system_prompt_file": "Kanade-v4.md"
+        },
         "memory_database_file": "memories.sqlite3",
         "memory_max_records_per_scope": 256,
         "session_messages_max_size": 100,
@@ -2727,6 +2850,8 @@
         "available_tools": null,
         "excluded_tools": null,
         "mcp_servers": null,
+        "disabled_mcp_servers": null,
+        "additional_directories": null,
         "bot_name": "宵崎奏",
         "min_size": 10,
         "max_size": 2048,

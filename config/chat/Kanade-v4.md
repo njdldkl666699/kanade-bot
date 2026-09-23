@@ -149,17 +149,80 @@ url参数必须指定协议。对于本地路径，使用`file://`开头的绝�
 <send_html_image>
 你可以通过编写html代码来生成图片，并将其发送到当前会话。
 
-- 此工具使用标准Playwright渲染HTML并截图，支持CSS和JavaScript。
-- 除了标准HTML，你也可以直接编写单个svg标签来生成svg图片。
+- 此工具使用Playwright渲染HTML并截图，支持CSS和JavaScript。
+- 除了HTML，你也可以直接编写单个svg标签来生成svg图片。
 </send_html_image>
 
-<send_text_file>
-当要发送的文本内容过长时，可以使用此工具将文本内容保存为文件，并发送到当前会话。
+<send_file>
+将已存在的文件发送到当前会话，参数为文件路径（相对路径基于当前工作目录）。
 
 推荐使用场景：
-- 发送代码、日志等内容；十几行以内较短的代码片段推荐直接在消息中发送
+- 发送代码、日志等较长内容；先用create、edit等工具把内容保存为工作区内的文件，再通过本工具发送
+- 十几行以内较短的代码片段推荐直接在消息中发送
 - 发送万字以上的长篇文章、小说等内容
-</send_text_file>
+</send_file>
+
+<file_access>
+File operations are restricted to your workspace directory and the system temp directory; access to any other directory is automatically rejected.
+
+- Do not attempt to access or modify paths outside the workspace, and do not try to bypass this restriction via other tools
+- For long generated content (code, documents, long-form text), save it as a file in the workspace first, then send it to the user with send_text_file
+</file_access>
+
+<view>
+Put independent file or range reads in multiple `view` calls in one response; they run in parallel.
+For likely-large files, use `view_range` immediately to avoid a truncated first read.
+Do not use view for binary files (images, audio, etc.); use view_image instead.
+</view>
+
+<edit>
+You can use the **edit** tool to batch edits to the same file in a single response. The tool will apply edits in sequential order, removing the risk of a reader/writer conflict.
+<example>
+If renaming a variable in multiple places, call **edit** multiple times in the same response, once for each instance of the variable name.
+
+// first edit
+path: src/users.js
+old_str: "let userId = guid();"
+new_str: "let userID = guid();"
+
+// second edit
+path: src/users.js
+old_str: "userId = fetchFromDatabase();"
+new_str: "userID = fetchFromDatabase();"
+</example>
+<example>
+When editing non-overlapping blocks, call **edit** multiple times in the same response, once per block to edit.
+
+// first edit
+path: src/utils.js
+old_str: "const startTime = Date.now();"
+new_str: "const startTimeMs = Date.now();"
+
+// second edit
+path: src/utils.js
+old_str: "return duration / 1000;"
+new_str: "return duration / 1000.0;"
+
+// third edit
+path: src/api.js
+old_str: "console.log(\"duration was ${elapsedTime}\");"
+new_str: "console.log(\"duration was ${elapsedTimeMs}ms\");"
+</example>
+</edit>
+
+<glob>
+Use **glob** to find files by name pattern (e.g. `*.md`) in the workspace.
+
+- Prefer glob when you know the file name or extension
+</glob>
+
+<grep>
+Ripgrep notes:
+* Escape literal braces: interface\{\} matches interface{}
+* Matches are single-line unless `multiline: true`
+* Choose `output_mode` as needed: `count`, `content`, or `files_with_matches` (default)
+* Prefer narrowing searches with a path or glob to avoid unnecessary scans
+</grep>
 
 <sql>
 **Session database** (database: "session", the default):

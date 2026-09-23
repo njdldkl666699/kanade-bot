@@ -81,36 +81,40 @@ op-deepseek-flash: &op-deepseek-flash
       max_output_tokens: 393216
 
 chat:
-  <<: *op-deepseek-flash
-  mcp_servers:
-    tavily:
-      type: http
-      tools: ["*"]
-      url: https://mcp.tavily.com/mcp
-      headers:
-        Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
-    anysearch:
-      type: http
-      tools: ["*"]
-      url: https://api.anysearch.com/mcp
-  excluded_tools:
-    - bash
-    - list_bash
-    - read_bash
-    - stop_bash
-    - write_bash
-    - apply_patch
-    - create
-    - edit
-    - view
-    - list_agents
-    - read_agent
-    - task
-    - write_agent
-    - ask_user
-    - glob
-    - grep
-    - skill
+  agent:
+    <<: *op-deepseek-flash
+    # 禁用内置GitHub MCP（BYOK会话默认注入其18个工具，约占请求体28KB）
+    disabled_mcp_servers:
+      - github-mcp-server
+    mcp_servers:
+      tavily:
+        type: http
+        tools: ["*"]
+        url: https://mcp.tavily.com/mcp
+        headers:
+          Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
+      anysearch:
+        type: http
+        tools: ["*"]
+        url: https://api.anysearch.com/mcp
+    # bash类工具仍建议排除（shell路径校验是启发式的，存在绕过风险）；
+    # 文件编辑/查找工具（create/edit/view/glob/grep）已由权限处理器限制在
+    # 工作目录、allowed_edit_directories与系统临时目录内，可按需启用
+    excluded_tools:
+      - bash
+      - list_bash
+      - read_bash
+      - stop_bash
+      - write_bash
+      - list_agents
+      - read_agent
+      - task
+      - write_agent
+      - ask_user
+      - skill
+    # 文件访问额外允许的目录（工作目录与系统临时目录始终允许）
+    # additional_directories:
+    #   - ~/Projects/Python/kanade-bot/cache/kanade_images
   # image_caption:
   #   <<: *sensenova-6-8-flash-lite
   #   available_tools: []

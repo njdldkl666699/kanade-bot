@@ -1,12 +1,16 @@
 import asyncio
 import json
+import platform
+import tempfile
 from collections import deque
 from contextlib import aclosing
+from pathlib import Path
 from typing import Any
 
 from copilot import CopilotSession
 from copilot.session import Attachment
 from nonebot import get_driver, logger
+from nonebot_plugin_localstore import get_plugin_cache_file
 
 from kanade_bot.utils.copilot import COPILOT_CLIENT, copilot_send_and_wait_stream
 from kanade_bot.utils.parse import build_sender_info
@@ -14,26 +18,29 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .memory import MemoryContext, MemoryStore
+from .permissions import PathPolicy, make_fs_permission_handler
 from .tool import (
     build_memory_tools,
+    build_send_file_tool,
     build_send_html_image_tool,
-    build_send_text_file_tool,
     build_tts_tool,
     list_memes,
     view_image,
 )
 
+agent = cfg.agent
+
 FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
 
 def _build_system_prompt() -> str:
-    sp_path = cfg.system_prompt_file_path
+    sp_path = agent.system_prompt_file_path
     if not sp_path.is_file():
         logger.warning(f"系统提示词文件不存在，路径: {sp_path.absolute()}")
         return FALLBACK_SYSTEM_PROMPT
 
     sp = sp_path.read_text(encoding="utf-8")
-    extras = cfg.system_prompt_extras_paths
+    extras = agent.system_prompt_extras_paths
 
     for k, p in extras.items():
         if not p.is_file():
@@ -58,14 +65,36 @@ class CopilotSessionManager:
         bot_id: str | None = None,
     ) -> dict[str, Any]:
         """返回会话配置字典"""
+        # 目录
+        wd = get_plugin_cache_file(session_info.session_id)
+        wd.mkdir(parents=True, exist_ok=True)
+
+        extra_dirs = [Path(d).expanduser() for d in agent.additional_directories or []]
+        path_policy = PathPolicy(wd, extra_dirs)
+
+        # 系统提示词
         session_system_prompt = self.system_prompt
+
+        session_system_prompt += f"* Current working directory: {wd.absolute()}\n"
+        if extra_dirs:
+            session_system_prompt += "* Additional allowed directories:\n"
+            for d in extra_dirs:
+                session_system_prompt += f"  - {d.absolute()}\n"
+        temp_dir = Path(tempfile.gettempdir()).resolve()
+        session_system_prompt += f"* System temporary directory: {temp_dir}\n"
+
+        session_system_prompt += f"* Operationg System: {platform.system()}\n"
+
         if group_info := build_sender_info(session_info.group_name, session_info.group_id):
-            session_system_prompt += f"\n$ 现在的会话在群聊{group_info}中。"
+            session_system_prompt += f"\n当前会话在群聊{group_info}中。\n"
 
-        draw_send_html = build_send_html_image_tool(session_info, bot_id)
-        send_text_file = build_send_text_file_tool(session_info, bot_id)
-
-        tools = [list_memes, view_image, draw_send_html, send_text_file]
+        # 构建工具列表
+        tools = [
+            list_memes,
+            view_image,
+            build_send_html_image_tool(session_info, bot_id),
+            build_send_file_tool(session_info, path_policy, bot_id),
+        ]
 
         if tool := await build_tts_tool(session_info, bot_id):
             tools.append(tool)
@@ -82,7 +111,9 @@ class CopilotSessionManager:
                 "content": session_system_prompt,
             },
             "tools": tools,
-            **cfg.model_dump_session_config(),
+            "working_directory": str(wd.absolute()),
+            "on_permission_request": make_fs_permission_handler(path_policy),
+            **agent.model_dump_session_config(),
         }
 
     def __init__(self):
@@ -164,11 +195,11 @@ class CopilotSessionManager:
         try:
             session = await COPILOT_CLIENT.resume_session(session_id, **session_config)
             # 因为SDK原因，resume_session更新的配置似乎没有生效，所以这里再手动设置一次
-            if m := cfg.model:
+            if m := agent.model:
                 await session.set_model(
                     m,
-                    reasoning_effort=cfg.reasoning_effort,
-                    model_capabilities=cfg.model_capabilities,
+                    reasoning_effort=agent.reasoning_effort,
+                    model_capabilities=agent.model_capabilities,
                 )
             logger.info(f"恢复会话{session_id}成功")
         except Exception as e:  # noqa: BLE001

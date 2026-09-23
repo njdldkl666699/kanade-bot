@@ -5,18 +5,18 @@ import magic
 from copilot import define_tool
 from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from httpx import AsyncClient, HTTPError
-from nonebot import get_bot, get_plugin_config, logger, require
+from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic import BaseModel, Field, PositiveInt
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
-from kanade_bot.utils.schema import KanadeConfig
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg, chat_configs
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryScopeType, MemoryStore
+from .permissions import PathPolicy
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import html_to_pic
@@ -24,7 +24,7 @@ from nonebot_plugin_htmlrender import html_to_pic
 
 @define_tool(
     "list_memes",
-    description="""列出当前可用的表情包字典，键为表情包名称，值为表情包描述。""",
+    description="列出当前可用的表情包字典，键为表情包名称，值为表情包描述。",
     skip_permission=True,
     defer="never",
 )
@@ -47,8 +47,7 @@ async def view_image(params: ViewImageParams):
     logger.info("查看图片工具被调用，URL: {}", url)
 
     if url.startswith("file://"):
-        file = url[7:]
-        path = Path(file)
+        path = Path.from_uri(url)
         data = base64.b64encode(path.read_bytes()).decode()
         mime_type = magic.from_file(path, mime=True)
     else:
@@ -212,9 +211,11 @@ tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
 async def build_tts_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool | None:
     if not tts_client.base_url:
         return
-    health = await tts_client.get("/health")
-    if health.status_code != 200:
-        logger.warning("TTS服务不可用，状态码: {}", health.status_code)
+    try:
+        health = await tts_client.get("/health")
+        health.raise_for_status()
+    except HTTPError as e:
+        logger.warning("无法访问TTS服务: {}", e)
         return
 
     @define_tool(
@@ -276,8 +277,11 @@ class ViewportSize(BaseModel):
     height: int = Field(..., description="视口高度，单位像素")
 
 
-class DrawSendHtmlParams(BaseModel):
-    html: str = Field(description="要渲染的HTML内容")
+class SendHtmlImageParams(BaseModel):
+    html: str | None = Field(default=None, description="要渲染的HTML内容，可选，优先于`file_path`")
+    file_path: str | None = Field(
+        default=None, description="要渲染的HTML文件路径，可选，无需file:// 前缀"
+    )
     viewport: ViewportSize | None = Field(
         default=None, description="渲染视口大小，默认为None表示1280x720的默认视口"
     )
@@ -292,10 +296,19 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
         skip_permission=True,
         defer="never",
     )
-    async def send_html_image(params: DrawSendHtmlParams):
+    async def send_html_image(params: SendHtmlImageParams):
+        html = params.html
+        if not html:
+            if not params.file_path:
+                return "未提供HTML内容或文件路径，无法渲染为图片。"
+            file_path = Path(params.file_path)
+            if not file_path.is_file():
+                return f"HTML文件不存在: {file_path}"
+            html = file_path.read_text(encoding="utf-8")
+
         try:
             image = await html_to_pic(
-                params.html,
+                html,
                 wait=params.wait_ms,
                 full_page=params.full_page,
                 viewport=params.viewport.model_dump() if params.viewport else None,
@@ -335,20 +348,27 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
 
 
 class SendTextFileParams(BaseModel):
-    name: str = Field(description="保存的文件名，包含扩展名，例如 example.txt")
-    content: str = Field(description="要保存为文件的文本内容")
+    path: str = Field(description="要发送的文件路径，若相对路径则基于当前工作目录")
 
 
-def build_send_text_file_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool:
-    cache_dir = get_plugin_config(KanadeConfig).autoclear_cache_dir_path
-
+def build_send_file_tool(
+    session_info: SessionInfo,
+    path_policy: PathPolicy,
+    bot_id: str | None = None,
+) -> Tool:
     @define_tool(
-        "send_text_file",
-        description="将文本内容保存为文件并发送给当前会话。",
+        "send_file",
+        description="将本地文件发送给当前会话。",
         skip_permission=True,
         defer="never",
     )
     async def send_file(params: SendTextFileParams):
+        file_path = path_policy.resolve(params.path)
+        if not path_policy.is_allowed(file_path):
+            return f"文件不在允许的目录内，未发送: {file_path}"
+        if not file_path.is_file():
+            return f"文件不存在: {file_path}"
+
         try:
             bot = get_bot(bot_id)
         except (KeyError, ValueError):
@@ -357,27 +377,22 @@ def build_send_text_file_tool(session_info: SessionInfo, bot_id: str | None = No
         if not isinstance(bot, Bot):
             return "当前类型的Bot不支持发送文件消息。"
 
-        file_path = cache_dir / params.name
-        file_path.write_text(params.content, encoding="utf-8")
-
         # 发送文件消息
         if group_id := session_info.group_id:
             await upload_group_file(
                 bot,
                 group_id=int(group_id),
                 file_path=file_path,
-                name=params.name,
             )
         elif user_id := session_info.user_id:
             await upload_private_file(
                 bot,
                 user_id=int(user_id),
                 file_path=file_path,
-                name=params.name,
             )
         else:
             return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
 
-        return f"文本内容已保存为文件 {params.name} 并发送给会话 {session_info.session_id}。"
+        return f"文件 {file_path.name} 已发送给会话 {session_info.session_id}。"
 
     return send_file

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from collections.abc import AsyncGenerator
 from typing import Literal
 
 from copilot import CopilotClient, CopilotSession, SessionEvent, StopError
@@ -57,7 +58,7 @@ async def copilot_send_and_wait_stream(
     request_headers: dict[str, str] | None = None,
     display_prompt: str | None = None,
     timeout: float = 60.0,
-):
+) -> AsyncGenerator[AssistantMessageData]:
     """
     发送消息到会话，每条AssistantMessageData一到达就实时yield。
 

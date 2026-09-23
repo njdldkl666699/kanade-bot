@@ -19,6 +19,39 @@ require("model_updater")
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
+class AgentConfig(BaseAgentConfig):
+    """聊天Agent配置"""
+
+    system_prompt_file: str = "Kanade-v4.md"
+    """系统提示词文件名"""
+    system_prompt_extras: dict[str, str] = {}
+    """系统提示词额外内容，键为占位符，值为替换内容的文件名
+    
+    例如：{"kanade_wiki": "Kanade-wiki.md"}表示在系统提示词中遇到{{kanade_wiki}}时，
+    会将其替换为Kanade-wiki.md文件的内容
+    """
+
+    @property
+    def system_prompt_file_path(self) -> Path:
+        return get_plugin_config_file(self.system_prompt_file)
+
+    @property
+    def system_prompt_extras_paths(self) -> dict[str, Path]:
+        return {k: get_plugin_config_file(f) for k, f in self.system_prompt_extras.items()}
+
+
+class ImageCaptionConfig(BaseAgentConfig):
+    """图片转述模型配置"""
+
+    system_prompt_file: str = "ImageCaption.md"
+    """系统提示词文件名"""
+
+    @property
+    def system_prompt_file_path(self) -> Path:
+        """系统提示词文件的路径"""
+        return get_plugin_config_file(self.system_prompt_file)
+
+
 class RAGConfig(AttrDocModel):
     """RAG相关配置"""
 
@@ -61,18 +94,6 @@ class RAGConfig(AttrDocModel):
         return get_plugin_config_file(self.document_file)
 
 
-class ImageCaptionConfig(BaseAgentConfig):
-    """图片转述模型配置"""
-
-    system_prompt_file: str = "ImageCaption.md"
-    """系统提示词文件名"""
-
-    @property
-    def system_prompt_file_path(self) -> Path:
-        """系统提示词文件的路径"""
-        return get_plugin_config_file(self.system_prompt_file)
-
-
 class TTSConfig(AttrDocModel):
     """文本转语音模型配置"""
 
@@ -84,15 +105,9 @@ class TTSConfig(AttrDocModel):
     """TTS使用的声音类型，不配置则使用服务端默认模型"""
 
 
-class ScopedConfig(BaseAgentConfig):
-    system_prompt_file: str = "Kanade-v4.md"
-    """系统提示词文件名"""
-    system_prompt_extras: dict[str, str] = {}
-    """系统提示词额外内容，键为占位符，值为替换内容的文件名
-    
-    例如：{"kanade_wiki": "Kanade-wiki.md"}表示在系统提示词中遇到{{kanade_wiki}}时，
-    会将其替换为Kanade-wiki.md文件的内容
-    """
+class ScopedConfig(AttrDocModel):
+    agent: AgentConfig = AgentConfig()
+    """聊天Agent配置"""
 
     memory_database_file: str = "memories.sqlite3"
     """持久化记忆数据库文件名，位于插件数据目录下"""
@@ -118,14 +133,6 @@ class ScopedConfig(BaseAgentConfig):
     """聊天失败时发送的图片名，不存在则返回默认的文本消息"""
     memes_dir: str = "memes/"
     """表情包存储目录名"""
-
-    @property
-    def system_prompt_file_path(self) -> Path:
-        return get_plugin_config_file(self.system_prompt_file)
-
-    @property
-    def system_prompt_extras_paths(self) -> dict[str, Path]:
-        return {k: get_plugin_config_file(f) for k, f in self.system_prompt_extras.items()}
 
     @property
     def session_messages_cache_file_path(self) -> Path:

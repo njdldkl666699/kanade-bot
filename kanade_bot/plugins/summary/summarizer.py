@@ -2,6 +2,7 @@ import json
 from collections import deque
 from typing import ClassVar
 
+from copilot import PermissionHandler
 from copilot.session import SystemMessageConfig
 from nonebot import get_driver, get_plugin_config, logger
 
@@ -107,6 +108,7 @@ class Summarizer:
             session_id=f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}",
             system_message=self.system_message,
             client_name="kanade-bot-summary",
+            on_permission_request=PermissionHandler.approve_all,
             **cfg.model_dump_session_config(),
         )
         try:
