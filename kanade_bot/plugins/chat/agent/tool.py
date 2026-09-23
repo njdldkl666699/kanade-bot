@@ -412,9 +412,7 @@ class DownloadFileParams(BaseModel):
     )
     path: str = Field(
         min_length=1,
-        description=(
-            "保存到的本地目录，仅允许白名单内的目录（工作目录、额外允许目录、系统临时目录）"
-        ),
+        description="保存到的本地目录，仅允许白名单内的目录（工作目录、额外允许目录、系统临时目录）",
     )
 
 
@@ -479,3 +477,39 @@ def build_download_file_tool(path_policy: PathPolicy) -> Tool:
         return f"已下载到 {target}（{size}字节）"
 
     return download_file
+
+
+class CreateDirectoryParams(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    path: str = Field(
+        min_length=1,
+        max_length=1024,
+        description="要创建的目录路径，相对路径基于当前工作目录；不存在的父目录会一并递归创建",
+    )
+
+
+def build_create_directory_tool(path_policy: PathPolicy) -> Tool:
+    @define_tool(
+        "create_directory",
+        description="在本地创建目录，父目录不存在时递归创建。目录必须在允许的白名单内。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def create_directory(params: CreateDirectoryParams):
+        target_dir = path_policy.resolve(params.path)
+        if not path_policy.is_allowed(target_dir):
+            return f"目录不在允许的白名单内，未创建: {target_dir}"
+        if target_dir.exists() and not target_dir.is_dir():
+            return f"路径已存在且不是目录: {target_dir}"
+
+        try:
+            # 目标目录在白名单内，其全部祖先目录也必然在白名单内，递归创建安全
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            return f"创建目录失败: {e}"
+
+        logger.info("模型创建目录: {}", target_dir)
+        return f"目录已就绪: {target_dir}"
+
+    return create_directory
