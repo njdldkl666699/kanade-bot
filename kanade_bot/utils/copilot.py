@@ -6,17 +6,18 @@ from typing import Literal
 
 from copilot import CopilotClient, CopilotSession, SessionEvent, StopError
 from copilot._diagnostics import log_timing
+from copilot.rpc import AbortRequest
 from copilot.session import Attachment
 from copilot.session import logger as copilot_logger
-from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
+from copilot.session_events import (
+    AbortReason,
+    AssistantMessageData,
+    SessionErrorData,
+    SessionIdleData,
+)
 from nonebot import get_driver, logger
 
 from kanade_bot.utils.common import get_project_version
-
-
-class SessionStreamError(Exception):
-    """会话在流式响应期间报告了SessionErrorData"""
-
 
 COPILOT_CLIENT = CopilotClient(
     # connection=RuntimeConnection.for_inprocess(),
@@ -48,6 +49,29 @@ async def shutdown():
     logger.info("Copilot客户端已关闭")
 
 
+async def abort_session_turn(session: CopilotSession, *, rpc_timeout: float = 30.0) -> bool:
+    """中止会话当前正在运行的turn，等同用户主动中断（如CLI的Ctrl+C）。会话空闲时为无操作。
+
+    超时放弃等待后必须调用：仅退订事件监听并不会停止运行时，会话会继续
+    生成、继续执行工具（权限审批、发送文件等副作用照常发生），且经
+    openai-proxy的上游LLM请求也不会被取消，最终产生迟到的"僵尸回复"，
+    并把后续用户消息排队在仍在运行的turn之后。
+
+    返回是否成功中止。
+    """
+    try:
+        result = await session.rpc.abort(
+            AbortRequest(reason=AbortReason.USER_INITIATED), timeout=rpc_timeout
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"中止会话{session.session_id}当前turn时发生错误: {e}")
+        return False
+    if not result.success:
+        logger.warning(f"中止会话{session.session_id}当前turn未成功: {result.error}")
+        return False
+    return True
+
+
 async def copilot_send_and_wait_stream(
     session: CopilotSession,
     prompt: str,
@@ -74,6 +98,8 @@ async def copilot_send_and_wait_stream(
     否则中途退出时 `finally` 中的 `unsubscribe` 不会执行。
 
     timeout 语义为相邻事件间的间隔超时：每收到一个事件即重置计时。
+    超时后会先调用`abort_session_turn`中止仍在运行的turn（防止超时后
+    会话继续生成、执行工具副作用），再抛出TimeoutError。
     收到 SessionErrorData 时立即抛出异常，不再等待后续的 idle 事件。
 
     参数注释参见`CopilotSession.send_and_wait`。
@@ -106,6 +132,9 @@ async def copilot_send_and_wait_stream(
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=timeout)
             except TimeoutError:
+                # 超时后必须主动中止当前turn：仅退订事件并不会停止运行时。
+                # abort会让运行时放弃本轮（中断在途LLM请求），整条链路才会停下
+                await abort_session_turn(session)
                 log_timing(
                     copilot_logger,
                     logging.WARNING,
@@ -136,7 +165,7 @@ async def copilot_send_and_wait_stream(
                         session_id=session.session_id,
                         completed_by="error",
                     )
-                    raise SessionStreamError(f"Session error: {data.message or str(data)}")
+                    raise RuntimeError(f"Session error: {data.message or str(data)}")
                 case SessionIdleData():
                     log_timing(
                         copilot_logger,

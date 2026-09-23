@@ -11,7 +11,10 @@ import (
 type Config struct {
 	Listen   string         `yaml:"listen"`
 	Upstream UpstreamConfig `yaml:"upstream"`
-	Timeout  time.Duration  `yaml:"timeout"`
+	// Timeout 每次上游尝试等待响应头的时间上限（含重试的每次尝试），
+	// 默认 5m。不限制流式响应 body 的总时长：LLM 长生成可合法超过该值，
+	// 流式 body 由客户端断开（如宿主会话 abort）中止。
+	Timeout time.Duration `yaml:"timeout"`
 	// RecordFile 追加记录每个上游请求（JSONL）。为空时不记录。
 	RecordFile string `yaml:"record_file"`
 	// InjectRequest 仅在请求体顶层缺失时注入的字段（如 max_tokens: 4096）。

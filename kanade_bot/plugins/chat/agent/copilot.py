@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from copilot import CopilotSession
+from copilot.rpc import (
+    HistoryCompactResult,
+    InterruptMainTurnRequest,
+    InterruptMainTurnResult,
+    SessionHistoryCompactRequest,
+    Trigger,
+)
 from copilot.session import Attachment
 from nonebot import get_driver, logger
 from nonebot_plugin_localstore import get_plugin_cache_file
@@ -366,6 +373,46 @@ class CopilotSessionManager:
                 await COPILOT_CLIENT.delete_session(session_id)
             except RuntimeError as e:
                 logger.warning(f"删除会话{session_id}时发生错误: {e}")
+
+    async def get_session(self, session_id: str) -> CopilotSession | None:
+        """获取会话对象，会话不存在（未创建或已重置）时返回None
+
+        仅短暂持全局锁读取字典，不取会话锁，因此可在会话处理中调用
+        （如手动中断正在进行的turn）。
+        """
+        async with self._global_lock:
+            return self._sessions.get(session_id)
+
+    async def interrupt_session_turn(self, session_id: str) -> InterruptMainTurnResult | None:
+        """手动中断会话当前正在运行的turn，不影响后续消息
+
+        与超时放弃时的abort（清空运行时排队消息）不同，这里用
+        `session.interruptMainTurn`且`flush_queued=True`：只打断当前
+        生成。本bot的后续消息实际等待在会话锁上（尚未发往运行时），
+        被中断的turn结束后锁释放，等待的消息会照常处理。
+        会话不存在时返回None。
+        """
+        session = await self.get_session(session_id)
+        if not session:
+            return None
+        return await session.rpc.interrupt_main_turn(
+            InterruptMainTurnRequest(flush_queued=True), timeout=30
+        )
+
+    async def compact_session(
+        self, session_id: str, *, timeout: float = 300
+    ) -> HistoryCompactResult | None:
+        """手动压缩会话历史（`session.history.compact`），减少上下文占用
+
+        压缩由模型生成摘要，可能耗时较长（timeout默认300s）；
+        会话不存在时返回None。
+        """
+        session = await self.get_session(session_id)
+        if not session:
+            return None
+        return await session.rpc.history.compact(
+            SessionHistoryCompactRequest(trigger=Trigger.MANUAL), timeout=timeout
+        )
 
     def _update_memory_context(self, session_info: SessionInfo) -> MemoryContext:
         context = self._memory_contexts.get(session_info.session_id)

@@ -43,6 +43,24 @@ chat_reset = on_command(
 )
 register_matcher(chat_reset, "重置会话")
 
+chat_interrupt = on_command(
+    "中断会话",
+    aliases={"chat_interrupt", "chatinterrupt"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(chat_interrupt, "中断会话")
+
+chat_compact = on_command(
+    "压缩会话",
+    aliases={"chat_compact", "chatcompact"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(chat_compact, "压缩会话")
+
 chat_ban = on_command(
     "聊天拉黑",
     aliases={"chat_ban", "chatban"},

@@ -20,7 +20,16 @@ type Proxy struct {
 }
 
 func NewProxy(cfg Config) *Proxy {
-	return &Proxy{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}}
+	// Timeout只约束「每次尝试等待上游响应头」的阶段（见ServeHTTP：不叠加
+	// 总时长上限）。不能用http.Client.Timeout那种总时长上限：LLM的SSE
+	// 流式响应可以合法地持续远超timeout（长生成），总时长上限会在流中途
+	// 掐断，触发Copilot运行时整段静默重试，造成重复生成与迟到回复。
+	// 流式body不设总时长，由客户端断开（如宿主会话abort）负责中止上游。
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.Timeout > 0 {
+		transport.ResponseHeaderTimeout = cfg.Timeout
+	}
+	return &Proxy{cfg: cfg, client: &http.Client{Transport: transport}}
 }
 
 func (p *Proxy) AddRequestHook(h RequestHook)   { p.requestHooks = append(p.requestHooks, h) }
@@ -61,12 +70,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
+	// ctx直接取客户端请求上下文：客户端断开（如宿主在会话超时后abort，
+	// 运行时随之断开在途请求）即取消，上游请求与重试等待随之中止。
+	// 不叠加总时长超时（见NewProxy注释），长流式响应不会被掐断。
 	ctx := r.Context()
-	if p.cfg.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, p.cfg.Timeout)
-		defer cancel()
-	}
 	upstream, err := p.forwardWithRetry(ctx, r, target, body)
 	if err != nil {
 		log.Printf("upstream request failed: %v", err)

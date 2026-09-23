@@ -41,7 +41,13 @@ go run . -config config-example.yaml
 1. 优先采用标准 `Retry-After` 头（秒数或 HTTP-date，OpenAI/Anthropic/GitHub 等均发送），封顶 `backoff_max`，可用 `respect_retry_after: false` 关闭
 2. 头不存在或无法解析时，按 `backoff_initial` 起步每次指数翻倍，封顶 `backoff_max`
 
-安全性：429/5xx 发生在响应头阶段（body 尚未开始转发），原样重发无副作用；重试等待期间客户端断开连接会立即中止。总时长受 `timeout` 约束。
+安全性：429/5xx 发生在响应头阶段（body 尚未开始转发），原样重发无副作用；重试等待期间客户端断开连接会立即中止。每次尝试等待上游响应头的时长受 `timeout` 约束（见下方「超时语义」）。
+
+## 超时语义
+
+`timeout`（默认 5m）只约束**每次尝试等待上游响应头**的时间（含重试循环中的每一次请求）。流式响应的 body 不设总时长上限——LLM 的长生成可以合法地远超 5m，若按总时长掐断，Copilot 运行时会把被截断的流当作错误并整段静默重试，造成重复生成与迟到的“僵尸回复”。
+
+流式 body 的中止由客户端断开驱动：宿主（如 kanade-bot 在聊天会话超时后调用 Copilot SDK 的 `session.abort`）断开连接时，代理随请求上下文取消在途上游请求与重试等待，上游生成随之中止，不再浪费 token。
 
 ## 请求字段注入
 
