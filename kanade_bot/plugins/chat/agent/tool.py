@@ -1,4 +1,5 @@
 import base64
+import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -34,9 +35,7 @@ def list_memes():
 
 
 class ViewImageParams(BaseModel):
-    url: str = Field(
-        description="带有协议的图片URL。对于本地路径，使用`file://`开头的绝对路径；对于网络路径，使用`http://`或`https://`开头的完整URL。"
-    )
+    url: str = Field(description="图片URL，本地或网络路径均可，需带协议。")
 
 
 @define_tool(
@@ -280,10 +279,18 @@ class ViewportSize(BaseModel):
     height: int = Field(..., description="视口高度，单位像素")
 
 
-class SendHtmlImageParams(BaseModel):
+class RenderHtmlImageParams(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
     html: str | None = Field(default=None, description="要渲染的HTML内容，可选，优先于`file_path`")
     file_path: str | None = Field(
-        default=None, description="要渲染的HTML文件路径，可选，无需file:// 前缀"
+        default=None, description="要渲染的HTML本地文件路径，可选，无需协议前缀"
+    )
+    save_dir: str = Field(min_length=1, description="图片保存目录")
+    file_name: str = Field(
+        default="",
+        max_length=255,
+        description="保存使用的PNG文件名，仅文件名本身；缺省时自动生成，缺少.png扩展名时自动追加",
     )
     viewport: ViewportSize | None = Field(
         default=None, description="渲染视口大小，默认为None表示1280x720的默认视口"
@@ -292,14 +299,14 @@ class SendHtmlImageParams(BaseModel):
     full_page: bool | None = Field(default=True, description="是否截图整个页面，默认为True")
 
 
-def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = None) -> Tool:
+def build_render_html_image_tool(path_policy: PathPolicy) -> Tool:
     @define_tool(
-        "send_html_image",
-        description="将HTML内容渲染为图片并发送给当前会话。",
+        "render_html_image",
+        description="将HTML内容渲染为PNG图片并保存到指定目录，返回保存后的绝对路径。",
         skip_permission=True,
         defer="never",
     )
-    async def send_html_image(params: SendHtmlImageParams):
+    async def render_html_image(params: RenderHtmlImageParams):
         html = params.html
         if not html:
             if not params.file_path:
@@ -308,6 +315,18 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
             if not file_path.is_file():
                 return f"HTML文件不存在: {file_path}"
             html = file_path.read_text(encoding="utf-8")
+
+        # 文件名必须纯净，防止借助文件名做路径穿越绕过目录白名单
+        if Path(params.file_name).name != params.file_name:
+            return f"文件名不合法（不能包含路径部分）: {params.file_name}"
+
+        save_dir = path_policy.resolve(params.save_dir)
+        if not path_policy.is_allowed(save_dir):
+            return f"目录不在允许的白名单内，未保存: {save_dir}"
+        file_name = params.file_name or f"html_{uuid.uuid4().hex[:12]}.png"
+        if Path(file_name).suffix.lower() != ".png":
+            file_name += ".png"
+        target = save_dir / file_name
 
         try:
             image = await html_to_pic(
@@ -321,6 +340,55 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
             return f"HTML渲染为图片失败: {e}"
 
         try:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(image)
+        except OSError as e:
+            return f"保存图片失败: {e}"
+
+        logger.info("HTML已渲染为图片: {}", target)
+        return f"HTML已渲染为图片并保存到 {target}（{len(image)}字节）"
+
+    return render_html_image
+
+
+class SendImageParams(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    image: str = Field(
+        min_length=1,
+        max_length=2048,
+        description="图片来源URL，本地或网络路径均可，需带协议。",
+    )
+
+
+def build_send_image_tool(
+    session_info: SessionInfo,
+    path_policy: PathPolicy,
+    bot_id: str | None = None,
+) -> Tool:
+    @define_tool(
+        "send_image",
+        description="将本地或网络图片发送给当前会话。",
+        skip_permission=True,
+        defer="never",
+    )
+    async def send_image(params: SendImageParams):
+        source = params.image
+        scheme = urlparse(source).scheme
+        if scheme in ("http", "https"):
+            segment = MessageSegment.image(source)
+        elif scheme == "file":
+            # resolve会展开..、符号链接等，防止借助它们绕过目录白名单
+            file_path = path_policy.resolve(str(Path.from_uri(source)))
+            if not path_policy.is_allowed(file_path):
+                return f"文件不在允许的目录内，未发送: {file_path}"
+            if not file_path.is_file():
+                return f"文件不存在: {file_path}"
+            segment = MessageSegment.image(file_path.read_bytes())
+        else:
+            return f"仅支持file://本地路径或http/https网络URL，未发送: {source}"
+
+        try:
             bot = get_bot(bot_id)
         except (KeyError, ValueError):
             logger.error("无法获取Bot实例，bot_id: {}", bot_id)
@@ -329,7 +397,7 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
             return "当前类型的Bot不支持发送图片消息。"
 
         # 发送图片消息
-        m = Message(MessageSegment.image(image))
+        m = Message(segment)
         if group_id := session_info.group_id:
             await bot.send_msg(
                 message=m,
@@ -345,9 +413,9 @@ def build_send_html_image_tool(session_info: SessionInfo, bot_id: str | None = N
         else:
             return "当前会话没有可用的用户ID或群组ID，无法发送图片消息。"
 
-        return f"HTML内容已渲染为图片并发送给会话 {session_info.session_id}。"
+        return f"图片已发送给会话 {session_info.session_id}。"
 
-    return send_html_image
+    return send_image
 
 
 class SendTextFileParams(BaseModel):
@@ -404,16 +472,13 @@ def build_send_file_tool(
 class DownloadFileParams(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    url: str = Field(min_length=1, description="要下载的资源链接，仅支持http/https协议")
+    url: str = Field(min_length=1, description="要下载的资源网络链接")
     file_name: str = Field(
         min_length=1,
         max_length=255,
         description="保存使用的文件名，仅文件名本身，不能包含任何路径部分；建议携带扩展名",
     )
-    path: str = Field(
-        min_length=1,
-        description="保存到的本地目录，仅允许白名单内的目录（工作目录、额外允许目录、系统临时目录）",
-    )
+    path: str = Field(min_length=1, description="保存到的本地目录")
 
 
 DOWNLOAD_MAX_SIZE = 256 * 1024 * 1024
@@ -424,8 +489,8 @@ def build_download_file_tool(path_policy: PathPolicy) -> Tool:
     @define_tool(
         "download_file",
         description=(
-            "下载网络链接的资源（如图片、音频等文件）并保存到本地目录。"
-            "保存目录必须在允许的白名单内，返回保存后的绝对路径和文件大小。"
+            "下载网络链接的资源（如图片、音频等文件）并保存到本地目录，"
+            "返回保存后的绝对路径和文件大小。"
         ),
         skip_permission=True,
         defer="never",
@@ -492,7 +557,7 @@ class CreateDirectoryParams(BaseModel):
 def build_create_directory_tool(path_policy: PathPolicy) -> Tool:
     @define_tool(
         "create_directory",
-        description="在本地创建目录，父目录不存在时递归创建。目录必须在允许的白名单内。",
+        description="在本地创建目录，父目录不存在时递归创建。",
         skip_permission=True,
         defer="never",
     )

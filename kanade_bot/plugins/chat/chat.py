@@ -156,12 +156,6 @@ def _extract_segments_preserving_code(content: str) -> list[MessageSegment]:
                         selected_image = random.choice(image_files)
                         segments.append(OneBotMessageSegmentMeme(selected_image))
 
-        # 处理图片链接，格式 ![描述](图片链接)
-        elif image_match := re.search(r"!\[.*?\]\((.*?)\)", chunk):
-            chunk = chunk.replace(image_match.group(0), "")
-            image_url = image_match.group(1)
-            segments.append(MessageSegment.image(image_url))
-
         # 处理后的文本块，如果不为空，则添加为文本消息段
         if chunk.strip():
             segments.append(MessageSegment.text(chunk.strip()))
