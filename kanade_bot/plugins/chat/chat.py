@@ -55,7 +55,10 @@ async def _send_onebot_message(
     *,
     content_long: bool = False,
     content_format: TextFormat = "plaintext",
+    first_reply: bool = False,
 ):
+    reply = MessageSegment.reply(event.message_id)
+
     # 根据消息段的数量决定发送方式
     if not segments:
         return
@@ -67,8 +70,13 @@ async def _send_onebot_message(
 
     # 消息数<=5，按条发送
     elif len(segments) <= 5:
-        for segment in segments:
-            await matcher.send(segment)
+        # for segment in segments:
+        #     await matcher.send(segment)
+        for i, segment in enumerate(segments):
+            if first_reply and i == 0:
+                await matcher.send(reply + segment)
+            else:
+                await matcher.send(segment)
 
     # 消息数>5但<=10，合并转发
     elif len(segments) <= 10:
@@ -95,8 +103,11 @@ async def _send_onebot_message(
 
         # 内容不长，直接发送消息列表
         if not content_long:
-            for message in messages:
-                await matcher.send(message)
+            for i, message in enumerate(messages):
+                if first_reply and i == 0:
+                    await matcher.send(reply + message)
+                else:
+                    await matcher.send(message)
             return
 
         # 内容长的Markdown消息，转换为图片发送
@@ -105,9 +116,10 @@ async def _send_onebot_message(
             and isinstance(m := messages[0], str)
             and content_format == "markdown"
         ):
-            image = MessageSegment.image(await md_to_pic(m))
-            reply = MessageSegment.reply(event.message_id)
-            await matcher.send(reply + image)
+            message = MessageSegment.image(await md_to_pic(m))
+            if first_reply:
+                message += MessageSegment.reply(event.message_id)
+            await matcher.send(message)
             return
 
         # 内容长的纯文本，作为合并转发消息发送
@@ -226,6 +238,7 @@ async def send_message_in_chunks(
                         segments,
                         content_long=len(content) > 600 or len(content.splitlines()) > 20,
                         content_format=guess_format(content),
+                        first_reply=True,
                     )
                 else:
                     await matcher.send(content)
