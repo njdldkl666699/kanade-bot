@@ -105,6 +105,15 @@ class TTSConfig(AttrDocModel):
     """TTS使用的声音类型，不配置则使用服务端默认模型"""
 
 
+class ImageSearchConfig(AttrDocModel):
+    """接口盒子以图搜图API配置"""
+
+    id: str | None = None
+    """开发者ID"""
+    key: str | None = None
+    """开发者KEY"""
+
+
 class ScopedConfig(AttrDocModel):
     agent: AgentConfig = AgentConfig()
     """聊天Agent配置"""
@@ -124,6 +133,8 @@ class ScopedConfig(AttrDocModel):
 
     不启用且主模型不支持图片输入，则无法处理图片消息。
     """
+    image_search: ImageSearchConfig = ImageSearchConfig()
+    """以图搜图API配置，id与key均配置时启用以图搜图工具"""
     rag: RAGConfig = RAGConfig()
     tts: TTSConfig = TTSConfig()
 

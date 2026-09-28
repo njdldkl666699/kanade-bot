@@ -29,6 +29,7 @@ from .permissions import PathPolicy, make_fs_permission_handler
 from .tool import (
     build_create_directory_tool,
     build_download_file_tool,
+    build_image_search_tool,
     build_memory_tools,
     build_render_html_image_tool,
     build_send_file_tool,
@@ -110,6 +111,9 @@ class CopilotSessionManager:
         ]
 
         if tool := await build_tts_tool(session_info, bot_id):
+            tools.append(tool)
+
+        if tool := build_image_search_tool(path_policy):
             tools.append(tool)
 
         memory_context = self._update_memory_context(session_info)

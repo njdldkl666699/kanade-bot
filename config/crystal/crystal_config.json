@@ -26,7 +26,7 @@
   "first_use_bonus": 500,
   "first_use_templates": ["欢迎你使用水晶系统。首次使用此模块，赠送{first_use_bonus}水晶。"],
   "handler_consumes": {
-    "聊天": 10,
+    "聊天": 25,
     "刷新老婆": 5,
     "随机图": 5,
     "总结": 100,

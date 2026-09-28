@@ -438,6 +438,39 @@
       "title": "ImageCaptionConfig",
       "type": "object"
     },
+    "ImageSearchConfig": {
+      "description": "接口盒子以图搜图API配置",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "开发者ID",
+          "title": "Id"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "开发者KEY",
+          "title": "Key"
+        }
+      },
+      "title": "ImageSearchConfig",
+      "type": "object"
+    },
     "MCPHTTPServerConfig": {
       "description": "Configuration for a remote MCP server (HTTP or SSE).",
       "properties": {
@@ -1192,6 +1225,14 @@
           ],
           "default": null,
           "description": "图片转述模型配置，如果为None则不启用图片转述。\n\n不启用且主模型不支持图片输入，则无法处理图片消息。"
+        },
+        "image_search": {
+          "$ref": "#/$defs/ImageSearchConfig",
+          "default": {
+            "id": null,
+            "key": null
+          },
+          "description": "以图搜图API配置，id与key均配置时启用以图搜图工具"
         },
         "rag": {
           "$ref": "#/$defs/RAGConfig",
@@ -2049,6 +2090,10 @@
         "session_messages_max_size": 100,
         "session_messages_cache_file": "session_messages_cache.json",
         "image_caption": null,
+        "image_search": {
+          "id": null,
+          "key": null
+        },
         "rag": {
           "collection_name": "kanade_wiki_collection",
           "db_dir": "rag_db/",
