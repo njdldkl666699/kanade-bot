@@ -1,7 +1,5 @@
-import asyncio
 import base64
 import uuid
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,7 +9,7 @@ from copilot.tools import Tool, ToolBinaryResult, ToolResult
 from httpx import AsyncClient, HTTPError
 from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
-from PIL import Image
+from PicImageSearch import BaiDu
 from pydantic import BaseModel, Field, PositiveInt
 
 from kanade_bot.utils.common import HTTPX_CLIENT
@@ -364,54 +362,6 @@ class SendImageParams(BaseModel):
     )
 
 
-APIHZ_IMAGE_SEARCH_ENDPOINTS = (
-    "https://cn.apihz.cn/api/shitu/ytst1.php",
-    "https://cn.apihz.cn/api/shitu/ytst2.php",
-)
-"""接口盒子以图搜图API端点（两个通道参数一致），依次尝试，全部失败才报错"""
-
-APIHZ_IMAGE_SEARCH_MAX_BASE64_LENGTH = 1024 * 1024
-"""接口盒子以图搜图API的BASE64图片编码长度上限（文档要求编码后不能超过1M）"""
-
-
-def _compress_image_to_limit(data: bytes) -> bytes:
-    """将图片压缩到BASE64编码长度不超过APIHZ上限，无需压缩时原样返回
-
-    使用Pillow重编码为JPEG：先逐步降低质量，仍超限时再逐步缩小分辨率。
-    """
-    if len(base64.b64encode(data)) <= APIHZ_IMAGE_SEARCH_MAX_BASE64_LENGTH:
-        return data
-
-    with Image.open(BytesIO(data)) as im:
-        im.load()
-        if im.mode in ("RGBA", "LA", "PA") or (im.mode == "P" and "transparency" in im.info):
-            # 透明通道无法编码为JPEG，合成到白底上
-            rgba = im.convert("RGBA")
-            background = Image.new("RGB", rgba.size, (255, 255, 255))
-            background.paste(rgba, mask=rgba.getchannel("A"))
-            im = background
-        elif im.mode != "RGB":
-            im = im.convert("RGB")
-
-        quality = 90
-        scale = 1.0
-        while True:
-            size = (max(1, round(im.width * scale)), max(1, round(im.height * scale)))
-            frame = im if size == im.size else im.resize(size)
-            buf = BytesIO()
-            frame.save(buf, format="JPEG", quality=quality)
-            out = buf.getvalue()
-            if len(base64.b64encode(out)) <= APIHZ_IMAGE_SEARCH_MAX_BASE64_LENGTH:
-                return out
-            if quality > 40:
-                quality -= 15
-            elif scale > 0.05:
-                scale *= 0.8
-            else:
-                # 已到压缩极限，返回最后一次结果，由调用方判断是否仍超限
-                return out
-
-
 class ImageSearchParams(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
@@ -420,20 +370,16 @@ class ImageSearchParams(BaseModel):
         max_length=2048,
         description="要搜索的图片来源，本地文件路径或网络URL均可。",
     )
-    page: PositiveInt = Field(default=1, description="结果页码，从1开始，默认第1页。")
 
 
-def build_image_search_tool(path_policy: PathPolicy) -> Tool | None:
-    """构建以图搜图工具，未配置接口盒子开发者ID与KEY时返回None"""
-    search_cfg = cfg.image_search
-    if not search_cfg.id or not search_cfg.key:
-        return None
+def build_image_search_tool(path_policy: PathPolicy) -> Tool:
+    """构建以图搜图工具（百度反向图片搜索）"""
 
     @define_tool(
         "image_search",
         description=(
-            "以图搜图。给定一张图片，搜索全网相似图片，"
-            "返回结果列表，含标题、摘要、尺寸、来源网页、原图与预览地址。"
+            "以图搜图。给定一张图片，搜索全网相同与相似图片，"
+            "返回完全相同图片与相似图片列表（标题、来源网页、预览地址）。"
         ),
         skip_permission=True,
         defer="never",
@@ -441,8 +387,10 @@ def build_image_search_tool(path_policy: PathPolicy) -> Tool | None:
     async def image_search(params: ImageSearchParams):
         source = params.image
         scheme = urlparse(source).scheme
+        url: str | None = None
+        file: bytes | None = None
         if scheme in ("http", "https"):
-            img = source
+            url = source
         elif scheme == "file":
             # resolve会展开..、符号链接等，防止借助它们绕过目录白名单
             file_path = path_policy.resolve(str(Path.from_uri(source)))
@@ -450,84 +398,38 @@ def build_image_search_tool(path_policy: PathPolicy) -> Tool | None:
                 return f"文件不在允许的目录内，未搜索: {file_path}"
             if not file_path.is_file():
                 return f"文件不存在: {file_path}"
-            data = file_path.read_bytes()
-            if len(base64.b64encode(data)) > APIHZ_IMAGE_SEARCH_MAX_BASE64_LENGTH:
-                # 超过API上限时自动压缩（JPEG重编码，必要时缩放），
-                # CPU密集操作放入线程执行以免阻塞事件循环
-                try:
-                    data = await asyncio.to_thread(_compress_image_to_limit, data)
-                except Exception as e:  # noqa: BLE001
-                    logger.exception("图片自动压缩失败: {}", file_path)
-                    return f"图片超过1MB且自动压缩失败，未搜索: {file_path}（{e}）"
-                if len(base64.b64encode(data)) > APIHZ_IMAGE_SEARCH_MAX_BASE64_LENGTH:
-                    return f"图片自动压缩后仍超过1MB上限，未搜索: {file_path}"
-                logger.info("图片已自动压缩至1MB以内: {}，{}字节", file_path, len(data))
-            img = base64.b64encode(data).decode()
+            file = file_path.read_bytes()
         else:
             return f"仅支持file://本地路径或http/https网络URL，未搜索: {source}"
 
-        errors: list[str] = []
-        for i, endpoint in enumerate(APIHZ_IMAGE_SEARCH_ENDPOINTS, 1):
-            try:
-                r = await HTTPX_CLIENT.post(
-                    endpoint,
-                    data={
-                        "id": search_cfg.id,
-                        "key": search_cfg.key,
-                        "img": img,
-                        "page": params.page,
-                    },
-                    timeout=60,
-                )
-            except HTTPError as e:
-                errors.append(f"通道{i}请求失败: {e}")
-                logger.warning("以图搜图通道{}请求失败: {}", i, e)
-                continue
+        # 每次搜索新建实例：HandOver不持有client时会为每个请求自动创建和关闭连接
+        baidu = BaiDu(timeout=60)
+        try:
+            resp = await baidu.search(url=url, file=file)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("以图搜图请求失败: {}", e)
+            return f"以图搜图请求失败: {e}"
 
-            if r.status_code != 200:
-                errors.append(f"通道{i}返回状态码{r.status_code}")
-                logger.warning("以图搜图通道{}返回状态码{}", i, r.status_code)
-                continue
-
-            try:
-                result = r.json()
-            except ValueError:
-                errors.append(f"通道{i}返回非JSON数据")
-                logger.warning("以图搜图通道{}返回非JSON数据", i)
-                continue
-
-            if result.get("code") != 200:
-                msg = result.get("msg", "未知错误")
-                errors.append(f"通道{i}返回错误: {msg}")
-                logger.warning("以图搜图通道{}返回错误: {}", i, msg)
-                continue
-
-            datas = result.get("datas") or []
-            lines = [
-                (
-                    f"以图搜图成功（通道模式: {result.get('td', '未知')}，"
-                    f"页码: {result.get('page', params.page)}），共{len(datas)}条结果："
-                )
-            ]
-            for j, item in enumerate(datas, 1):
-                content = str(item.get("content") or "").strip()
-                if len(content) > 200:
-                    content = content[:200] + "…"
+        lines = [f"以图搜图成功，搜索结果页: {resp.url}"]
+        if resp.exact_matches:
+            lines.append(f"\n完全相同的图片，共{len(resp.exact_matches)}条（最多展示10条）：")
+            for i, item in enumerate(resp.exact_matches[:10], 1):
                 lines.append(
-                    f"{j}. {item.get('title') or '(无标题)'}\n"
-                    f"   尺寸: {item.get('width', '?')}x{item.get('height', '?')}"
-                    f"（{item.get('size', '?')}KB）\n"
-                    + (f"   摘要: {content}\n" if content else "")
-                    + f"   来源网页: {item.get('purl', '')}\n"
-                    f"   原图: {item.get('imgurl', '')}\n"
-                    f"   预览: {item.get('ylimgurl', '')}"
+                    f"{i}. 标题: {item.title or '(无标题)'}\n"
+                    f"   来源网页: {item.url}\n"
+                    f"   预览: {item.thumbnail}"
                 )
-            return "\n".join(lines)
-
-        return (
-            f"以图搜图失败，已依次尝试{len(APIHZ_IMAGE_SEARCH_ENDPOINTS)}个通道，全部失败：\n"
-            + "\n".join(f"- {e}" for e in errors)
-        )
+        if resp.raw:
+            lines.append(f"\n相似图片，共{len(resp.raw)}条（最多展示10条）：")
+            for i, item in enumerate(resp.raw[:10], 1):
+                lines.append(
+                    f"{i}. 标题: {item.title or '(无标题)'}\n"
+                    f"   来源网页: {item.url}\n"
+                    f"   预览: {item.thumbnail}"
+                )
+        if not resp.raw and not resp.exact_matches:
+            return "以图搜图完成，但未找到相同或相似图片。"
+        return "\n".join(lines)
 
     return image_search
 

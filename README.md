@@ -84,3 +84,42 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
    # Override the GitHub Releases base URL.
    COPILOT_CLI_DOWNLOAD_BASE_URL="https://gh-proxy.com/https://github.com/github/copilot-cli/releases/download"
    ```
+
+### Failed to build `lxml==x.x.x`
+
+请根据你的操作系统，执行以下命令安装必要的系统依赖：
+
+**Ubuntu / Debian**
+
+```bash
+sudo apt update
+sudo apt install libxml2-dev libxslt1-dev python3-dev
+```
+
+**CentOS / RHEL / Fedora**
+
+```bash
+# CentOS 7/8
+sudo yum install libxml2-devel libxslt-devel python3-devel
+
+# Fedora / RHEL 8+
+sudo dnf install libxml2-devel libxslt-devel python3-devel
+```
+
+**macOS**
+
+```bash
+# 1. 安装 Xcode 命令行工具（如果尚未安装）
+xcode-select --install
+
+# 2. 使用 Homebrew 安装依赖库
+brew install libxml2 libxslt
+```
+
+安装完成后，如果 `uv` 仍然找不到库，可以尝试在安装时显式指定路径（M1/M2 芯片路径通常是 `/opt/homebrew/`）：
+
+```bash
+export LDFLAGS="-L$(brew --prefix libxml2)/lib -L$(brew --prefix libxslt)/lib"
+export CPPFLAGS="-I$(brew --prefix libxml2)/include/libxml2 -I$(brew --prefix libxslt)/include"
+uv add PicImageSearch
+```

@@ -108,12 +108,10 @@ class CopilotSessionManager:
             build_send_file_tool(session_info, path_policy, bot_id),
             build_download_file_tool(path_policy),
             build_create_directory_tool(path_policy),
+            build_image_search_tool(path_policy),
         ]
 
         if tool := await build_tts_tool(session_info, bot_id):
-            tools.append(tool)
-
-        if tool := build_image_search_tool(path_policy):
             tools.append(tool)
 
         memory_context = self._update_memory_context(session_info)

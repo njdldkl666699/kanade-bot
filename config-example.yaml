@@ -123,10 +123,6 @@ chat:
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
     openai_model: BAAI/bge-m3
-  # 以图搜图（接口盒子 https://apihz.cn），id与key见用户中心，均配置后启用
-  image_search:
-    id: "10000000"
-    key: "15he5h15ty854j5sr152hs2"
 
 fun:
   lolicon_proxy: example.com
