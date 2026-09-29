@@ -319,6 +319,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
         except Exception as e:  # noqa: BLE001
             await random_waifu.finish(f"获取图片失败：{e}")
         succeed_consume(key, platform, user_id)
+        return
 
     # 隐藏功能
     urls = await query_lolicon_waifus(json_str)

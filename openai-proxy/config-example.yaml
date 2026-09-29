@@ -7,6 +7,11 @@ record_file: ""
 # 可选：仅当请求体顶层缺失这些字段时注入（不覆盖已有值）
 inject_request:
   max_tokens: 4096
+# 可选：修复 DeepSeek 思考模式「写错输出通道」——模型偶尔把最终答案整体
+# 写入 reasoning_content（content 为空），并以 "Final:\n" 分隔推理与答案。
+# 启用后把标记后的内容搬回 content（chat completions 的流式/非流式响应均支持）。
+# 注意：启用后流式响应会先完整缓冲再返回，牺牲增量输出。
+fix_reasoning_final: false
 # 可选：上游状态码重试（statuses 为空时不重试）。
 # 等待时长优先采用上游 Retry-After 头（封顶 backoff_max，可用 respect_retry_after 关闭），
 # 未提供时按 backoff_initial 指数翻倍；重试期间客户端断开会立即中止。

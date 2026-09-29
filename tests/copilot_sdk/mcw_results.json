@@ -1,5 +1,25 @@
 [
  {
+  "variant": "baseline",
+  "token_limit": 128000
+ },
+ {
+  "variant": "caps_camel",
+  "token_limit": 128000
+ },
+ {
+  "variant": "caps_snake",
+  "token_limit": 128000
+ },
+ {
+  "variant": "prov_direct",
+  "token_limit": 1048576
+ },
+ {
+  "variant": "prov_caps_snake",
+  "token_limit": 128000
+ },
+ {
   "variant": "bot_path",
   "token_limit": 1048576
  }

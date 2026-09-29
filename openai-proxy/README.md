@@ -22,6 +22,16 @@ go run . -config config-example.yaml
 
 - `upstream.api_key` 非空时以它设置 `Authorization: Bearer`；为空时透传入站请求的 `Authorization` 头
 
+## 配置热重载
+
+服务启动后通过 [viper](https://github.com/spf13/viper)（fsnotify）监听 `-config` 指向的配置文件，保存后自动重载，无需重启。行为细节：
+
+- **触发**：直接覆盖写入，以及编辑器常见的「临时文件写入 + rename 原子替换」均可触发；连续事件防抖约 200ms 后统一重载
+- **解析**：与启动加载共用同一份 `loadConfig`（yaml.v3），语义完全一致；解析失败（如文件写到一半被读到）时按 500ms 间隔重试至多 3 次，仍失败则保留旧配置并等待下一次变更
+- **生效方式**：代理的运行时状态（配置、上游 client、hooks）按新配置整体重建后原子替换，在途请求继续用旧状态完成，不会出现半新半旧的组合；重载日志会逐项列出变更（`api_key` 只提示变化、不打印值）
+- **立即生效**：`upstream.*`、`timeout`、`retry`、`inject_request`、`record_file`、`fix_reasoning_final`
+- **需要重启**：`listen`——监听地址已随进程绑定，变更只会在日志中提示
+
 ## 请求记录
 
 设置 `record_file`（JSONL 路径）后，每个上游请求会被原样追加记录为一行 JSON：
@@ -52,6 +62,18 @@ go run . -config config-example.yaml
 ## 请求字段注入
 
 设置 `inject_request` 后，代理会在请求体顶层缺失对应字段时注入配置值（已有字段不覆盖）。例如 Copilot BYOK 场景下注入 `max_tokens: 4096` 限制输出长度（Copilot 运行时不会把 BYOK 配置的 `max_output_tokens` 写入上游请求体，实测见 `tests/copilot_sdk/`）。注意不同提供商的参数名：OpenAI 兼容 completions API 为 `max_tokens`（或 `max_completion_tokens`），Responses API 为 `max_output_tokens`。
+
+## reasoning_content 通道修复
+
+设置 `fix_reasoning_final: true` 后，修复 DeepSeek 思考模式「写错输出通道」的问题：模型偶尔会把最终答案整体写入 `reasoning_content`（`content` 为空、`finish_reason` 仍为 `stop`），并在结尾用 `Final:\n` 分隔推理与答案（DeepSeek V4 Pro / V4.1 Flash 流式 + 思考模式下有约三成复现率）。
+
+处理规则（仅作用于 chat completions 形状的响应，按最后一个 `Final:\n` 切分，`Final:` 后必须紧跟换行才命中，避免误匹配正文提及）：
+
+- `content` 为空（缺失、null 或纯空白）且 `reasoning_content` 含 `Final:\n` 时，标记后内容搬入 `content`，`reasoning_content` 保留标记前的推理
+- 流式与非流式响应均支持；流式按 delta 累积判定切点后重写受影响的帧，未受影响的帧字节不变
+- 标记后没有内容（如被 `max_tokens` 截断在标记处）时不改动
+
+代价：启用后存在响应 hook，**流式响应会先完整缓冲再转发**，客户端失去增量输出（见「Hook 扩展」）。
 
 ## Hook 扩展
 
