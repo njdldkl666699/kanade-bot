@@ -115,8 +115,7 @@ func TestDiffConfigs(t *testing.T) {
 		Upstream: UpstreamConfig{
 			BaseURL: "http://a", APIKey: "sk-old", ModelSupportsImages: true,
 		},
-		Retry:             RetryConfig{Statuses: []int{429}, MaxAttempts: 3},
-		FixReasoningFinal: true,
+		Retry: RetryConfig{Statuses: []int{429}, MaxAttempts: 3},
 	}
 	newCfg := oldCfg
 	newCfg.Listen = ":9090"
@@ -124,7 +123,6 @@ func TestDiffConfigs(t *testing.T) {
 	newCfg.Upstream.APIKey = "sk-new"
 	newCfg.Upstream.ModelSupportsImages = false
 	newCfg.Retry = RetryConfig{Statuses: []int{429, 503}, MaxAttempts: 5}
-	newCfg.FixReasoningFinal = false
 
 	diffs := strings.Join(diffConfigs(oldCfg, newCfg), "\n")
 	for _, want := range []string{
@@ -133,7 +131,6 @@ func TestDiffConfigs(t *testing.T) {
 		"upstream.api_key changed",
 		"upstream.model_supports_images: true -> false",
 		"respect_retry_after:true",
-		"fix_reasoning_final: true -> false",
 	} {
 		if !strings.Contains(diffs, want) {
 			t.Fatalf("diff missing %q in:\n%s", want, diffs)

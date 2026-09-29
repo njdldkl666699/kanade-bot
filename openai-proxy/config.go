@@ -21,11 +21,6 @@ type Config struct {
 	// Copilot 运行时不会把 BYOK 配置的 max_output_tokens 写入上游请求体，
 	// 可用此机制补齐。
 	InjectRequest map[string]any `yaml:"inject_request"`
-	// FixReasoningFinal 修复 DeepSeek 思考模式「写错输出通道」：模型偶尔
-	// 把最终答案整体写入 reasoning_content（content 为空），并以 "Final:\n"
-	// 分隔推理与答案。启用后会把标记后的内容搬回 content。注意：启用后
-	// 存在响应 hook，流式响应会先完整缓冲再返回（见 README）。
-	FixReasoningFinal bool `yaml:"fix_reasoning_final"`
 	// Retry 上游状态码重试策略。statuses 为空时不重试。
 	Retry RetryConfig `yaml:"retry"`
 }

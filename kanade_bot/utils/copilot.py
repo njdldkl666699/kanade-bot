@@ -97,6 +97,37 @@ async def abort_session_turn(session: CopilotSession, *, rpc_timeout: float = 30
     return True
 
 
+FINAL_CHANNEL_MARKER = "Final:\n"
+"""DeepSeek思考模式「写错输出通道」时，模型在reasoning_content结尾自发使用的
+最终答案分隔标记。必须带换行，避免误匹配推理正文中普通提到的"Final:"。"""
+
+
+def _recover_final_channel(data: AssistantMessageData) -> None:
+    """Final通道异常兜底：content为空而答案被整体写入reasoning时，提取为回复。
+
+    部分模型思考模式偶尔把最终答案整体写入reasoning_content（content为
+    空、finish_reason仍为stop），并以"Final:\\n"分隔推理与答案。运行时会把
+    该消息原样存入会话历史并回传（实测content=""），bot侧收到的
+    AssistantMessageData.content为空、reasoning_text含完整推理。
+
+    此处在消息事件到达时就地（原地修改，事件对象为可变dataclass）把最后
+    一个标记之后的内容搬回content，保证bot回复正确。
+    """
+    if data.content.strip() or not data.reasoning_text:
+        return
+    at = data.reasoning_text.rfind(FINAL_CHANNEL_MARKER)
+    if at < 0:
+        return
+    answer = data.reasoning_text[at + len(FINAL_CHANNEL_MARKER) :].strip()
+    if not answer:
+        return
+    logger.warning(
+        f"会话消息content为空且reasoning含{FINAL_CHANNEL_MARKER!r}标记"
+        f"（Final通道异常），已提取标记后内容作为回复"
+    )
+    data.content = answer
+
+
 async def copilot_send_and_wait_stream(
     session: CopilotSession,
     prompt: str,
@@ -180,6 +211,7 @@ async def copilot_send_and_wait_stream(
                             total_start,
                             session_id=session.session_id,
                         )
+                    _recover_final_channel(data)
                     yield data
                 case SessionErrorData() as data:
                     log_timing(
@@ -228,6 +260,7 @@ async def copilot_send_and_wait_contents(
         nonlocal first_assistant_message_logged, error_event
         match event.data:
             case AssistantMessageData() as data:
+                _recover_final_channel(data)
                 contents.append(data.content)
                 if not first_assistant_message_logged:
                     first_assistant_message_logged = True

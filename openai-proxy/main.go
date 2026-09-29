@@ -55,10 +55,6 @@ func wireHooks(cfg Config) (requestHooks []RequestHook, responseHooks []Response
 		requestHooks = append(requestHooks, &RequestRecorderHook{Path: cfg.RecordFile})
 		log.Printf("recording requests to %s", cfg.RecordFile)
 	}
-	if cfg.FixReasoningFinal {
-		responseHooks = append(responseHooks, ReasoningFinalFixHook{})
-		log.Printf("reasoning final fix enabled (streaming responses will be buffered before forwarding)")
-	}
 	return requestHooks, responseHooks
 }
 
@@ -93,9 +89,6 @@ func diffConfigs(oldCfg, newCfg Config) []string {
 	}
 	if !reflect.DeepEqual(oldCfg.Retry, newCfg.Retry) {
 		add("retry: %s -> %s", retrySummary(oldCfg.Retry), retrySummary(newCfg.Retry))
-	}
-	if oldCfg.FixReasoningFinal != newCfg.FixReasoningFinal {
-		add("fix_reasoning_final: %t -> %t", oldCfg.FixReasoningFinal, newCfg.FixReasoningFinal)
 	}
 	return diffs
 }
