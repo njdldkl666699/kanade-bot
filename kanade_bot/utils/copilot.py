@@ -6,13 +6,14 @@ from typing import Literal
 
 from copilot import CopilotClient, CopilotSession, SessionEvent, StopError
 from copilot._diagnostics import log_timing
-from copilot.rpc import AbortRequest
+from copilot.rpc import AbortRequest, HistoryTruncateRequest
 from copilot.session import Attachment
 from copilot.session import logger as copilot_logger
 from copilot.session_events import (
     AbortReason,
     AssistantMessageData,
     SessionErrorData,
+    SessionEventType,
     SessionIdleData,
 )
 from nonebot import get_driver, logger
@@ -97,35 +98,60 @@ async def abort_session_turn(session: CopilotSession, *, rpc_timeout: float = 30
     return True
 
 
-FINAL_CHANNEL_MARKER = "Final:\n"
-"""DeepSeek思考模式「写错输出通道」时，模型在reasoning_content结尾自发使用的
-最终答案分隔标记。必须带换行，避免误匹配推理正文中普通提到的"Final:"。"""
+class EmptyResponseError(RuntimeError):
+    """重发耗尽后模型仍返回空响应（content为空字符串且工具调用为空列表）。
 
-
-def _recover_final_channel(data: AssistantMessageData) -> None:
-    """Final通道异常兜底：content为空而答案被整体写入reasoning时，提取为回复。
-
-    部分模型思考模式偶尔把最终答案整体写入reasoning_content（content为
-    空、finish_reason仍为stop），并以"Final:\\n"分隔推理与答案。运行时会把
-    该消息原样存入会话历史并回传（实测content=""），bot侧收到的
-    AssistantMessageData.content为空、reasoning_text含完整推理。
-
-    此处在消息事件到达时就地（原地修改，事件对象为可变dataclass）把最后
-    一个标记之后的内容搬回content，保证bot回复正确。
+    抛出前会尽力截断末轮历史（移除用户消息与空响应），避免历史残留
+    空content的assistant消息导致上游后续请求报400。
     """
-    if data.content.strip() or not data.reasoning_text:
-        return
-    at = data.reasoning_text.rfind(FINAL_CHANNEL_MARKER)
-    if at < 0:
-        return
-    answer = data.reasoning_text[at + len(FINAL_CHANNEL_MARKER) :].strip()
-    if not answer:
-        return
-    logger.warning(
-        f"会话消息content为空且reasoning含{FINAL_CHANNEL_MARKER!r}标记"
-        f"（Final通道异常），已提取标记后内容作为回复"
+
+
+EMPTY_RESPONSE_MAX_RETRIES = 2
+"""空响应（content为空字符串且工具调用为空列表）的最大重发次数，含首发共
+1+2次尝试。重发前会先截断本轮历史（连同空响应一起移除），避免历史残留
+空content的assistant消息（上游已开始拒绝并报400）以及重复的用户消息。"""
+
+
+def _is_empty_response(data: AssistantMessageData) -> bool:
+    """空响应：content为空字符串且工具调用为空列表（模型把答案写进了
+    reasoning_content等错误通道，或未产出任何内容）。"""
+    return not data.content.strip() and not data.tool_requests
+
+
+def _attempt_usable(messages: list[AssistantMessageData]) -> bool:
+    """本轮尝试是否产生了可用输出：任一助手消息有内容或发起了工具调用。
+
+    只要本轮发生过工具调用就不重发——重发会重复执行工具副作用（发文件、
+    渲染图片等）。"""
+    return any(not _is_empty_response(d) for d in messages)
+
+
+async def _truncate_last_turn(session: CopilotSession) -> bool:
+    """截断会话末轮历史：移除最后一个user.message事件及其后的全部事件
+    （含空响应），为重发同一请求清理现场。返回是否成功。"""
+    try:
+        events = await session.get_events()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"读取会话{session.session_id}事件历史失败: {e}")
+        return False
+    event_id = next(
+        (str(e.id) for e in reversed(events) if e.type == SessionEventType.USER_MESSAGE),
+        None,
     )
-    data.content = answer
+    if not event_id:
+        logger.warning(f"会话{session.session_id}历史中未找到user.message事件，无法截断")
+        return False
+    try:
+        result = await session.rpc.history.truncate(
+            HistoryTruncateRequest(event_id=event_id), timeout=30
+        )
+        logger.info(
+            f"已截断会话{session.session_id}末轮历史（移除{result.events_removed}个事件，含空响应）"
+        )
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"截断会话{session.session_id}末轮历史失败: {e}")
+        return False
 
 
 async def copilot_send_and_wait_stream(
@@ -158,6 +184,12 @@ async def copilot_send_and_wait_stream(
     会话继续生成、执行工具副作用），再抛出TimeoutError。
     收到 SessionErrorData 时立即抛出异常，不再等待后续的 idle 事件。
 
+    空响应重发：整轮结束时若本轮全部助手消息均为空响应（content为空
+    字符串且工具调用为空列表，模型推理标记灵活多变故不依赖特定标记），
+    先截断本轮历史（移除用户消息与空响应）再重发同一请求，至多
+    `EMPTY_RESPONSE_MAX_RETRIES` 次；重试耗尽时仍空则截断本轮历史后
+    抛出`EmptyResponseError`交由上层处理。
+
     参数注释参见`CopilotSession.send_and_wait`。
     """
     total_start = time.perf_counter()
@@ -174,64 +206,85 @@ async def copilot_send_and_wait_stream(
 
     unsubscribe = session.on(handler)
     try:
-        await session.send(
-            prompt,
-            attachments=attachments,
-            mode=mode,
-            agent_mode=agent_mode,
-            request_headers=request_headers,
-            display_prompt=display_prompt,
-        )
         first_assistant_message_logged = False
-        while True:
-            # 每收到一个事件，超时计时就会重置
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=timeout)
-            except TimeoutError:
-                # 超时后必须主动中止当前turn：仅退订事件并不会停止运行时。
-                # abort会让运行时放弃本轮（中断在途LLM请求），整条链路才会停下
-                await abort_session_turn(session)
-                log_timing(
-                    copilot_logger,
-                    logging.WARNING,
-                    "copilot_send_and_wait_stream failed",
-                    total_start,
-                    session_id=session.session_id,
-                    completed_by="timeout",
-                )
-                raise TimeoutError(f"Timeout after {timeout}s waiting for session events")
-            match event.data:
-                case AssistantMessageData() as data:
-                    if not first_assistant_message_logged:
-                        first_assistant_message_logged = True
-                        log_timing(
-                            copilot_logger,
-                            logging.DEBUG,
-                            "copilot_send_and_wait_stream first assistant message",
-                            total_start,
-                            session_id=session.session_id,
-                        )
-                    _recover_final_channel(data)
-                    yield data
-                case SessionErrorData() as data:
+        for attempt in range(1 + EMPTY_RESPONSE_MAX_RETRIES):
+            attempt_messages: list[AssistantMessageData] = []
+            await session.send(
+                prompt,
+                attachments=attachments,
+                mode=mode,
+                agent_mode=agent_mode,
+                request_headers=request_headers,
+                display_prompt=display_prompt,
+            )
+            while True:
+                # 每收到一个事件，超时计时就会重置
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=timeout)
+                except TimeoutError:
+                    # 超时后必须主动中止当前turn：仅退订事件并不会停止运行时。
+                    # abort会让运行时放弃本轮（中断在途LLM请求），整条链路才会停下
+                    await abort_session_turn(session)
                     log_timing(
                         copilot_logger,
                         logging.WARNING,
                         "copilot_send_and_wait_stream failed",
                         total_start,
                         session_id=session.session_id,
-                        completed_by="error",
+                        completed_by="timeout",
                     )
-                    raise RuntimeError(f"Session error: {data.message or str(data)}")
-                case SessionIdleData():
-                    log_timing(
-                        copilot_logger,
-                        logging.DEBUG,
-                        "copilot_send_and_wait_stream idle received",
-                        total_start,
-                        session_id=session.session_id,
-                    )
-                    return
+                    raise TimeoutError(f"Timeout after {timeout}s waiting for session events")
+                match event.data:
+                    case AssistantMessageData() as data:
+                        if not first_assistant_message_logged:
+                            first_assistant_message_logged = True
+                            log_timing(
+                                copilot_logger,
+                                logging.DEBUG,
+                                "copilot_send_and_wait_stream first assistant message",
+                                total_start,
+                                session_id=session.session_id,
+                            )
+                        attempt_messages.append(data)
+                        # 空消息不产出（消费方本就会跳过），非空内容实时流式产出
+                        if data.content.strip():
+                            yield data
+                    case SessionErrorData() as data:
+                        log_timing(
+                            copilot_logger,
+                            logging.WARNING,
+                            "copilot_send_and_wait_stream failed",
+                            total_start,
+                            session_id=session.session_id,
+                            completed_by="error",
+                        )
+                        raise RuntimeError(f"Session error: {data.message or str(data)}")
+                    case SessionIdleData():
+                        log_timing(
+                            copilot_logger,
+                            logging.DEBUG,
+                            "copilot_send_and_wait_stream idle received",
+                            total_start,
+                            session_id=session.session_id,
+                        )
+                        if _attempt_usable(attempt_messages):
+                            return
+                        # 整轮空响应：截断本轮（移除用户消息与空响应）后重发
+                        if attempt < EMPTY_RESPONSE_MAX_RETRIES and await _truncate_last_turn(
+                            session
+                        ):
+                            logger.warning(
+                                f"会话{session.session_id}本轮回复为空"
+                                f"（尝试{attempt + 1}/{1 + EMPTY_RESPONSE_MAX_RETRIES}），"
+                                f"已移除空响应并重发"
+                            )
+                            break
+                        # 重试耗尽或截断失败：清理历史后抛给上层处理
+                        await _truncate_last_turn(session)
+                        raise EmptyResponseError(
+                            f"会话{session.session_id}连续{attempt + 1}次回复为空"
+                            f"（content为空且无工具调用），已停止重试"
+                        )
     finally:
         unsubscribe()
 
@@ -249,19 +302,24 @@ async def copilot_send_and_wait_contents(
 
     handler 是注册在 `session.on` 上的同步回调，由 JSON-RPC 读取线程分发，
     并不在事件循环线程上；这里只做收集与事件置位，无需流式跨线程桥接。
+
+    空响应重发：整轮结束时若本轮全部助手消息均为空响应（content为空
+    字符串且工具调用为空列表），先截断本轮历史（移除用户消息与空响应）
+    再重发同一请求，至多`EMPTY_RESPONSE_MAX_RETRIES`次；重试耗尽时仍空
+    则截断本轮历史后抛出`EmptyResponseError`交由上层处理。
     """
     total_start = time.perf_counter()
-    idle_event = asyncio.Event()
     error_event: Exception | None = None
-    contents: list[str] = []
     first_assistant_message_logged = False
+    idle_event = asyncio.Event()
+    # 每次尝试整体重绑，handler闭包按名字解析到最新列表/事件
+    attempt_messages: list[AssistantMessageData] = []
 
     def handler(event: SessionEvent) -> None:
         nonlocal first_assistant_message_logged, error_event
         match event.data:
             case AssistantMessageData() as data:
-                _recover_final_channel(data)
-                contents.append(data.content)
+                attempt_messages.append(data)
                 if not first_assistant_message_logged:
                     first_assistant_message_logged = True
                     log_timing(
@@ -286,18 +344,37 @@ async def copilot_send_and_wait_contents(
 
     unsubscribe = session.on(handler)
     try:
-        await session.send(prompt)
-        await asyncio.wait_for(idle_event.wait(), timeout=timeout)
-        if error_event:
-            log_timing(
-                copilot_logger,
-                logging.WARNING,
-                "copilot_send_and_wait_contents failed",
-                total_start,
-                session_id=session.session_id,
-                completed_by="error",
+        for attempt in range(1 + EMPTY_RESPONSE_MAX_RETRIES):
+            idle_event = asyncio.Event()
+            attempt_messages = []
+            await session.send(prompt)
+            await asyncio.wait_for(idle_event.wait(), timeout=timeout)
+            if error_event:
+                log_timing(
+                    copilot_logger,
+                    logging.WARNING,
+                    "copilot_send_and_wait_contents failed",
+                    total_start,
+                    session_id=session.session_id,
+                    completed_by="error",
+                )
+                raise error_event
+            if _attempt_usable(attempt_messages):
+                break
+            # 整轮空响应：截断本轮（移除用户消息与空响应）后重发
+            if attempt < EMPTY_RESPONSE_MAX_RETRIES and await _truncate_last_turn(session):
+                logger.warning(
+                    f"会话{session.session_id}本轮回复为空"
+                    f"（尝试{attempt + 1}/{1 + EMPTY_RESPONSE_MAX_RETRIES}），"
+                    f"已移除空响应并重发"
+                )
+                continue
+            # 重试耗尽或截断失败：清理历史后抛给上层处理
+            await _truncate_last_turn(session)
+            raise EmptyResponseError(
+                f"会话{session.session_id}连续{attempt + 1}次回复为空"
+                f"（content为空且无工具调用），已停止重试"
             )
-            raise error_event
         log_timing(
             copilot_logger,
             logging.DEBUG,
@@ -305,9 +382,9 @@ async def copilot_send_and_wait_contents(
             total_start,
             session_id=session.session_id,
             completed_by="idle",
-            assistant_message_received=bool(contents),
+            assistant_message_received=bool(attempt_messages),
         )
-        return contents
+        return [d.content for d in attempt_messages if d.content.strip()]
     except TimeoutError:
         log_timing(
             copilot_logger,

@@ -43,9 +43,32 @@ REQ_LOG = Path(__file__).parent / "final_channel_requests.jsonl"
 
 REASONING = "让我想想该怎么回答。\nFinal:\n这是被写错通道的最终答案：42"
 
+# mock行为状态：按用户消息文本记录「无标记空响应」是否已触发过一次
+_empty_once_seen: set[str] = set()
+
+
+def _mock_message(last_user: str) -> dict:
+    """根据最后一条用户消息选择响应：
+    - 含「无标记」：首次返回空响应（reasoning无任何标记），其后正常
+    - 含「始终空」：始终返回带Final标记的空响应（验证重试耗尽后的兜底）
+    - 其余：正常回复
+    """
+    if "无标记" in last_user:
+        if "无标记" not in _empty_once_seen:
+            _empty_once_seen.add("无标记")
+            return {
+                "role": "assistant",
+                "content": "",
+                "reasoning_content": "推理过程没有任何标记",
+            }
+        return {"role": "assistant", "content": "重发后的正常回复"}
+    if "始终空" in last_user:
+        return {"role": "assistant", "content": "", "reasoning_content": REASONING}
+    return {"role": "assistant", "content": "正常的回复"}
+
 
 async def start_mock_server() -> asyncio.AbstractServer:
-    """用户消息含「异常」时返回异常响应（content空、答案在reasoning），否则正常。"""
+    """按最后一条用户消息内容返回正常/异常响应的 mock OpenAI server。"""
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
@@ -68,14 +91,7 @@ async def start_mock_server() -> asyncio.AbstractServer:
                 (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
                 "",
             )
-            if "异常" in str(last_user):
-                message = {
-                    "role": "assistant",
-                    "content": "",
-                    "reasoning_content": REASONING,
-                }
-            else:
-                message = {"role": "assistant", "content": "正常的回复"}
+            message = _mock_message(str(last_user))
 
             payload = json.dumps(
                 {
@@ -136,6 +152,8 @@ def import_bot_helper():
     """导入bot真实代码路径（需nonebot.init + 项目根cwd，参照mcw测试）。"""
     import nonebot
 
+    global EmptyResponseError
+
     cwd = os.getcwd()
     os.chdir(ROOT)  # get_project_version() 读项目根的 pyproject.toml
     try:
@@ -143,16 +161,29 @@ def import_bot_helper():
             nonebot.get_driver()
         except Exception:  # noqa: BLE001
             nonebot.init(driver="~httpx")
-        from kanade_bot.utils.copilot import copilot_send_and_wait_stream
+        from kanade_bot.utils.copilot import (
+            EmptyResponseError,
+            copilot_send_and_wait_stream,
+        )
 
         return copilot_send_and_wait_stream
     finally:
         os.chdir(cwd)
 
 
+def print_requests(tag: str, requests: list[dict]) -> None:
+    print(f"== {tag}（共{len(requests)}个请求，打印各请求的messages）:")
+    for i, req in enumerate(requests, 1):
+        print(f"   -- 请求{i}:")
+        for m in req.get("messages", []):
+            slim = {k: (v if len(str(v)) < 80 else str(v)[:80] + "…") for k, v in m.items()}
+            print(f"      {slim}")
+
+
 async def main() -> None:
     REQ_LOG.unlink(missing_ok=True)
     server = await start_mock_server()
+    stream_helper = import_bot_helper()
     client = CopilotClient(
         client_info={
             "application_name": "final_channel_test",
@@ -170,26 +201,35 @@ async def main() -> None:
             available_tools=[],
         )
 
-        # 第1部分：原始事件字段
-        events1 = await send_and_wait(session, "第一条：触发异常通道")
-        for d in events1:
-            print("== 第1轮 AssistantMessageData:")
-            print(f"   content={d.content!r}")
-            print(f"   reasoning_text={d.reasoning_text!r}")
+        # 场景A：无标记空响应一次 → 截断本轮+重发，第二次应正常
+        base = len(REQ_LOG.read_text().splitlines()) if REQ_LOG.is_file() else 0
+        print("== 场景A：无标记空响应（应截断后重发并拿到正常回复）")
+        async for d in stream_helper(session, "场景A：无标记空响应", timeout=60):
+            print(f"   收到回复: content={d.content!r}")
+        reqs = [json.loads(line) for line in REQ_LOG.read_text().splitlines()[base:]]
+        print_requests("场景A请求", reqs)
 
-        # 第2部分：bot层兜底后的流式消费
-        stream_helper = import_bot_helper()
-        print("== 第2轮（bot层 copilot_send_and_wait_stream 兜底后）:")
-        async for d in stream_helper(session, "第二条：再次触发异常通道", timeout=60):
-            print(f"   content={d.content!r}")
+        # 场景B：始终空（带Final标记）→ 重试耗尽后应抛EmptyResponseError
+        base = len(REQ_LOG.read_text().splitlines())
+        print("== 场景B：始终空响应（应重试耗尽后抛EmptyResponseError）")
+        try:
+            async for d in stream_helper(session, "场景B：始终空响应", timeout=60):
+                print(f"   收到回复: content={d.content!r}")
+            print("   !! 未抛异常（不符合预期）")
+        except EmptyResponseError as e:
+            print(f"   收到异常（预期）: {e}")
+        reqs = [json.loads(line) for line in REQ_LOG.read_text().splitlines()[base:]]
+        print_requests("场景B请求", reqs)
 
-        # 第3部分：历史回传结构（400根源）
-        requests = [json.loads(line) for line in REQ_LOG.read_text().splitlines()]
-        last_req = requests[-1]
-        print("== 最后一个请求的 messages（运行时回传的历史）:")
+        # 场景B后续：历史中不应残留空content的assistant消息
+        print("== 场景B后续：正常消息的历史（验证空响应已清除）")
+        async for d in stream_helper(session, "场景B后续：普通消息", timeout=60):
+            print(f"   收到回复: content={d.content!r}")
+        last_req = json.loads(REQ_LOG.read_text().splitlines()[-1])
+        print("   最后请求的messages:")
         for m in last_req.get("messages", []):
-            slim = {k: (v if len(str(v)) < 100 else str(v)[:100] + "…") for k, v in m.items()}
-            print(f"   {slim}")
+            slim = {k: (v if len(str(v)) < 80 else str(v)[:80] + "…") for k, v in m.items()}
+            print(f"      {slim}")
     finally:
         await client.stop()
         server.close()
