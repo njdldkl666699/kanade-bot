@@ -268,7 +268,7 @@ async def parse_onebot_message_for_ai(
             description = QQ_EMOJI_INDEXES.get(id, id)
             text_parts.append(f"[表情 {description}]")
         else:
-            text_parts.append(segment.to_rich_text().strip())
+            text_parts.append(segment.to_rich_text(truncate=None).strip())
 
     return "\n".join(text_parts), attachments
 

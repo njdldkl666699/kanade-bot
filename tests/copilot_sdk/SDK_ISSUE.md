@@ -2,9 +2,12 @@
 
 提交地址：<https://github.com/github/copilot-sdk/issues/new>
 
-## 复测记录（2026-09-29）
+## 复测记录
 
-- **SDK 1.0.14 → 1.0.15，CLI 1.0.85 → 1.0.89：两个问题均未修复。**
+- **2026-10-01，SDK 1.0.16 + CLI 1.0.90：两个问题均未修复，结果与 2026-09-29 完全一致。**（官方 changelog："Internal dependency updates only… no other user-visible SDK changes since v1.0.15"，实测属实）
+  - 问题 1：6 个变体上游请求体仍无任何 token 限制字段（responses 变体仍因新增的 `summary` 字段被 SenseNova 400）；RPC 层确认 SDK 仍在转发全部选项。
+  - 问题 2：六变体 token_limit 与上表一致（caps 路径全 128000，`prov_direct`/`bot_path` 1048576）；SDK `ProviderConfig` 仍未暴露 `max_context_window_tokens`，CLI schema 仍 snake_case。
+- **2026-09-29，SDK 1.0.14 → 1.0.15，CLI 1.0.85 → 1.0.89：两个问题均未修复。**
 - 问题 1：全部变体的上游请求体仍无任何 token 限制字段（completions 顶层字段仍为 `messages/model/reasoning_effort/temperature`；responses 变体为 `include/input/instructions/model/prompt_cache_key/reasoning/store/tools`，新增 `prompt_cache_key` 但仍无 `max_output_tokens`）。RPC 层确认 SDK 1.0.15 仍在 `session.create` 中转发 `provider.maxOutputTokens` / `models[].maxOutputTokens` / `modelCapabilities.limits.maxOutputTokens`，即依旧是运行时丢弃。
   - 附带发现：`wire_api="responses"` 下新版运行时会发送 `summary` 字段，SenseNova 上游返回 400 `json: unknown field "summary"`（上游兼容性问题，与本 issue 主诉无关但影响 responses 变体复测）。
 - 问题 2：六个变体结果与 1.0.85 完全一致 —— `caps_camel`/`caps_snake`/`prov_caps_snake` 仍为 128000（且 snake_case 透传也无效，说明不只是 casing 问题，运行时根本不消费 `session.open` 的 `modelCapabilities.limits`）；`prov_direct` 与 `bot_path`（本仓 workaround）仍为 1048576。
@@ -114,6 +117,8 @@ At minimum, one of:
 Run a local OpenAI-compatible proxy between the SDK and the provider that injects the missing field into the request body (e.g. `inject max_tokens: 4096` when absent). Verified working with SenseNova.
 
 > **Retest 2026-09-29, SDK 1.0.15 + CLI 1.0.89: still not fixed.** All variants still produce upstream bodies without `max_tokens` / `max_completion_tokens` / `max_output_tokens`. The completions body is unchanged (`messages/model/reasoning_effort/temperature`); the responses body now includes `prompt_cache_key` but still no token limit. RPC trace confirms SDK 1.0.15 still forwards all the options on `session.create`, so the runtime is still the component dropping them.
+>
+> **Retest 2026-10-01, SDK 1.0.16 + CLI 1.0.90: still not fixed.** Identical results across all variants — no token-limit field on the wire anywhere; RPC trace again shows the SDK forwarding `provider.maxOutputTokens` / `models[].maxOutputTokens` / `modelCapabilities.limits.maxOutputTokens` on `session.create`. (The `summary` field on the responses wire API still breaks non-OpenAI upstreams.)
 
 ---
 
@@ -154,3 +159,5 @@ Two additional problems compound this:
 Monkey-patch `CopilotClient._convert_provider_to_wire_format` to pass `maxContextWindowTokens` through on the provider object. Verified working (`tokenLimit = 1048576`). Repro script: `tests/copilot_sdk/test_max_context_window.py`.
 
 > **Retest 2026-09-29, SDK 1.0.15 + CLI 1.0.89: still not fixed.** All six variants reproduce identically: `caps_camel` / `caps_snake` / `prov_caps_snake` → 128000; `prov_direct` / `bot_path` → 1048576. Notably the snake_case passthrough variant still shows the override is not merely a casing mismatch — the runtime does not consume `session.open` `modelCapabilities.limits` at all. SDK 1.0.15's `ProviderConfig` still lacks `max_context_window_tokens` and `_convert_provider_to_wire_format` still drops it; CLI 1.0.89's `api.schema.json` still declares `ModelCapabilitiesOverrideLimits` in snake_case while the SDK sends camelCase.
+>
+> **Retest 2026-10-01, SDK 1.0.16 + CLI 1.0.90: still not fixed.** Identical results across all six variants. SDK 1.0.16's `ProviderConfig` still lacks `max_context_window_tokens` (only the named-`models[]` converter gained a `maxContextWindowTokens` passthrough, which is not the documented path); CLI 1.0.90's schema still declares `ModelCapabilitiesOverrideLimits` in snake_case.
