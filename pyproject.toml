@@ -1,13 +1,12 @@
 [project]
 name = "kanade-bot"
-version = "v5.10.4"
+version = "v6.0.0-beta.1"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "anyconfig>=0.15.1",
   "emoji>=2.15.0",
-  "github-copilot-sdk>=1.0.0",
   "httpx>=0.28.1",
   "mcstatus>=13.0.1",
   "nonebot-adapter-console>=0.9.0",
@@ -22,6 +21,8 @@ dependencies = [
   "nonebot-plugin-whateat-pic>=1.5.9",
   "nonebot-plugin-wordcloud>=0.10.0",
   "nonebot2[fastapi]>=2.5.0",
+  "openai-agents-context-compaction[tiktoken]>=0.3.0",
+  "openai-agents[docker]>=0.22.3",
   "picimagesearch>=3.12.11",
   "pypinyin>=0.55.0",
   "pyspellchecker>=0.9.0",

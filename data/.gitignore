@@ -1,4 +1,4 @@
-chat/memories.*
+chat/*sqlite3*
 chat/rag_db/
 command_counter/
 crystal/

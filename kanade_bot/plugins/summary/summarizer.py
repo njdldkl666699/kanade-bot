@@ -1,13 +1,16 @@
+import asyncio
 import json
 from collections import deque
 from typing import ClassVar
 
-from copilot import PermissionHandler
-from copilot.session import SystemMessageConfig
+from agents import Agent
 from nonebot import get_driver, get_plugin_config, logger
 
-from kanade_bot.utils.common import asia_shanghai_now
-from kanade_bot.utils.copilot import COPILOT_CLIENT, copilot_send_and_wait_contents
+from kanade_bot.utils.agents_runtime import (
+    build_model_settings,
+    get_length_tracked_model,
+    run_with_continuation,
+)
 
 from .config import Config
 
@@ -25,10 +28,12 @@ class Summarizer:
         system_prompt = system_prompt_path.read_text(encoding="utf-8")
         system_prompt = system_prompt.replace("{{summary_bot_name}}", cfg.bot_name)
 
-    system_message: ClassVar[SystemMessageConfig] = {
-        "mode": "replace",
-        "content": system_prompt,
-    }
+    agent: ClassVar[Agent] = Agent(
+        name="kanade-bot-summary",
+        instructions=system_prompt,
+        model=get_length_tracked_model(cfg),
+        model_settings=build_model_settings(cfg),
+    )
 
     def __init__(self):
         self._message_records: dict[str, deque[str]] = {}
@@ -91,11 +96,14 @@ class Summarizer:
         group_or_user_name: str | None = None,
         timeout: float = 120,
     ) -> str:
-        """发送消息并等待响应，返回响应文本
+        """生成会话消息总结，返回总结文本
+
+        输出因max_output_tokens截断（finish_reason=length）时，把已生成内容
+        作为助手消息回传并请求继续，拼接为完整总结。
 
         :param session_id: 会话ID
         :param size: 要总结的消息条数，不足则总结全部
-        :returns: 模型生成的总结文本（全部助手消息以空行拼接），发生错误时抛出异常
+        :returns: 模型生成的总结文本，发生错误时抛出异常
         """
         if session_id not in self._message_records:
             raise ValueError(f"会话 {session_id} 没有任何消息记录，无法生成总结")
@@ -104,23 +112,9 @@ class Summarizer:
         prefix = f"{'群' if is_group else '私'}聊 {group_or_user_name}: \n\n"
         prompt = prefix + "\n\n".join(messages_slice)
 
-        session = await COPILOT_CLIENT.create_session(
-            session_id=f"summary-{session_id}-{int(asia_shanghai_now().timestamp())}",
-            system_message=self.system_message,
-            client_name="kanade-bot-summary",
-            on_permission_request=PermissionHandler.approve_all,
-            **cfg.model_dump_session_config(),
+        return await asyncio.wait_for(
+            run_with_continuation(self.agent, prompt, max_turns=1), timeout=timeout
         )
-        try:
-            contents = await copilot_send_and_wait_contents(session, prompt, timeout=timeout)
-        finally:
-            await session.disconnect()
-
-        if not contents:
-            raise RuntimeError("总结会话没有收到任何响应")
-
-        # 拼接全部助手消息为完整总结文本
-        return "\n\n".join(contents)
 
 
 summarizer = Summarizer()

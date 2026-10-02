@@ -2,13 +2,12 @@ import ast
 import inspect
 import json
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 
-from copilot import MCPServerConfig, ModelCapabilitiesOverride
-from copilot.session import AzureProviderOptions, ReasoningEffort
 from nonebot import get_driver, get_plugin_config, logger
 from nonebot.config import Config as NoneBotConfig
 from nonebot.config import Env
+from openai.types import ReasoningEffort
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
 
@@ -22,63 +21,29 @@ class AttrDocModel(BaseModel):
 
 
 class ProviderConfig(AttrDocModel):
-    """自定义API提供商配置
+    """OpenAI兼容API提供商配置"""
 
-    此模型用于Pydantic校验，运行时通过`.model_dump()`方法获取字典形式的配置。
-
-    修改自`copilot.session.ProviderConfig`，仅保留了可生成schema的字段。
-    """
-
-    type: Literal["openai", "azure", "anthropic"] | None = None
-    wire_api: Literal["completions", "responses"] | None = None
-
-    transport: Literal["http", "websockets"] | None = None
-    """Transport for OpenAI Responses requests. Defaults to "http". Set 
-    "websockets" to deliver Responses API requests over a persistent WebSocket
-    connection instead of HTTP. Applies to OpenAI-compatible providers using
-    wire_api "responses"."""
     base_url: str | None = None
+    """API Base URL，为None时使用openai官方端点（需设置OPENAI_API_KEY环境变量）"""
+
     api_key: str | None = None
+    """API密钥，为None时回退到OPENAI_API_KEY环境变量"""
 
-    bearer_token: str | None = None
-    """Bearer token for authentication. Sets the Authorization header directly.
-    Use this for services requiring bearer token auth instead of API key.
-    Takes precedence over api_key when both are set."""
-    azure: AzureProviderOptions | None = None
-    """Azure-specific options"""
     headers: dict[str, str] | None = None
+    """额外请求头"""
 
-    model_id: str | None = None
-    """Well-known model name used by the runtime to look up agent configuration
-    (tools, prompts, reasoning behavior) and default token limits. Also used
-    as the wire model when wire_model is not set.
-    Falls back to SessionConfig.model."""
 
-    wire_model: str | None = None
-    """Model name sent to the provider API for inference. Use this when the
-    provider's model name (e.g. an Azure deployment name or a custom
-    fine-tune name) differs from model_id.
-    Falls back to model_id, then SessionConfig.model."""
+class MCPServerConfig(AttrDocModel):
+    """MCP服务器配置（Streamable HTTP传输）"""
 
-    max_prompt_tokens: int | None = None
-    """Overrides the resolved model's default max prompt tokens. The runtime
-    triggers conversation compaction before sending a request when the prompt
-    (system message, history, tool definitions, user message) would exceed
-    this limit."""
+    url: str
+    """MCP服务器URL"""
 
-    max_output_tokens: int | None = None
-    """Overrides the resolved model's default max output tokens. When hit, the
-    model stops generating and returns a truncated response."""
+    headers: dict[str, str] | None = None
+    """请求头，如Authorization"""
 
-    max_context_window_tokens: int | None = None
-    """BYOK provider顶层的上下文窗口大小覆盖（wire `maxContextWindowTokens`）
-
-    实测（SDK 1.0.14 / CLI 1.0.85，2026-09-23）这是唯一能改变运行时会话
-    管理行为（compaction的`token_limit`、自动压缩触发阈值）的途径；
-    `model_capabilities.limits.max_context_window_tokens`（session.open的
-    `modelCapabilities`参数，camelCase与snake_case均试过）会被运行时忽略，
-    BYOK未知模型默认回退到128000。未显式设置时，会自动从
-    `model_capabilities.limits.max_context_window_tokens`回填。"""
+    tools: list[str] | None = None
+    """工具白名单，None或["*"]表示全部工具"""
 
 
 class BaseAgentConfig(AttrDocModel):
@@ -86,66 +51,24 @@ class BaseAgentConfig(AttrDocModel):
 
     model: str | None = None
     """模型ID"""
+
     provider: ProviderConfig | None = None
-    """模型提供商配置，如果为None则使用Copilot内置模型的默认值"""
-    reasoning_effort: ReasoningEffort | None = None
-    """推理努力程度"""
-    model_capabilities: ModelCapabilitiesOverride | None = None
-    """模型能力覆盖配置"""
+    """模型提供商配置，如果为None则使用openai官方端点"""
+
+    reasoning_effort: ReasoningEffort = None
+    """推理努力程度，仅对支持的模型生效"""
+
+    max_output_tokens: int | None = None
+    """模型单次响应的最大输出token数"""
+
+    vision: bool = False
+    """模型是否支持图片（视觉）输入"""
+
     system_prompt_file: str
     """系统提示词文件名"""
 
-    available_tools: list[str] | None = None
-    """启用的工具白名单。若指定此列表，则仅指定的工具和chat插件内置工具可用，
-    未指定的Copilot CLI内置工具和MCP工具将被排除。
-    此选项优先级高于 `excluded_tools`（排除工具列表）。"""
-    excluded_tools: list[str] | None = None
-    """要禁用的工具列表。适用于所有工具。如果设置了`available_tools`，则忽略此列表。"""
     mcp_servers: dict[str, MCPServerConfig] | None = None
-    """MCP服务器配置"""
-    disabled_mcp_servers: list[str] | None = None
-    """要禁用的MCP服务器名称列表，禁用的服务器不会被启动和认证。
-    内置的GitHub MCP服务器名为`github-mcp-server`，BYOK会话默认注入其
-    18个工具（约占请求体28KB），不需要时可在此禁用。"""
-
-    additional_directories: list[str] | None = None
-    """文件访问额外允许的目录列表（additionalDirectories）
-
-    会通过`model_dump_session_config()`传给Copilot运行时，这些目录会被加入
-    会话的允许目录列表（其中的读取不再触发权限请求）；聊天Agent的文件权限
-    处理器（plugins/chat/agent/permissions.py）也将其纳入读写白名单。
-    会话工作目录与系统临时目录始终允许，白名单之外的文件写入、读取以及
-    涉及越界路径的shell命令会被聊天Agent驳回。支持`~`开头的路径。"""
-
-    def model_dump_session_config(self) -> dict[str, Any]:
-        """将配置转换为Copilot SessionConfig字典
-
-        作用为移除`system_prompt_file`字段，并设置额外的默认值
-        """
-        base_fields = set(BaseAgentConfig.model_fields.keys())
-        data = self.model_dump(exclude_unset=True, include=base_fields)
-        # 运行时只认BYOK provider顶层的 maxContextWindowTokens（见
-        # ProviderConfig.max_context_window_tokens 字段说明），model_capabilities
-        # 路径不生效，这里自动回填，避免各模型配置重复拆写（provider多为YAML锚点共享）
-        if (
-            self.model_capabilities is not None
-            and self.model_capabilities.limits is not None
-            and self.model_capabilities.limits.max_context_window_tokens is not None
-        ):
-            provider = data.get("provider")
-            if provider is not None and "max_context_window_tokens" not in provider:
-                provider["max_context_window_tokens"] = (
-                    self.model_capabilities.limits.max_context_window_tokens
-                )
-        data.pop("system_prompt_file", None)
-        data.update(
-            {
-                "large_output": {"enabled": False},
-                # dataclasses.dataclass总是会被Pydantic序列化，这里我们不希望序列化
-                "model_capabilities": self.model_capabilities,
-            }
-        )
-        return data
+    """MCP服务器配置，键为服务器名称"""
 
 
 class KanadeConfig(AttrDocModel):

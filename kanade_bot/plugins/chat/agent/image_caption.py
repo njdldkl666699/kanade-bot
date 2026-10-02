@@ -1,16 +1,17 @@
-import uuid
+import asyncio
 
-from copilot import PermissionHandler
-from copilot.session import Attachment
-from copilot.session_events import AssistantMessageData
+from agents import Agent, TResponseInputItem
 from nonebot import logger
 
-from kanade_bot.utils.copilot import COPILOT_CLIENT
+from kanade_bot.utils.agents_runtime import (
+    build_model_settings,
+    get_length_tracked_model,
+    run_with_continuation,
+)
 
 from ..config import cfg as chat_cfg
 
 cfg = chat_cfg.image_caption
-
 
 FALLBACK_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内容转述为文字描述。
 请充分查看、分析和理解图片内容，详细地描述图片内容中的场景、元素等信息，避免遗漏重要信息。
@@ -18,45 +19,57 @@ FALLBACK_SYSTEM_PROMPT = """你是一个图片转述模型，负责将图片内�
 """
 
 
-async def get_image_caption(attachment: Attachment) -> str | None:
-    """使用图片转述模型获取图片的文字描述"""
-    if not cfg:
+def _build_agent() -> Agent | None:
+    if cfg is None:
+        return None
+    system_prompt = FALLBACK_SYSTEM_PROMPT
+    if (p := cfg.system_prompt_file_path) and p.is_file():
+        system_prompt = p.read_text(encoding="utf-8")
+
+    return Agent(
+        name="kanade-bot-image-caption",
+        instructions=system_prompt,
+        model=get_length_tracked_model(cfg),
+        model_settings=build_model_settings(cfg),
+    )
+
+
+async def get_image_caption(data: str, mime_type: str) -> str | None:
+    """使用图片转述模型获取图片的文字描述
+
+    :param data: 图片内容的base64字符串
+    :param mime_type: 图片MIME类型
+    :returns: 图片的文字描述，发生错误时返回错误信息
+    """
+    agent = _build_agent()
+    if agent is None:
         msg = "未配置图片转述模型，无法获取图片转述"
         logger.warning(msg)
         return msg
 
-    if (p := cfg.system_prompt_file_path) and p.is_file():
-        system_prompt = p.read_text(encoding="utf-8")
-    else:
-        system_prompt = FALLBACK_SYSTEM_PROMPT
-
-    session = await COPILOT_CLIENT.create_session(
-        session_id=f"image-caption-{uuid.uuid4()}",
-        client_name="kanade-bot-image-caption",
-        system_message={
-            "mode": "replace",
-            "content": system_prompt,
-        },
-        on_permission_request=PermissionHandler.approve_all,
-        **cfg.model_dump_session_config(),
-    )
+    input_items: list[TResponseInputItem] = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_image",
+                    "image_url": f"data:{mime_type};base64,{data}",
+                    "detail": "auto",
+                },
+                {"type": "input_text", "text": "请描述这张图片的内容。"},
+            ],
+        }
+    ]
     try:
-        async with session:
-            event = await session.send_and_wait(
-                prompt="请描述这张图片的内容。",
-                attachments=[attachment],
-                timeout=180,
-            )
+        content = await asyncio.wait_for(
+            run_with_continuation(agent, input_items, max_turns=1), timeout=180
+        )
     except Exception as e:  # noqa: BLE001
         msg = f"获取图片转述时发生错误: {e}"
         logger.exception(msg)
         return msg
 
-    if not event:
-        msg = f"图片转述模型未返回结果，图片URL: {attachment.get('displayName')}"
-        logger.warning(msg)
-        return msg
-
-    match event.data:
-        case AssistantMessageData() as data:
-            return data.content.strip()
+    if not content.strip():
+        logger.warning("图片转述模型未返回结果")
+        return None
+    return content.strip()

@@ -9,11 +9,21 @@ from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 from nonebot.compat import model_dump
 from nonebot.config import DOTENV_TYPE, Config, Env
+from nonebot.log import default_format
 from nonebot.utils import escape_tag
 
 from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 from scripts.util import load_configs
+
+# 配置 NoneBot 的日志记录器，记录全量日志到文件
+log_file_path = Path("cache/kanade.log")
+log_file_path.parent.mkdir(parents=True, exist_ok=True)
+logger.add(
+    log_file_path,
+    level="DEBUG",
+    format=default_format,
+)
 
 
 def _mask_values(obj, placeholder="..."):

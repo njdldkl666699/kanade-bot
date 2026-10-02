@@ -1,7 +1,8 @@
 import base64
+from dataclasses import dataclass
 from typing import Any, Literal, SupportsIndex
 
-from copilot.session import Attachment
+import magic
 from markdown_it import MarkdownIt
 from nonebot import logger
 from nonebot.adapters import Event
@@ -16,6 +17,16 @@ from kanade_bot.utils.common import QQ_EMOJI_INDEXES
 
 from .onebot11 import get_image_path
 from .session import extract_session_info
+
+
+@dataclass
+class ImageInput:
+    """图片附件"""
+
+    name: str
+    data: str | None = None
+    """图片内容的Base64字符串，无法获取图片内容时为None"""
+    mime_type: str | None = None
 
 
 def parse_arg_message(
@@ -167,14 +178,14 @@ async def get_forward_message_events(
 async def parse_onebot_message_for_ai(
     event_or_reply: OneBotMessageEvent | Reply,
     bot: OneBot | None = None,
-) -> tuple[str, list[Attachment]]:
+) -> tuple[str, list[ImageInput]]:
     """解析OneBot消息，返回AI可读的文本和附件列表
 
     :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
     """
     message = event_or_reply.message
     text_parts: list[str] = []
-    attachments: list[Attachment] = []
+    attachments: list[ImageInput] = []
 
     # 如果消息只有一个segment且是转发消息，直接解析转发消息中的内容
     if len(message) == 1 and message[0].type == "forward" and bot:
@@ -204,22 +215,22 @@ async def parse_onebot_message_for_ai(
             continue
 
         file: str = segment.data["file"]
-        attachment: Attachment
+        attachment: ImageInput
         if bot:
             local_path = await get_image_path(bot, segment)
-            attachment = {
-                "type": "file",
-                "path": str(local_path),
-                "displayName": file or "image.png",
-            }
+            if local_path and local_path.is_file():
+                raw = local_path.read_bytes()
+                attachment = ImageInput(
+                    name=file or "image.png",
+                    data=base64.b64encode(raw).decode(),
+                    mime_type=magic.from_buffer(raw, mime=True),
+                )
+            else:
+                # 下载失败，仅保留名称占位
+                attachment = ImageInput(name=file or "image.png")
         else:
-            # 没有bot实例，仅返回图片的displayName
-            attachment = {
-                "type": "blob",
-                "data": base64.b64encode(file.encode()).decode(),
-                "mimeType": "text/plain",
-                "displayName": file or "image.png",
-            }
+            # 没有bot实例，仅保留图片名称
+            attachment = ImageInput(name=file or "image.png")
 
         # 把前半段内容转为文字
         splitted_segments = message[:i]
@@ -276,13 +287,13 @@ async def parse_onebot_message_for_ai(
 async def parse_message_for_ai(
     event: Event,
     bot: OneBot | None = None,
-) -> tuple[str, list[Attachment]]:
+) -> tuple[str, list[ImageInput]]:
     """解析消息，返回AI可读的文本和附件列表
 
     :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
     """
     prompt: str = ""
-    attachments: list[Attachment] = []
+    attachments: list[ImageInput] = []
     ## Console消息直接发送原始内容，无需解析附件
     if isinstance(event, ConsoleMessageEvent):
         prompt = str(event.message)

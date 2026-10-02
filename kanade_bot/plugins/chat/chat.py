@@ -24,7 +24,7 @@ from kanade_bot.utils.parse import (
 )
 from kanade_bot.utils.session import extract_session_info
 
-from .agent.copilot import copilot
+from .agent.manager import chat_manager
 from .ban import is_banned
 from .config import cfg, chat_configs
 
@@ -205,13 +205,13 @@ async def send_message_in_chunks(
         # aclosing确保中途异常退出时也会关闭生成器：
         # 退订事件、清空消息缓冲区、释放会话锁
         async with aclosing(
-            copilot.send_and_wait(
+            chat_manager.send_and_wait(
                 session_info,
                 prompt,
                 bot_id=onebot.self_id if onebot else None,
                 rag_docs=rag_docs,
                 reply_text=reply_text,
-                attachments=attachments,
+                images=attachments,
                 timeout=600,
             )
         ) as contents:
@@ -289,7 +289,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
         return False
     auto_reply_config = group_config[group_id]
 
-    size = copilot.get_session_messages_size(session_id)
+    size = chat_manager.get_session_messages_size(session_id)
     threshold = auto_reply_config.threshold
     # 阈值小于等于0，或当前消息数小于阈值，不触发自动回复
     if threshold <= 0 or size < threshold:

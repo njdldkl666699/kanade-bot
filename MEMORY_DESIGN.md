@@ -32,17 +32,19 @@
 
 这里不使用向量模型，保证离线可用并避免每次聊天引入 embedding 延迟。若后续单个作用域增长到上千条或需要语义召回，可以在不改变工具契约的情况下增加 embedding 字段和向量索引。
 
-## Copilot 工具
+## 工具
 
-基于 `github-copilot-sdk 1.0.8` 的 `define_tool` 注册三个工具：
+基于 `openai-agents`（0.22.x）的 `function_tool` 注册三个工具：
 
 - `save_memory(scope, topic, content)`：新增或更新原子事实。
 - `recall_memory(query, scopes, limit)`：按相关性或最近时间检索。
 - `forget_memory(scope, memory_id)`：按 ID 删除，但仅能删除当前作用域内的数据。
 
-工具由 `build_memory_tools` 针对 Copilot 会话动态构建，闭包持有服务端解析出的作用域。模型只选择 `user/group`，不能伪造 ID。群聊 Copilot 会话会被多个成员复用，因此会话管理器在既有的每会话锁内、每次发送前把上下文切换到当前成员；工具调用期间该身份不会并发变化。这避免了把用户记忆固定到群内首位发言者，也避免了跨会话的全局上下文串线。
+工具在 `tool.py` 中静态定义，通过 `RunContextWrapper[ChatContext]` 携带会话管理器解析出的作用域（`ChatContext.memory_context`，发送前在会话锁内更新）。模型只选择 `user/group`，不能伪造 ID。群聊会话会被多个成员复用，因此会话管理器在既有的每会话锁内、每次发送前把上下文切换到当前成员；工具调用期间该身份不会并发变化。这避免了把用户记忆固定到群内首位发言者，也避免了跨会话的全局上下文串线。
 
-SDK 原生 memory 不开启。它只暴露启用开关，应用层无法为其声明或验证本项目的用户/群访问边界；同时启用两套记忆也会造成重复和不一致。
+SDK 原生记忆不使用。Agents SDK 的 `extensions/memory` 只是会话历史后端，sandbox `Memory()` 是面向工作流的文件式经验记忆，两者均无法声明或验证本项目的用户/群访问边界；同时启用两套记忆也会造成重复和不一致。
+
+已知问题与后续方向（不在当前范围）：生产中模型很少主动调用 `save_memory`。可考虑被动注入（发送前按相关性预检索记忆并入上下文），或参考 SDK sandbox Memory 的两阶段机制（会话提取+合并固化）异步生成候选事实。
 
 ## 调用引导
 

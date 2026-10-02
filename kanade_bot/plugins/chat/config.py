@@ -1,11 +1,17 @@
 from pathlib import Path
 from typing import Literal
 
+from agents.sandbox.manifest import Environment
 from nonebot import get_plugin_config, require
 from pydantic import BaseModel, PositiveInt
 
 from kanade_bot.utils.common import PlatformType
-from kanade_bot.utils.schema import AttrDocModel, BaseAgentConfig, ConfigRegistry, generate_schema
+from kanade_bot.utils.schema import (
+    AttrDocModel,
+    BaseAgentConfig,
+    ConfigRegistry,
+    generate_schema,
+)
 
 require("nonebot_plugin_localstore")
 
@@ -105,6 +111,60 @@ class TTSConfig(AttrDocModel):
     """TTS使用的声音类型，不配置则使用服务端默认模型"""
 
 
+class SessionConfig(AttrDocModel):
+    """会话历史存储配置"""
+
+    db_file: str = "agent_sessions.sqlite3"
+    """会话历史SQLite数据库文件名，位于插件数据目录"""
+
+    compaction_window_size: PositiveInt = 80
+    """读时压缩滑动窗口大小（items数，含工具调用对）
+
+    每轮对话约产生2-8个items（user+工具调用对+assistant）；
+    窗口外的items不再发送给模型，但仍保留在数据库中。"""
+
+    @property
+    def session_db_file_path(self) -> Path:
+        return get_plugin_data_file(self.db_file)
+
+
+class SandboxConfig(AttrDocModel):
+    """Docker沙箱配置"""
+
+    enabled: bool = False
+    """是否启用Docker沙箱（文件与shell能力）"""
+
+    image: str = "python:3.14-slim"
+    """沙箱容器镜像"""
+
+    environment: Environment = Environment()
+    """沙箱容器环境变量，注入到每个会话容器
+
+    注意：环境变量对容器内所有进程可见，不要在此存放敏感密钥"""
+
+    mem_limit: str = "256m"
+    """单容器内存上限（docker create的mem_limit）"""
+
+    cpus: float = 1.0
+    """单容器CPU核数上限"""
+
+    max_concurrent_containers: PositiveInt = 4
+    """同时存活的最大容器数，超出后LRU销毁（销毁前快照保留工作区）"""
+
+    idle_timeout_minutes: PositiveInt = 30
+    """空闲容器回收阈值（分钟），超时后销毁并快照"""
+
+    sweeper_interval_minutes: PositiveInt = 5
+    """后台回收任务扫描间隔（分钟）"""
+
+    snapshot_dir: str = "sandboxes/"
+    """沙箱工作区快照目录名，位于插件缓存目录"""
+
+    @property
+    def snapshot_dir_path(self) -> Path:
+        return get_plugin_cache_file(self.snapshot_dir)
+
+
 class ScopedConfig(AttrDocModel):
     agent: AgentConfig = AgentConfig()
     """聊天Agent配置"""
@@ -118,7 +178,11 @@ class ScopedConfig(AttrDocModel):
     """会话消息缓冲区最大条数，超出后会丢弃最早的消息"""
     session_messages_cache_file: str = "session_messages_cache.json"
     """会话消息缓冲区缓存文件名，位于插件数据目录下"""
+    session: SessionConfig = SessionConfig()
+    """会话历史存储配置"""
 
+    sandbox: SandboxConfig = SandboxConfig()
+    """Docker沙箱配置"""
     image_caption: ImageCaptionConfig | None = None
     """图片转述模型配置，如果为None则不启用图片转述。
 

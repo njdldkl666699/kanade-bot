@@ -7,117 +7,60 @@ nickname: [宵崎奏]
 # 是否启用无头模式，如果为true，则不会启动TUI界面。
 console_headless_mode: true
 
-# Provider配置
-openrouter:
-  type: openai
-  base_url: https://openrouter.ai/api/v1
-  api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxxx
-opencode:
-  type: openai
-  base_url: https://opencode.ai/zen/v1/
-  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
+# Provider配置（OpenAI兼容端点）
 siliconflow:
-  type: openai
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 agnes-ai: &agnes-ai
-  type: openai
   base_url: https://api.agnes-ai.cn/v1
   api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 sensenova: &sensenova
-  type: openai
   base_url: https://token.sensenova.cn/v1/
   api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxx
+deepseek: &deepseek
+  base_url: https://api.deepseek.com
+  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
 
 # 模型配置
-agnes-3.0-flash: &agnes-3-0-flash
-  model: agnes-3.0-flash
-  provider: *agnes-ai
-  reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 524288
-      max_output_tokens: 65536
+deepseek-official: &deepseek-official
+  model: deepseek-chat
+  provider: *deepseek
+  max_output_tokens: 8192
 
-sensenova-deepseek-flash: &sensenova-deepseek-flash
-  model: deepseek-flash
-  provider: *sensenova
-  reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 1048576
-      max_output_tokens: 393216
-
-sensenova-6.8-flash-lite: &sensenova-6-8-flash-lite
+sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
   model: sensenova-6.8-flash-lite
   provider: *sensenova
   reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 262144
-      max_output_tokens: 65536
-
-op-deepseek-flash: &op-deepseek-flash
-  model: deepseek-flash
-  provider:
-    type: openai
-    base_url: http://localhost:39211/v1
-  reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 1048576
-      max_output_tokens: 393216
+  vision: true
+  max_output_tokens: 65536
 
 chat:
   agent:
-    <<: *op-deepseek-flash
-    # 禁用内置GitHub MCP（BYOK会话默认注入其18个工具，约占请求体28KB）
-    disabled_mcp_servers:
-      - github-mcp-server
+    <<: *deepseek-official
     mcp_servers:
       tavily:
-        type: http
-        tools: ["*"]
         url: https://mcp.tavily.com/mcp
         headers:
           Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
       anysearch:
-        type: http
-        tools: ["*"]
         url: https://api.anysearch.com/mcp
-    # bash类工具仍建议排除（shell路径校验是启发式的，存在绕过风险）；
-    # 文件编辑/查找工具（create/edit/view/glob/grep）已由权限处理器限制在
-    # 工作目录、allowed_edit_directories与系统临时目录内，可按需启用
-    excluded_tools:
-      - bash
-      - list_bash
-      - read_bash
-      - stop_bash
-      - write_bash
-      - list_agents
-      - read_agent
-      - task
-      - write_agent
-      - ask_user
-      - skill
-    # 文件访问额外允许的目录（工作目录与系统临时目录始终允许）
-    # additional_directories:
-    #   - ~/Projects/Python/kanade-bot/cache/kanade_images
+  # 文件能力与shell由Docker沙箱提供（TTL/LRU自动回收，见sandbox段）
+  sandbox:
+    enabled: true
+    image: python:3.14-slim
+    # 容器环境变量（对容器内所有进程可见，勿存放敏感密钥）
+    environment:
+      value:
+        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    mem_limit: 256m
+    cpus: 1.0
+    max_concurrent_containers: 4
+    idle_timeout_minutes: 30
+    sweeper_interval_minutes: 5
+    snapshot_dir: sandboxes/
+  # 图片转述模型（主模型不支持视觉时用于图片兑底）
   # image_caption:
   #   <<: *sensenova-6-8-flash-lite
-  #   available_tools: []
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
@@ -135,8 +78,7 @@ help:
     `Message`: {message}
 
 summary:
-  <<: *op-deepseek-flash
-  available_tools: []
+  <<: *deepseek-official
 
 tool:
   sensenova_api_key: *sensenova-api_key

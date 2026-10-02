@@ -1,0 +1,7 @@
+- [ ] 抄LLM压缩会话（调研Copilot和Codex）
+- [x] 审查chat模块代码
+- [ ] 更新README
+- [ ] 更新help文档和提示词
+- [ ] 定时任务（system_reminder实现）
+- [ ] 记忆系统升级，被动注入
+- [ ] 移除`openai-proxy`
