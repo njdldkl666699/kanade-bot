@@ -224,9 +224,14 @@ class ChatSessionManager:
         prompt += f"\n* Operationg System: {platform.system()}\n"
 
         if ctx_wrapper.context.sandbox is not None:
+            workspace_root = ctx_wrapper.context.sandbox_root
             prompt += (
-                "\n* 你有一个Linux沙箱工作区（Docker容器），可用exec_command执行shell命令\n"
-                "  （文件读写与编辑用 cat/echo/sed，下载用curl，建目录用mkdir 等）；\n"
+                f"\n* 你有一个Linux沙箱工作区（mirage虚拟文件系统，"
+                f"由Landlock沙箱约束），可用exec_command执行shell命令。\n"
+                f"  工作区根目录（绝对路径）：{workspace_root}\n"
+                "  当前工作目录即为工作区根，文件读写与编辑用 cat/echo/sed，"
+                "下载用curl，建目录用mkdir 等；\n"
+                "  curl 请用 -s/-L/-o <文件>，**不要用 -m 或 -k**（内置curl暂不支持）；\n"
                 "  工作区文件在会话间持久保留，发送给用户的文件/图片请用\n"
                 "  send_file/send_image 工具从工作区发送。\n"
             )
@@ -377,14 +382,17 @@ class ChatSessionManager:
 
             # 沙箱启用时获取（惰性创建）会话沙箱
             sandbox_session = None
+            sandbox_root = None
             if self._sandbox_manager is not None:
                 sandbox_session = await self._sandbox_manager.acquire(session_id)
+                sandbox_root = self._sandbox_manager.workspace_root(session_id)
 
             context = ChatContext(
                 session_info=session_info,
                 bot_id=bot_id,
                 memory_context=memory_context,
                 sandbox=sandbox_session,
+                sandbox_root=sandbox_root,
             )
 
             session = self._get_session(session_id)
@@ -541,9 +549,9 @@ class ChatSessionManager:
                     logger.warning(f"清空会话{session_id}历史时发生错误: {e}")
 
             if self._sandbox_manager is not None:
-                # 不保留快照：重置即彻底清除工作区
-                await self._sandbox_manager.destroy(session_id, keep_snapshot=False)
-                self._sandbox_manager.delete_snapshot(session_id)
+                # 不保留工作区：重置即彻底清除沙箱文件
+                await self._sandbox_manager.destroy(session_id)
+                self._sandbox_manager.delete_workspace(session_id)
 
     async def interrupt_session_turn(self, session_id: str) -> bool | None:
         """手动中断会话当前正在运行的回复，不影响后续消息

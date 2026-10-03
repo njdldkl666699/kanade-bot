@@ -8,7 +8,7 @@
 
 ## 简介
 
-宵崎奏Bot是一个基于NoneBot2框架的机器人，集成了Copilot SDK来提供聊天功能，并提供一些有趣的功能命令。同时支持Console和OneBot v11适配器，方便在不同环境中使用。
+宵崎奏Bot是一个基于[NoneBot2](https://nonebot.dev/)框架的机器人，使用[OpenAI Agents SDK](https://openai.github.io/openai-agents-python/zh/)开发聊天Agent，并提供一些有趣的功能命令。同时支持Console和OneBot v11适配器，方便在不同环境中使用。
 
 ## 部署
 
@@ -24,6 +24,36 @@
 ```bash
 uv sync --with rag
 ```
+
+### 沙箱（可选）
+
+聊天Agent的文件与shell能力由 [mirage](https://github.com/strukto-ai/mirage) 沙箱提供。启用方式：
+
+```yaml
+# config-{环境}.yaml
+sandbox:
+  enabled: true
+```
+
+启用前需安装 **sandlock** CLI（用于以 Landlock + seccomp 约束沙箱里的 native 进程，
+要求 Linux 6.12+）：
+
+```bash
+# 从 https://github.com/multikernel/sandlock/releases 下载对应架构的二进制
+curl -fsSL -o sandlock.tar.gz \
+  https://github.com/multikernel/sandlock/releases/download/v0.8.9/sandlock-x86_64-unknown-linux-gnu.tar.gz
+tar xzf sandlock.tar.gz && sudo install -m755 sandlock /usr/local/bin/
+sandlock --version
+```
+
+sandlock 缺失时机器人会在启动阶段直接报错并提示，不会静默降级；临时不用沙箱可把
+`sandbox.enabled` 设为 `false`。
+
+沙箱工作区位于插件缓存目录的 `sandboxes/<会话ID>/`，每个会话独立，文件在会话间保留。
+Python 由宿主CPython执行并受Landlock约束，只能访问自己的工作区。
+
+已知限制：内置 `curl` 的 `-m`（超时）与 `-k`（忽略证书）参数暂不支持，会返回
+退出码 7；请使用 `-s` / `-L` / `-o <文件>`。
 
 ### 配置
 
@@ -69,21 +99,6 @@ Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pul
 
 1. 检查你的终端模拟器是否支持True Color（24-bit颜色）。如果不支持，可能会导致颜色显示异常。
 2. 如果在Windows Terminal中显示不正确，请检查对应配置文件-外观-自动调整无法区分的文本的亮度的设置；如果为“始终”，改为其他选项即可正常显示。
-
-### 程序长久不启动，或运行到`COPILOT_CLIENT = CopilotClient()`时报错
-
-1. 检查网络连接是否正常，确保可以访问GitHub Releases；
-2. 参考如下环境变量配置，在启动程序时或为终端设置环境变量：
-   ```bash
-   # Copilot SDK 的 CLI 路径，如果为空，则会下载CLI
-   COPILOT_CLI_PATH=
-   # Override the cache directory (binary placed directly here).
-   COPILOT_CLI_EXTRACT_DIR=
-   # Set to "1" or "true" to disable auto-download.
-   COPILOT_SKIP_CLI_DOWNLOAD=
-   # Override the GitHub Releases base URL.
-   COPILOT_CLI_DOWNLOAD_BASE_URL="https://gh-proxy.com/https://github.com/github/copilot-cli/releases/download"
-   ```
 
 ### Failed to build `lxml==x.x.x`
 

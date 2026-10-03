@@ -1,7 +1,9 @@
 # chat / summary 迁移到 OpenAI Agents SDK 计划
 
-> 目标版本:`openai-agents` **0.22.3**（源码见 `cache/openai-agents-python`）
-> 已确认决策：全量迁移（chat 主 agent + summary 总结器 + image_caption 图片转述）；**直接替换**，不做双引擎开关；会话后端用**内置 `SQLiteSession`**；文件能力走 **Docker 沙箱**（开放网络、TTL+LRU+资源限额）；**移除 openai-proxy**，chat 链路直连上游；会话压缩直接使用 **`openai-agents-context-compaction`**（读时滑动窗口，评估结论见 1.2）；上游已换 **deepseek 官方 API**，429 无需特殊处理；**配置文件结构允许重构，无需兼容旧配置**。
+> 目标版本:`openai-agents` **0.22.3**（源码见 `cache/openai-agents-python`）；沙箱运行时 `mirage-ai` **git main**（monorepo，源码见 `cache/mirage`，依赖需 `#subdirectory=python`）
+> 已确认决策：全量迁移（chat 主 agent + summary 总结器 + image_caption 图片转述）；**直接替换**，不做双引擎开关；会话后端用**内置 `SQLiteSession`**；文件能力走 **mirage 沙箱**（进程内虚拟文件系统 + sandlock 约束的宿主进程，**取代 Docker**，见 1.4）；**移除 openai-proxy**，chat 链路直连上游；会话压缩直接使用 **`openai-agents-context-compaction`**（读时滑动窗口，评估结论见 1.2）；上游已换 **deepseek 官方 API**，429 无需特殊处理；**配置文件结构允许重构，无需兼容旧配置**。
+>
+> **沙箱方案变更（2026-10-03，已实测验证）**：原计划的 Docker 沙箱替换为 mirage。每会话内存从"每容器数 MB~数十 MB"降到 **约 0.1MB**（5 会话实测：140.3MB → 144.7MB），去掉 docker daemon 依赖与容器冷启动。已知代价与缺陷见 1.4 末尾「实测结论与已知限制」。
 
 ---
 
@@ -24,8 +26,8 @@
 | 附件（图片）                      | `Attachment` TypedDict                                          | user content 内 `input_image`（data URL）                                                                                                   |
 | 工具注册                          | `define_tool` + pydantic params                                 | `@function_tool`（或 `agents.decorators.tool`）                                                                                             |
 | 动态工具上下文                    | 闭包持有 `SessionInfo`/`bot_id`，每次发送重建工具               | `RunContextWrapper[ChatContext]`，Agent/工具静态化（推荐）                                                                                  |
-| 文件工具                          | Copilot 内置 create/edit/view/glob/grep + PathPolicy 审批       | Docker 沙箱：`Shell(exec_command/write_stdin)` + `Filesystem(view_image/apply_patch)`                                                       |
-| 权限审批                          | `make_fs_permission_handler`（PathPolicy）                      | 删除；边界=容器；宿主工具自身只碰沙箱工作区                                                                                                 |
+| 文件工具                          | Copilot 内置 create/edit/view/glob/grep + PathPolicy 审批       | mirage 沙箱：`Shell(exec_command/write_stdin)`；文件编辑走 shell（见 1.4）                                                                  |
+| 权限审批                          | `make_fs_permission_handler`（PathPolicy）                      | 删除；边界=sandlock（Landlock/seccomp）+ mirage VFS 作用域；宿主工具自身只碰沙箱工作区                                                      |
 | MCP                               | `mcp_servers` YAML → Copilot 运行时管理                         | `MCPServerStreamableHttp`（tavily / anysearch 直接映射）                                                                                    |
 | GitHub MCP 注入                   | `disabled_mcp_servers` 规避                                     | 不存在该问题，配置删除                                                                                                                      |
 | 主动记忆                          | 自研 SQLite MemoryStore + 3 工具                                | **原样保留**（仅工具注册方式更换；SDK session/sandbox-memory 均不满足作用域隔离需求，维持 MEMORY_DESIGN.md 结论）                           |
@@ -97,36 +99,84 @@ BaseAgentConfig (YAML) ──► get_model(cfg) ──► OpenAIChatCompletionsM
   - 发送层转换为 user content：`[{"type":"input_image","image_url":"data:<mime>;base64,..."}]`；
   - `model_capabilities.supports.vision=False` 时走 `image_caption` 兜底（逻辑保留，见 1.7）。
 
-### 1.4 Docker 沙箱层（新 `chat/agent/sandbox.py`）
+### 1.4 mirage 沙箱层（重写 `chat/agent/sandbox.py`）
 
-**客户端**（子类注入资源限额——SDK 的 `DockerSandboxClientOptions` 只有 `image/exposed_ports/network_mode/labels`，无资源限制）：
+**为什么换掉 Docker**：`mirage`（[strukto-ai/mirage](https://github.com/strukto-ai/mirage)）把「文件系统 + shell + 运行时」做进 bot 进程，配合 sandlock（Landlock + seccomp）约束 native 进程，不需要容器。实测每会话内存 **≈0.1MB**（Docker 为数 MB~数十 MB/容器），且无 docker daemon 依赖、无冷启动。
 
-```python
-class KanadeDockerClient(DockerSandboxClient):
-    async def _create_container(self, image, **kw):
-        container = await super()._create_container(image, **kw)   # 视实现改为前后插桩
-        # 或直接在 create_kwargs 注入后调用 docker API：
-        # mem_limit / nano_cpus / pids_limit
+**架构**（每个聊天会话一套）：
+
+```
+聊天会话 ── SandboxManager ── MirageSandboxClient ── Workspace
+                                                     ├─ /<abs_host_dir> → DiskResource  (MountMode.EXEC)
+                                                     └─ runtimes=[SandlockRuntime(python3)]
 ```
 
-- 实施时优先选择"覆写 `_create_container` 在 `containers.create(**kwargs)` 前注入 `mem_limit`/`nano_cpus`/`pids_limit`"（复制父类方法体改 kwargs，或调用 docker API 更新容器资源限制）；
-- `labels={"kanade-bot":"chat-sandbox"}`：固定标签，用于运维识别与孤儿容器清理；
-- `image` 可配，默认 `python:3.14-slim`（`DEFAULT_PYTHON_SANDBOX_IMAGE`）；**网络开放**（默认行为，不设 `network_mode`）；
-- 默认参数（全部进配置）：`mem_limit=256m`、`cpus=1.0`、`pids_limit=256`。
+**版本**：`mirage-ai` 走 **git main**（`git+https://github.com/strukto-ai/mirage.git@main#subdirectory=python`，monorepo 需 `#subdirectory=python`）。**不用 PyPI 版**：PyPI `0.0.6`/`0.0.7a2` 落后 main 约 1800 个 commit，有 3 个会直接影响本项目的缺陷（见下方实测表）。
+
+**免 FUSE 的关键设计**：把 `DiskResource` 的**虚拟挂载前缀设为它自己的宿主 `realpath`**：
+
+```python
+workspace_dir = (snapshot_root / safe_name(session_id)).resolve()   # 必须 realpath
+ws = Workspace(
+    {str(workspace_dir): (DiskResource(str(workspace_dir)), MountMode.EXEC)},
+    mode=MountMode.EXEC,
+    runtimes=[SandlockRuntime(captures=("python3",), config={...})],
+)
+```
+
+这样虚拟路径 == 真实路径，sandlock 拉起的 native 进程能直接看到真实文件——**不需要 FUSE / fuse3 / mfusepy**（mirage 文档称 "Skip the FUSE"）。配套要求：**目录必须 `os.path.realpath()`**（`/tmp` 是 symlink，不解析会导致写进 workspace overlay 而宿主目录为空）。
 
 **SandboxManager（应用层池）**：
 
-- `dict[chat_session_id → ManagedSandbox(sandbox_session, last_used_at)]`；
-- `acquire(session_id)`（会话锁内调用）：存在且 running → 刷新时间戳返回；否则 `client.create(manifest=空, snapshot=LocalSnapshotSpec(cache/chat/sandboxes/<id>.tar))` 从快照恢复工作区；
-- **后台 sweeper**（5min 周期）：空闲 > 30min → stop（销毁容器，`_persist_snapshot` 保留工作区）；存活数 > 4 → LRU 同样处理；
-- bot shutdown：全部销毁（snapshot 留存，下次恢复）；bot startup：按 label 清理上次 crash 遗留的孤儿容器；
-- `reset_session`：销毁 + 删 snapshot 文件。
+- `dict[chat_session_id → ManagedSandbox(workspace, client, session, last_used)]`；
+- `acquire(session_id)`：存在且存活 → 刷新时间戳返回；否则新建 Workspace + client + session；
+- **回收策略沿用**：后台 sweeper 空闲 > `idle_timeout_minutes` → `close()`；存活数 > `max_concurrent_sandboxes` → LRU；
+- **不再需要快照 tar**：DiskVFS 直接落宿主目录，销毁 workspace 不丢文件 → 删除 `LocalSnapshot` 与 `snapshot_dir` 的 tar 逻辑（`delete_snapshot` 改为删除目录）；
+- bot shutdown：全部 `close()`；**不再需要孤儿容器清理**（进程内无残留）；
+- `reset_session`：`close()` + 删工作区目录。
+
+**sandlock 配置**（`SandlockRuntime`）：
+
+```python
+SandlockRuntime(
+    captures=("python3",),          # 只委派 python3，mirage 内置命令仍走 VFS
+    config={
+        "fs_readable": (str(workspace_dir),),
+        "fs_writable": (str(workspace_dir),),
+        "max_memory": "512M",
+        "env": {"PATH": "/usr/local/bin:/usr/bin:/bin"},
+    },
+)
+```
+
+- **不捕获 `@external`**：让 mirage 内置的 `cat/grep/ls/echo/sed/find/curl` 走 VFS（相对路径正常）；只把 `python3` 委派给宿主 CPython；
+- `max_memory` 替代原 `mem_limit`（实测生效：256M 下 1.5GB 分配失败）；
+- **CLI 缺失时启动即报错**（不做自动回退），部署步骤写入文档；
+- 需要 Linux 6.12+（Landlock ABI v6）；本机 kernel 7.0 已验证可用。
+
+**无需兼容层**：main 已原生修复下述三处路径缺陷，直接用上游 `MirageSandboxClient` / `MirageSandboxSession` 即可，不需要任何子类或 monkeypatch。
 
 **Agent 形态**：
 
-- 迁移为 `SandboxAgent`：`base_instructions=完整 Kanade 提示词 + 沙箱使用说明段`（替换 SDK 默认 coding-agent 向的 sandbox prompt；capability 片段与文件树仍会自动追加）；`capabilities=[Shell(), Filesystem()]`；
-- 每次发送 `RunConfig(sandbox=SandboxRunConfig(session=acquire(...)), session_settings=...)`；
-- 注意 SandboxAgent 为 beta（风险 R2），实施时以 0.22.3 源码为准核对 `base_instructions`/`instructions` 组装顺序。
+- 保持 `SandboxAgent` + `capabilities=[Shell()]`（`Filesystem` 的 `apply_patch` 是 FREEFORM/grammar，仅 Responses API 支持，Chat Completions 下不可用——沿用现有结论）；
+- main 版提供 `MirageCapability`，可把工作区挂载信息写进模型指令（当前提示词已手写工作区根路径，按需再引入）；
+- 每次发送 `RunConfig(sandbox=SandboxRunConfig(session=acquire(...)))`。
+
+#### 实测结论与已知限制（2026-10-03，全部经 `.venv` 实跑验证）
+
+| 项           | 结论                                                                                                                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 每会话内存   | 5 会话并发：baseline 140.3MB → 144.7MB，**≈0.1MB/会话**                                                                                                                                                       |
+| `MountMode`  | **必须 `EXEC`**；用 `WRITE` 时 `python3` 报 `not in EXEC mode`（exit 126）                                                                                                                                    |
+| git 依赖     | `#subdirectory=python` 必填；安装需代理（`git config --global http.proxy`）                                                                                                                                   |
+| 版本差异     | PyPI `0.0.6`/`0.0.7a2` 用 `mirage.resource.disk.DiskResource`、`ws.execute(...)`、`mirage.runtime.python.sandlock`；**main 用 `mirage.vfs.disk.DiskVFS`、`ws.shell(...)`、`mirage.runtime.sandbox.sandlock`** |
+| sandlock cwd | **main 已修复**：`os.getcwd()` 返回工作区，相对路径可用 → 原 R8 风险消除，提示词无需强制绝对路径                                                                                                              |
+| 隔离有效性   | 未授权路径读写全部被拒（`No such file`）、secret 内容未变、`max_memory` 生效                                                                                                                                  |
+| 内置 curl    | `-s`/`-L`/`-o file` 正常；**`-m <秒>`/`-k` 被误当端口 → exit 7**（已知限制，不修）                                                                                                                            |
+| 快照 tar     | 不再需要（DiskVFS 落宿主目录）                                                                                                                                                                                |
+| 会话隔离     | mirage 会话共享底层 VFS、隔离 shell 状态；**用户间文件隔离靠「每聊天会话一个 Workspace」**                                                                                                                    |
+
+**降级路径**：若 sandlock CLI 缺失或 Landlock 不可用，把 `captures` 置空即退回 mirage 内置 runtime（`python3` 需 `mirage-ai[monty]`，能力有缺口）。
 
 ### 1.5 工具层（`tool.py` 改造，`@function_tool`）
 
@@ -158,14 +208,14 @@ class KanadeDockerClient(DockerSandboxClient):
 
 配置结构**允许重构、无需兼容旧配置**——借迁移之机把 Copilot 概念残留一并清理，直接设计新结构：
 
-- `pyproject.toml`：`- github-copilot-sdk`，`+ openai-agents[docker]`、`+ openai-agents-context-compaction`（可选 `[tiktoken]` extra）；
+- `pyproject.toml`：`- github-copilot-sdk`、`- openai-agents[docker]`、`+ openai-agents`、`+ mirage-ai`（git main，`#subdirectory=python`）、`+ openai-agents-context-compaction`（可选 `[tiktoken]` extra）；不再需要 `docker-py`；
 - `utils/schema.py`：`BaseAgentConfig` 重构（不必保留旧字段名）——
   - 保留：`model`、`provider`（`base_url`/`api_key`）、`reasoning_effort`、`model_capabilities`（`vision` 标志供附件兜底判断；`limits` 供窗口大小参考）、`system_prompt_file`、`mcp_servers`；
   - 删除：`available_tools`/`excluded_tools`/`disabled_mcp_servers`/`additional_directories`、`model_dump_session_config()`；
   - 新增：`to_model_settings()` / `to_model()` helper（供 1.1 模型层使用）；
 - `config.yaml` / `config-example.yaml` 重写 chat 段：
   - provider 全部直连（指向 openai-proxy 的锚点如 `op-deepseek-flash` 改 deepseek 官方 API）；
-  - 新增 `chat.sandbox` 段：`image / mem_limit / cpus / pids_limit / max_concurrent_containers / idle_timeout_minutes / snapshot_dir`；
+  - 新增 `chat.sandbox` 段：`enabled / max_concurrent_sandboxes / idle_timeout_minutes / sweeper_interval_minutes / workspace_dir / memory_limit / environment`（**删除** `image`/`mem_limit`/`cpus`/`max_concurrent_containers`/`snapshot_dir`，命名改为 `*_sandboxes` 以贴合新语义）；
   - 新增 `chat.session` 段：`db_file / compaction_window_size / compaction_token_budget(可选)`；
   - 删除 `disabled_mcp_servers`、`excluded_tools`、`additional_directories`；
 - 重新生成 `schemas/*.json`。
@@ -189,12 +239,15 @@ class KanadeDockerClient(DockerSandboxClient):
    **验证**：多轮对话、重启后会话恢复、reset、缓冲区攒消息、系统通知、图片输入、群身份切换、600s 超时取消、空响应自动重试。
    （此阶段 `send_file/send_image/render_html_image` 暂不可用——依赖阶段三的沙箱。）
 
-### 阶段三：Docker 沙箱
-1. `KanadeDockerClient`（资源限额注入）+ `SandboxManager`（TTL/LRU/sweeper/孤儿清理）；
-2. Agent → `SandboxAgent`，系统提示词组装调整；
-3. `send_file/send_image`（files API 读沙箱）、`render_html_image`（宿主渲染 → 写沙箱）改造；
-4. 删除 `download_file/create_directory/permissions.py`。
-   **验证**：`docker stats` 确认 mem_limit/cpus；空闲回收与重建恢复工作区；LRU 上限；render→沙箱→send 全链路；reset 清容器+快照。
+### 阶段三：mirage 沙箱
+1. `pyproject.toml` 换依赖（去 `[docker]`，加 `mirage-ai` git main）；
+2. 重写 `chat/agent/sandbox.py`：`_exec_internal` cwd 兼容层 + `Workspace`/`MirageSandboxClient` 封装 + `SandboxManager`（TTL/LRU/sweeper，DiskVFS 落宿主目录，免 FUSE）；
+3. Agent → `SandboxAgent`（维持 `capabilities=[Shell()]`），系统提示词注入工作区绝对路径；
+4. `send_file/send_image`（读沙箱）、`render_html_image`（宿主渲染 → 写沙箱）改造；
+5. 删除 `download_file/create_directory/permissions.py`。
+   **验证**：内存占用对比（预期 ≈0.1MB/会话）；sandlock 隔离（未授权路径读写被拒、`max_memory` 生效）；`python3` 读写工作区文件；render→沙箱→send 全链路；reset 清目录；TTL/LRU 回收后文件仍在。
+
+> **部署前置**：需先安装 `sandlock` CLI 到 `PATH`（Linux 6.12+；本机 kernel 7.0 已验证）。缺失时 bot 启动直接报错，步骤见 README。
 
 ### 阶段四：治理与清理
 1. compact 存储清理版 SUPERUSER 命令（物理删除窗口外 items，见 1.2）+ `matcher.py`/`handler.py` 适配；
@@ -211,8 +264,13 @@ class KanadeDockerClient(DockerSandboxClient):
 | R2  | **SandboxAgent beta**：0.22.3 的 sandbox API（`base_instructions`/capabilities/session state）可能在后续版本变动                               | 沙箱层集中封装在 `sandbox.py` 单文件；升级 SDK 时对照 changelog                                                                                    |
 | R3  | **流式"多条消息"语义差异**：copilot 按 AssistantMessageData 分条（工具调用间穿插文本），SDK 按 message item；deepseek-flash 的穿插行为可能不同 | 按 message item 聚合产出，`chat.py` 的分段发送逻辑（按空行/代码块拆）不变，UX 差异实测后微调                                                       |
 | R4  | **`pop_item` 回退**与 SDK 写入顺序的耦合（空响应重试用）                                                                                       | 回退长度 = run 前后 `get_items()` 差集，只在会话锁内操作；端到端测试覆盖（可参考 `tests/copilot_sdk/test_final_channel.py` 的 mock 思路重写）      |
-| R5  | 容器冷启动延迟（首次 create + snapshot 恢复，秒级）                                                                                            | 仅影响空闲回收后的首条消息；可接受                                                                                                                 |
-| R6  | Docker 资源限额注入依赖覆写私有方法 `_create_container`                                                                                        | 升级 SDK 时回归 `docker stats`；失败则退化为 docker daemon 级默认限制                                                                              |
+| R5  | ~~容器冷启动延迟~~ mirage 为进程内 workspace，**无冷启动**（原 Docker 风险已消除）                                                             | —                                                                                                                                                  |
+| R6  | ~~Docker 资源限额注入依赖覆写私有方法~~ 改为 sandlock `max_memory`（实测生效）                                                                 | —                                                                                                                                                  |
+| R7  | ~~mirage PyPI 版路径缺陷~~ **已消除**：改用 git main，3 处缺陷均已上游修复                                                                     | 保持 git 依赖；升级时回归 1.4「实测结论」表                                                                                                        |
+| R8  | ~~sandlock 子进程 cwd 异常~~ **已消除**：main 已修复，相对路径可用                                                                             | 提示词仅需给出工作区根路径供模型参考                                                                                                               |
+| R9  | **sandlock CLI 为外部依赖**，需 Linux 6.12+（Landlock ABI v6）；缺失则沙箱不可用                                                               | 启动时检查 `shutil.which("sandlock")`，缺失直接报错并提示安装步骤（不做静默回退）；降级路径：`captures` 置空 + `mirage-ai[monty]`                  |
+| R10 | **内置 curl flag 解析缺陷**：`-m <秒>`/`-k` 被误当端口 → exit 7                                                                                | 已知限制，写入文档；提示词引导用 `-s`/`-L`/`-o <file>`；或将来把 `curl` 纳入 sandlock captures 用真二进制                                          |
+| R11 | **git 依赖指向 main（非 tagged release）**：上游变更可能引入不兼容                                                                             | 需代理才能安装（已在 README 写明）；`uv.lock` 锁定具体 commit；升级时跑 `tests/chat/test_mirage_sandbox.py` 回归                                   |
 | O1  | `RunItemStreamEvent` 中 message 级事件的确切类型名、`ViewImageTool` 容器内可用性、MCP 断线重连行为                                             | 实施时核对 `src/agents/stream_events.py` / 实测                                                                                                    |
 
 ## 4. 明确不做
@@ -220,3 +278,6 @@ class KanadeDockerClient(DockerSandboxClient):
 - 不迁移历史 Copilot 会话（SDK items 格式不兼容，全部会话从零开始；summary 的 JSON 消息记录缓存保留）；
 - 不引入 SDK 原生记忆体系（`extensions/memory` 是 session 后端、sandbox `Memory()` 是文件式经验记忆，均无用户/群作用域隔离）；
 - 不做双引擎开关（直接替换，出问题回滚 git）。
+- **不修复 mirage 内置 curl 的 `-m`/`-k` flag 缺陷**（上游问题，走文档约束）；
+- **不引入 FUSE**（用「挂载前缀 = 宿主 realpath」方案免掉 fuse3/mfusepy 依赖）；
+- **不追 PyPI 版 mirage**（落后 main 约 1800 commit 且有 3 处路径缺陷）；统一用 git main。

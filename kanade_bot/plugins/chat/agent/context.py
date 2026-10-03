@@ -30,5 +30,8 @@ class ChatContext:
     sandbox: SandboxSession | None = None
     """当前聊天会话绑定的沙箱会话（启用沙箱时由管理器注入）"""
 
+    sandbox_root: str | None = None
+    """沙箱工作区根的绝对路径，供系统提示词告知模型（sandlock下python3需绝对路径）"""
+
     extra: dict = field(default_factory=dict)
     """扩展数据槽"""

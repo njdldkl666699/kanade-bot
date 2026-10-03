@@ -1,7 +1,10 @@
-- [ ] 抄LLM压缩会话（调研Copilot和Codex）
 - [x] 审查chat模块代码
-- [ ] 更新README
-- [ ] 更新help文档和提示词
+- [x] 更新README
+- [ ] 更新提示词系统（模块化配置）
 - [ ] 定时任务（system_reminder实现）
-- [ ] 记忆系统升级，被动注入
+- [ ] 记忆系统+会话压缩一起设计
 - [ ] 移除`openai-proxy`
+- [x] 内存占用测试
+- [x] 考虑文件编辑工具、shell方案：使用mirage+sandlock
+- [ ] 聊天、总结按Token计费
+- [ ] 卡池更新

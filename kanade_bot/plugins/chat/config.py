@@ -129,40 +129,36 @@ class SessionConfig(AttrDocModel):
 
 
 class SandboxConfig(AttrDocModel):
-    """Docker沙箱配置"""
+    """Mirage沙箱配置"""
 
     enabled: bool = False
-    """是否启用Docker沙箱（文件与shell能力）"""
+    """是否启用沙箱（文件与shell能力）
 
-    image: str = "python:3.14-slim"
-    """沙箱容器镜像"""
+    需要 sandlock CLI 在 PATH 上（Linux 6.12+），详见 README 部署说明"""
 
     environment: Environment = Environment()
-    """沙箱容器环境变量，注入到每个会话容器
+    """沙箱环境变量，注入到每个会话
 
-    注意：环境变量对容器内所有进程可见，不要在此存放敏感密钥"""
+    注意：这些变量对工作区内的所有进程可见，不要在此存放敏感密钥"""
 
-    mem_limit: str = "256m"
-    """单容器内存上限（docker create的mem_limit）"""
+    memory_limit: str = "512M"
+    """sandlock受限子进程的内存上限（仅约束python3等native进程）"""
 
-    cpus: float = 1.0
-    """单容器CPU核数上限"""
-
-    max_concurrent_containers: PositiveInt = 4
-    """同时存活的最大容器数，超出后LRU销毁（销毁前快照保留工作区）"""
+    max_concurrent_sandboxes: PositiveInt = 4
+    """同时存活的最大沙箱数，超出后LRU关闭"""
 
     idle_timeout_minutes: PositiveInt = 30
-    """空闲容器回收阈值（分钟），超时后销毁并快照"""
+    """空闲沙箱回收阈值（分钟），超时后关闭"""
 
     sweeper_interval_minutes: PositiveInt = 5
     """后台回收任务扫描间隔（分钟）"""
 
-    snapshot_dir: str = "sandboxes/"
-    """沙箱工作区快照目录名，位于插件缓存目录"""
+    workspace_dir: str = "sandboxes/"
+    """沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录"""
 
     @property
-    def snapshot_dir_path(self) -> Path:
-        return get_plugin_cache_file(self.snapshot_dir)
+    def workspace_dir_path(self) -> Path:
+        return get_plugin_cache_file(self.workspace_dir)
 
 
 class ScopedConfig(AttrDocModel):
@@ -182,7 +178,7 @@ class ScopedConfig(AttrDocModel):
     """会话历史存储配置"""
 
     sandbox: SandboxConfig = SandboxConfig()
-    """Docker沙箱配置"""
+    """Mirage沙箱配置"""
     image_caption: ImageCaptionConfig | None = None
     """图片转述模型配置，如果为None则不启用图片转述。
 

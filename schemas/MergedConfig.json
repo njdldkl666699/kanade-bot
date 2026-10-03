@@ -605,49 +605,37 @@
       "type": "object"
     },
     "SandboxConfig": {
-      "description": "Docker沙箱配置",
+      "description": "mirage沙箱配置",
       "properties": {
         "enabled": {
           "default": false,
-          "description": "是否启用Docker沙箱（文件与shell能力）",
+          "description": "是否启用沙箱（文件与shell能力）\n\n需要 sandlock CLI 在 PATH 上（Linux 6.12+），详见 README 部署说明",
           "title": "Enabled",
           "type": "boolean"
-        },
-        "image": {
-          "default": "python:3.14-slim",
-          "description": "沙箱容器镜像",
-          "title": "Image",
-          "type": "string"
         },
         "environment": {
           "$ref": "#/$defs/Environment",
           "default": {
             "value": {}
           },
-          "description": "沙箱容器环境变量，注入到每个会话容器\n\n注意：环境变量对容器内所有进程可见，不要在此存放敏感密钥"
+          "description": "沙箱环境变量，注入到每个会话\n\n注意：这些变量对工作区内的所有进程可见，不要在此存放敏感密钥"
         },
-        "mem_limit": {
-          "default": "256m",
-          "description": "单容器内存上限（docker create的mem_limit）",
-          "title": "Mem Limit",
+        "memory_limit": {
+          "default": "512M",
+          "description": "sandlock受限子进程的内存上限（仅约束python3等native进程）",
+          "title": "Memory Limit",
           "type": "string"
         },
-        "cpus": {
-          "default": 1.0,
-          "description": "单容器CPU核数上限",
-          "title": "Cpus",
-          "type": "number"
-        },
-        "max_concurrent_containers": {
+        "max_concurrent_sandboxes": {
           "default": 4,
-          "description": "同时存活的最大容器数，超出后LRU销毁（销毁前快照保留工作区）",
+          "description": "同时存活的最大沙箱数，超出后LRU关闭（工作区目录保留，文件不丢）",
           "exclusiveMinimum": 0,
-          "title": "Max Concurrent Containers",
+          "title": "Max Concurrent Sandboxes",
           "type": "integer"
         },
         "idle_timeout_minutes": {
           "default": 30,
-          "description": "空闲容器回收阈值（分钟），超时后销毁并快照",
+          "description": "空闲沙箱回收阈值（分钟），超时后关闭（工作区目录保留）",
           "exclusiveMinimum": 0,
           "title": "Idle Timeout Minutes",
           "type": "integer"
@@ -659,10 +647,10 @@
           "title": "Sweeper Interval Minutes",
           "type": "integer"
         },
-        "snapshot_dir": {
+        "workspace_dir": {
           "default": "sandboxes/",
-          "description": "沙箱工作区快照目录名，位于插件缓存目录",
-          "title": "Snapshot Dir",
+          "description": "沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录",
+          "title": "Workspace Dir",
           "type": "string"
         }
       },
@@ -871,16 +859,14 @@
           "$ref": "#/$defs/SandboxConfig",
           "default": {
             "enabled": false,
-            "image": "python:3.14-slim",
             "environment": {
               "value": {}
             },
-            "mem_limit": "256m",
-            "cpus": 1.0,
-            "max_concurrent_containers": 4,
+            "memory_limit": "512M",
+            "max_concurrent_sandboxes": 4,
             "idle_timeout_minutes": 30,
             "sweeper_interval_minutes": 5,
-            "snapshot_dir": "sandboxes/"
+            "workspace_dir": "sandboxes/"
           }
         },
         "image_caption": {
@@ -1690,17 +1676,15 @@
           "db_file": "agent_sessions.sqlite3"
         },
         "sandbox": {
-          "cpus": 1.0,
           "enabled": false,
           "environment": {
             "value": {}
           },
           "idle_timeout_minutes": 30,
-          "image": "python:3.14-slim",
-          "max_concurrent_containers": 4,
-          "mem_limit": "256m",
-          "snapshot_dir": "sandboxes/",
-          "sweeper_interval_minutes": 5
+          "max_concurrent_sandboxes": 4,
+          "memory_limit": "512M",
+          "sweeper_interval_minutes": 5,
+          "workspace_dir": "sandboxes/"
         },
         "image_caption": null,
         "rag": {
