@@ -60,7 +60,7 @@ SDK 原生记忆不使用。Agents SDK 的 `extensions/memory` 只是会话历�
 
 ## 配置与运维
 
-- `chat.memory_database_file`：数据库相对插件数据目录的路径。
-- `chat.memory_max_records_per_scope`：每个用户或群的最大记录数。
+- `chat.memory.database_file`：数据库相对插件数据目录的路径。
+- `chat.memory.max_records_per_scope`：每个用户或群的最大记录数。
 
 数据库文件位于现有 `data/chat/memories/` 忽略目录中。备份时复制 SQLite 主文件及可能存在的 `-wal/-shm` 文件，或先停止机器人再复制主文件。

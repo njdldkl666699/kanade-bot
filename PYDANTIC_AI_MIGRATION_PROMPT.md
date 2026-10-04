@@ -24,7 +24,7 @@ Responses（`OpenAIResponsesModel`）做成一等公民的对等模型。
 
 ### 1. 先读官方迁移技能包 —— 最重要
 
-pydantic_ai 包**自带官方迁移技能包**，是维护者视角的权威指引，比任何在线文档都准：
+pydantic_ai 包**自带官方迁移技能包**（暂未安装），是维护者视角的权威指引，比任何在线文档都准：
 
 ```
 .venv/lib/python3.14/site-packages/pydantic_ai/.agents/skills/migrating-openai-agents-sdk-to-pydantic-ai/

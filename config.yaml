@@ -23,16 +23,14 @@ chat:
     system_prompt_file: Kanade-v4.md
     system_prompt_extras:
       kanade_wiki: Kanade-wiki.md
-    mcp_servers:
-      tavily:
-        url: https://mcp.tavily.com/mcp
-      anysearch:
-        url: https://api.anysearch.com/mcp
-  memory_max_records_per_scope: 256
-  session_messages_max_size: 256
   session:
-    db_file: agent_sessions.sqlite3
-    compaction_window_size: 80
+    buffer_max_size: 256
+  compaction:
+    trigger_fraction: 0.8
+    keep_pairs: 3
+    min_clear_tokens: 2000
+  memory:
+    max_records_per_scope: 256
   sandbox:
     enabled: false
   rag:

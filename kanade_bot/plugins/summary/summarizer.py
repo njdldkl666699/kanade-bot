@@ -3,14 +3,10 @@ import json
 from collections import deque
 from typing import ClassVar
 
-from agents import Agent
 from nonebot import get_driver, get_plugin_config, logger
+from pydantic_ai import Agent
 
-from kanade_bot.utils.agents_runtime import (
-    build_model_settings,
-    get_length_tracked_model,
-    run_with_continuation,
-)
+from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 
 from .config import Config
 
@@ -31,7 +27,7 @@ class Summarizer:
     agent: ClassVar[Agent] = Agent(
         name="kanade-bot-summary",
         instructions=system_prompt,
-        model=get_length_tracked_model(cfg),
+        model=get_model(cfg),
         model_settings=build_model_settings(cfg),
     )
 
@@ -98,8 +94,8 @@ class Summarizer:
     ) -> str:
         """生成会话消息总结，返回总结文本
 
-        输出因max_output_tokens截断（finish_reason=length）时，把已生成内容
-        作为助手消息回传并请求继续，拼接为完整总结。
+        输出因max_output_tokens截断（finish_reason=length）时，
+        把已生成内容并入历史并请求继续，拼接为完整总结。
 
         :param session_id: 会话ID
         :param size: 要总结的消息条数，不足则总结全部
@@ -113,7 +109,7 @@ class Summarizer:
         prompt = prefix + "\n\n".join(messages_slice)
 
         return await asyncio.wait_for(
-            run_with_continuation(self.agent, prompt, max_turns=1), timeout=timeout
+            run_with_continuation(self.agent, prompt, max_requests=1), timeout=timeout
         )
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "kanade-bot"
-version = "v6.0.0-beta.2"
+version = "v6.0.0-beta.3"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -22,9 +22,9 @@ dependencies = [
   "nonebot-plugin-whateat-pic>=1.5.9",
   "nonebot-plugin-wordcloud>=0.10.0",
   "nonebot2[fastapi]>=2.5.0",
-  "openai-agents>=0.22.3",
-  "openai-agents-context-compaction[tiktoken]>=0.3.0",
   "picimagesearch>=3.12.11",
+  "pydantic-ai-harness>=0.54",
+  "pydantic-ai-slim[mcp,openai]>=2.54",
   "pypinyin>=0.55.0",
   "pyspellchecker>=0.9.0",
   "python-magic>=0.4.27",

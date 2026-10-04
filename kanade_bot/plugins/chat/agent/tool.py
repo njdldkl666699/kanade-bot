@@ -1,7 +1,8 @@
-"""聊天Agent宿主工具（openai-agents function_tool）。
+"""聊天Agent宿主工具
 
-所有工具通过 `RunContextWrapper[ChatContext]` 获取当前发送者身份、Bot实例
-与沙箱会话，定义本身是静态的、可全局复用。
+所有工具通过 `RunContext[ChatDeps]` 获取当前发送者身份、Bot实例与沙箱会话，
+定义本身是静态的、可全局复用；条件启用（记忆工具、TTS）由 `PrepareTools`
+capability 在每次请求前按 `ctx.deps` 过滤，关闭的工具**完全不进入 schema**。
 
 文件类工具以沙箱工作区为中心：`send_file`/`send_image` 从沙箱读取文件发送
 到聊天平台，`render_html_image` 在宿主侧渲染后把产物写入沙箱工作区；联网
@@ -13,22 +14,24 @@ import io
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import magic
-from agents import FunctionTool, RunContextWrapper, function_tool
-from agents.tool import ToolOutputImage, ToolOutputText
 from httpx import AsyncClient, HTTPError
 from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from PicImageSearch import BaiDu
 from pydantic import Field
+from pydantic_ai import RunContext
+from pydantic_ai.messages import BinaryContent
+from pydantic_ai.tools import ToolDefinition
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
 
 from ..config import cfg, chat_configs
-from .context import ChatContext
+from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryScopeType
 
@@ -38,18 +41,18 @@ from nonebot_plugin_htmlrender import html_to_pic
 agent_cfg = cfg.agent
 
 
-def _get_sandbox(ctx: RunContextWrapper[ChatContext]):
+def _get_sandbox(ctx: RunContext[ChatDeps]):
     """获取当前会话的沙箱，未启用时返回None"""
-    return ctx.context.sandbox
+    return ctx.deps.sandbox
 
 
-async def _send_onebot_message(ctx: RunContextWrapper[ChatContext], message: Message) -> str | None:
+async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> str | None:
     """向当前会话发送OneBot消息，返回错误信息（None表示成功）"""
-    info = ctx.context.session_info
+    info = ctx.deps.session_info
     try:
-        bot = get_bot(ctx.context.bot_id)
+        bot = get_bot(ctx.deps.bot_id)
     except (KeyError, ValueError):
-        logger.error("无法获取Bot实例，bot_id: {}", ctx.context.bot_id)
+        logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
         return "无法获取Bot实例，无法发送消息。"
     if not isinstance(bot, Bot):
         return "当前类型的Bot不支持发送此类消息。"
@@ -63,14 +66,32 @@ async def _send_onebot_message(ctx: RunContextWrapper[ChatContext], message: Mes
     return None
 
 
-@function_tool
-def list_memes() -> dict[str, str | None]:
+async def prepare_tools(ctx: RunContext[ChatDeps], tool_defs: list[ToolDefinition]):
+    """按运行期状态过滤工具定义
+
+    关闭的工具直接从 schema 中移除，模型完全看不到，不浪费 token。
+    与压缩 capability 的注册顺序见 manager（必须压缩在前、工具过滤在后）。
+    """
+    disabled: set[str] = set()
+
+    memory_context = ctx.deps.memory_context
+    if memory_context is None or not memory_context.scopes():
+        disabled.update({"save_memory", "recall_memory", "forget_memory"})
+
+    if not tts_client.base_url:
+        disabled.add("send_voice")
+
+    if not disabled:
+        return tool_defs
+    return [t for t in tool_defs if t.name not in disabled]
+
+
+async def list_memes() -> dict[str, str | None]:
     """列出当前可用的表情包字典，键为表情包名称，值为表情包描述。"""
     return chat_configs.instance.memes
 
 
-@function_tool
-async def view_image(ctx: RunContextWrapper[ChatContext], url: str) -> str | list:
+async def view_image(ctx: RunContext[ChatDeps], url: str) -> str | list[str | BinaryContent]:
     """查看一张图片，返回图片内容供视觉理解。
 
     Args:
@@ -107,19 +128,13 @@ async def view_image(ctx: RunContextWrapper[ChatContext], url: str) -> str | lis
         return "当前模型不支持视觉输入，且未配置图片转述模型，无法查看图片。"
 
     return [
-        ToolOutputText(text="图片查看结果"),
-        ToolOutputImage(image_url=f"data:{mime_type};base64,{data}"),
+        "图片查看结果",
+        BinaryContent(data=base64.b64decode(data), media_type=mime_type),
     ]
 
 
-def _memory_enabled(ctx: RunContextWrapper[ChatContext], _agent) -> bool:
-    memory_context = ctx.context.memory_context
-    return memory_context is not None and bool(memory_context.scopes())
-
-
-@function_tool(is_enabled=_memory_enabled)
 async def save_memory(
-    ctx: RunContextWrapper[ChatContext],
+    ctx: RunContext[ChatDeps],
     scope: MemoryScopeType,
     topic: str,
     content: str,
@@ -133,10 +148,9 @@ async def save_memory(
         topic: 稳定、简短的主题键，例如 music_preference 或 群内称呼约定；同主题会更新。
         content: 一条自包含的原子事实。只写事实，不写指令或对话原文。
     """
-
     from .manager import chat_manager
 
-    memory_context = ctx.context.memory_context
+    memory_context = ctx.deps.memory_context
     assert memory_context is not None
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
@@ -146,11 +160,10 @@ async def save_memory(
     return f"已保存 {scope} 记忆：ID={record.id}，topic={record.topic}。"
 
 
-@function_tool(is_enabled=_memory_enabled)
 async def recall_memory(
-    ctx: RunContextWrapper[ChatContext],
+    ctx: RunContext[ChatDeps],
     query: str = "",
-    scopes: list[MemoryScopeType] = Field(default_factory=lambda: ["user", "group"]),
+    scopes: list[MemoryScopeType] = Field(default_factory=lambda: ["user", "group"]),  # pyright: ignore[reportArgumentType]
     limit: int = Field(default=8, ge=1, le=20),
 ) -> str:
     """检索当前用户和当前群聊的长期记忆。当回答涉及过去提到的偏好、身份、计划、称呼、
@@ -164,7 +177,7 @@ async def recall_memory(
     """
     from .manager import chat_manager
 
-    memory_context = ctx.context.memory_context
+    memory_context = ctx.deps.memory_context
     assert memory_context is not None
     selected_scopes = [
         memory_scope
@@ -183,9 +196,8 @@ async def recall_memory(
     return "\n".join(lines)
 
 
-@function_tool(is_enabled=_memory_enabled)
 async def forget_memory(
-    ctx: RunContextWrapper[ChatContext],
+    ctx: RunContext[ChatDeps],
     scope: MemoryScopeType,
     memory_id: int,
 ) -> str:
@@ -198,7 +210,7 @@ async def forget_memory(
     """
     from .manager import chat_manager
 
-    memory_context = ctx.context.memory_context
+    memory_context = ctx.deps.memory_context
     assert memory_context is not None
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
@@ -213,12 +225,7 @@ async def forget_memory(
 tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
 
 
-def _tts_enabled(_ctx: RunContextWrapper[ChatContext], _agent) -> bool:
-    return bool(tts_client.base_url)
-
-
-@function_tool(is_enabled=_tts_enabled)
-async def send_voice(ctx: RunContextWrapper[ChatContext], text: str) -> str:
+async def send_voice(ctx: RunContext[ChatDeps], text: str) -> str:
     """向当前会话发送一段语音。将文本转换为语音后，自动返回给当前会话。
 
     Args:
@@ -244,12 +251,11 @@ async def send_voice(ctx: RunContextWrapper[ChatContext], text: str) -> str:
     error = await _send_onebot_message(ctx, Message(MessageSegment.record(r.content)))
     if error:
         return error
-    return f"当前文本已转换为语音并发送给会话 {ctx.context.session_info.session_id}。"
+    return f"当前文本已转换为语音并发送给会话 {ctx.deps.session_info.session_id}。"
 
 
-@function_tool
 async def render_html_image(
-    ctx: RunContextWrapper[ChatContext],
+    ctx: RunContext[ChatDeps],
     html: str,
     file_name: str = "",
     viewport_width: int = 1280,
@@ -301,8 +307,7 @@ async def render_html_image(
     return f"HTML已渲染为图片并保存到沙箱工作区 {target}（{len(image)}字节）"
 
 
-@function_tool
-async def image_search(ctx: RunContextWrapper[ChatContext], image: str) -> str:
+async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
     """以图搜图。给定一张图片，搜索全网相同与相似图片，
     返回完全相同图片与相似图片列表（标题、来源网页、预览地址）。
 
@@ -327,7 +332,7 @@ async def image_search(ctx: RunContextWrapper[ChatContext], image: str) -> str:
     else:
         return f"不支持的图片来源: {source}"
 
-    # 每次搜索新建实例：HandOver不持有client时会为每个请求自动创建和关闭连接
+    # 每次搜索新建实例：不持有client时为每个请求自动创建和关闭连接
     baidu = BaiDu(timeout=60)
     try:
         resp = await baidu.search(url=url, file=file)
@@ -357,8 +362,7 @@ async def image_search(ctx: RunContextWrapper[ChatContext], image: str) -> str:
     return "\n".join(lines)
 
 
-@function_tool
-async def send_image(ctx: RunContextWrapper[ChatContext], image: str) -> str:
+async def send_image(ctx: RunContext[ChatDeps], image: str) -> str:
     """将图片发送给当前会话。
 
     Args:
@@ -383,11 +387,10 @@ async def send_image(ctx: RunContextWrapper[ChatContext], image: str) -> str:
     error = await _send_onebot_message(ctx, Message(segment))
     if error:
         return error
-    return f"图片已发送给会话 {ctx.context.session_info.session_id}。"
+    return f"图片已发送给会话 {ctx.deps.session_info.session_id}。"
 
 
-@function_tool
-async def send_file(ctx: RunContextWrapper[ChatContext], path: str) -> str:
+async def send_file(ctx: RunContext[ChatDeps], path: str) -> str:
     """将沙箱工作区中的文件发送给当前会话。
 
     Args:
@@ -408,11 +411,11 @@ async def send_file(ctx: RunContextWrapper[ChatContext], path: str) -> str:
         local_path = Path(f.name)
 
     try:
-        info = ctx.context.session_info
+        info = ctx.deps.session_info
         try:
-            bot = get_bot(ctx.context.bot_id)
+            bot = get_bot(ctx.deps.bot_id)
         except (KeyError, ValueError):
-            logger.error("无法获取Bot实例，bot_id: {}", ctx.context.bot_id)
+            logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
             return "无法获取Bot实例，无法发送文件消息。"
         if not isinstance(bot, Bot):
             return "当前类型的Bot不支持发送文件消息。"
@@ -426,11 +429,11 @@ async def send_file(ctx: RunContextWrapper[ChatContext], path: str) -> str:
     finally:
         local_path.unlink(missing_ok=True)
 
-    return f"文件 {file_name} 已发送给会话 {ctx.context.session_info.session_id}。"
+    return f"文件 {file_name} 已发送给会话 {ctx.deps.session_info.session_id}。"
 
 
-def build_tools() -> list[FunctionTool]:
-    """构建聊天Agent的静态工具列表"""
+def build_tools() -> list[Any]:
+    """构建聊天Agent的静态工具列表（Pydantic AI 接受普通可调用对象）"""
     return [
         list_memes,
         view_image,

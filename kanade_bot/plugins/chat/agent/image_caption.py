@@ -1,13 +1,13 @@
+"""图片转述模型。一次性调用，无工具、无会话历史"""
+
 import asyncio
+import base64
 
-from agents import Agent, TResponseInputItem
 from nonebot import logger
+from pydantic_ai import Agent, UserContent
+from pydantic_ai.messages import BinaryContent
 
-from kanade_bot.utils.agents_runtime import (
-    build_model_settings,
-    get_length_tracked_model,
-    run_with_continuation,
-)
+from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 
 from ..config import cfg as chat_cfg
 
@@ -29,7 +29,7 @@ def _build_agent() -> Agent | None:
     return Agent(
         name="kanade-bot-image-caption",
         instructions=system_prompt,
-        model=get_length_tracked_model(cfg),
+        model=get_model(cfg),
         model_settings=build_model_settings(cfg),
     )
 
@@ -47,22 +47,13 @@ async def get_image_caption(data: str, mime_type: str) -> str | None:
         logger.warning(msg)
         return msg
 
-    input_items: list[TResponseInputItem] = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_image",
-                    "image_url": f"data:{mime_type};base64,{data}",
-                    "detail": "auto",
-                },
-                {"type": "input_text", "text": "请描述这张图片的内容。"},
-            ],
-        }
+    user_prompt: list[UserContent] = [
+        BinaryContent(data=base64.b64decode(data), media_type=mime_type),
+        "请描述这张图片的内容。",
     ]
     try:
         content = await asyncio.wait_for(
-            run_with_continuation(agent, input_items, max_turns=1), timeout=180
+            run_with_continuation(agent, user_prompt, max_requests=1), timeout=180
         )
     except Exception as e:  # noqa: BLE001
         msg = f"获取图片转述时发生错误: {e}"

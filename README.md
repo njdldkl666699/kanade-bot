@@ -35,25 +35,80 @@ sandbox:
   enabled: true
 ```
 
-启用前需安装 **sandlock** CLI（用于以 Landlock + seccomp 约束沙箱里的 native 进程，
-要求 Linux 6.12+）：
+启用前需安装 **sandlock** CLI：
 
 ```bash
 # 从 https://github.com/multikernel/sandlock/releases 下载对应架构的二进制
 curl -fsSL -o sandlock.tar.gz \
   https://github.com/multikernel/sandlock/releases/download/v0.8.9/sandlock-x86_64-unknown-linux-gnu.tar.gz
-tar xzf sandlock.tar.gz && sudo install -m755 sandlock /usr/local/bin/
-sandlock --version
+tar xzf sandlock.tar.gz && install -m755 sandlock ~/.local/bin/
+sandlock check   # 确认 ABI 与 protection 可用性
 ```
 
+`~/.profile` 里的 `PATH` 需包含 sandlock 所在目录（登录 shell 会自动加载）。
 sandlock 缺失时机器人会在启动阶段直接报错并提示，不会静默降级；临时不用沙箱可把
 `sandbox.enabled` 设为 `false`。
 
-沙箱工作区位于插件缓存目录的 `sandboxes/<会话ID>/`，每个会话独立，文件在会话间保留。
-Python 由宿主CPython执行并受Landlock约束，只能访问自己的工作区。
+**内核版本要求**：sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）。
+`Landlock ABI v4`（如 Linux 6.8）上需对 v6 protection 显式降级，否则 sandlock
+默认 Strict 模式会拒绝启动。**机器人会自动处理**：启动时读 `sandlock check` 的
+ABI，低于 v6 时在工作区根的 `.bin/` 生成一个 wrapper 注入
+`--allow-degraded signal-scope --allow-degraded abstract-unix-socket-scope
+--allow-degraded fs-ioctl-dev`，并把该目录前置到 `PATH`（mirage 用
+`shutil.which("sandlock")` 查找，会命中 wrapper）。wrapper 生成后会自检一次，
+降级没生效则拒绝启动。
+
+降级只削弱「防进程逃逸」维度（signal 宿主进程 / 连宿主 abstract unix socket /
+设备 ioctl），**文件系统隔离主线不受影响**——工作区外的路径在 mirage VFS 中依然
+不存在，且 `max_memory` 仍由 rlimit 生效。可用 `sandbox.landlock_degrade` 改为
+`strict`（不足即报错）或 `always`（始终降级）。
+
+沙箱工作区位于插件缓存目录的 `sandboxes/<会话ID>/`，每个会话独立，文件在会话间
+保留。
+Python 由宿主 CPython 执行并受 Landlock 约束，只能访问自己的工作区。
 
 已知限制：内置 `curl` 的 `-m`（超时）与 `-k`（忽略证书）参数暂不支持，会返回
 退出码 7；请使用 `-s` / `-L` / `-o <文件>`。
+
+### 会话历史与压缩
+
+会话历史全量落 SQLite（`messages` 表，只追加不修改），压缩事件另记在
+`compaction_marks` 表；重启时按 marks 重放，重建的历史与关闭前最后一次请求发送
+的内容完全一致，以最大化 provider 侧的前缀缓存命中率。
+
+压缩只清空旧工具**结果**的内容（消息结构与位置不变，前缀稳定），**不用滑动
+窗口**——滑动窗口每轮移动前缀起点会让前缀缓存全部失效。相关配置：
+
+```yaml
+chat:
+  compaction:
+    trigger_fraction: 0.8      # 上下文占用超过此比例才触发压缩
+    keep_pairs: 3              # 保留最近几个工具调用对
+    min_clear_tokens: 2000    # 清理收益太小就跳过，保护缓存
+    summary_target_fraction: null # 设了才启用 LLM 摘要档（默认不启用）
+    summary_model: null        # 摘要模型，null = 继承主模型
+    summary_keep_messages: 40  # 生成摘要时保留的最近消息条数
+```
+
+比例均相对**当前模型的上下文窗口**解析，换模型不必重新校准。
+`summary_target_fraction` 留空时**只用零成本档**，压缩永远可重放、不调用 LLM。
+启用摘要档后摘要结果会一并存入 mark，恢复时直接复用而不重新生成。
+
+会话历史存储（消息缓冲区 + 数据库）与持久化记忆各自独立成子配置：
+
+```yaml
+chat:
+  session:
+    db_file: agent_sessions.sqlite3      # 数据库（插件数据目录）
+    buffer_max_size: 100                 # 消息缓冲区条数
+    buffer_cache_file: session_messages_cache.json # 缓冲区缓存（插件缓存目录）
+  memory:
+    database_file: memories.sqlite3      # 记忆数据库（插件数据目录）
+    max_records_per_scope: 256           # 每个用户/群聊的记忆条数上限
+```
+
+`/清理会话存储` 现在只报告统计（全量条数 / 实际发送条数），**不再删除消息**——
+数据库是全量保留的。
 
 ### 配置
 

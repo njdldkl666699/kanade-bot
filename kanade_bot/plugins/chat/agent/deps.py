@@ -1,21 +1,23 @@
-"""聊天Agent的运行时上下文。
+"""聊天Agent的运行时依赖（Pydantic AI `deps`）。
 
-`ChatContext` 实例通过 `Runner.run(..., context=...)` 传入，在工具函数内经
-`RunContextWrapper[ChatContext].context` 访问。每次发送前由会话管理器构建，
-携带当前发送者身份（群聊会话被多个成员复用时逐轮切换）与沙箱会话引用。
+`ChatDeps` 实例通过 `agent.run(..., deps=...)` 传入，在工具函数内经
+`RunContext[ChatDeps].deps` 访问。每次发送前由会话管理器构建，携带当前发送者
+身份（群聊会话被多个成员复用时逐轮切换）与沙箱会话引用。
+
+沙箱工作区本身通过 `ctx.workspace` 访问，因此这里只保留
+「是否启用沙箱」之外的应用层状态。
 """
 
 from dataclasses import dataclass, field
 
-from agents.sandbox.session.sandbox_session import SandboxSession
-
 from kanade_bot.utils.session import SessionInfo
 
 from .memory import MemoryContext
+from .sandbox import SandboxSession
 
 
 @dataclass
-class ChatContext:
+class ChatDeps:
     """一次聊天运行绑定的本地上下文（不发送给模型）"""
 
     session_info: SessionInfo

@@ -164,9 +164,56 @@
       "title": "CompConfig",
       "type": "object"
     },
-    "EnvEntry": {
+    "CompactionConfig": {
+      "description": "会话压缩配置",
       "properties": {
-        "description": {
+        "trigger_fraction": {
+          "default": 0.8,
+          "description": "触发压缩的上下文占用比例（按模型真实上下文窗口解析）\n\n用比例而非绝对 token 数：一个配置对所有模型都正确，换个模型也不必重新校准。",
+          "title": "Trigger Fraction",
+          "type": "number"
+        },
+        "keep_pairs": {
+          "default": 3,
+          "description": "清空旧工具结果时保留的最近工具调用对数\n\n只清空旧工具**结果**的内容，消息结构与位置不变，\n因此 provider 侧的前缀缓存仍然命中。",
+          "exclusiveMinimum": 0,
+          "title": "Keep Pairs",
+          "type": "integer"
+        },
+        "min_clear_tokens": {
+          "default": 2000,
+          "description": "清理收益低于此 token 数则跳过本次清理\n\n清理会改写消息内容、使该点之后的 prompt cache 失效；\n收益太小不值得破坏缓存，故宁可不清理。",
+          "exclusiveMinimum": 0,
+          "title": "Min Clear Tokens",
+          "type": "integer"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析",
+          "title": "Context Window"
+        },
+        "summary_target_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "超过此上下文占用比例才升级到 LLM 摘要档；None 表示不启用摘要档\n\n超过预算时先做零成本的工具结果清理，仍超预算才调用 LLM 生成摘要。\n摘要不可重放（非确定性），会把压缩后的完整历史存入数据库。",
+          "title": "Summary Target Fraction"
+        },
+        "summary_model": {
           "anyOf": [
             {
               "type": "string"
@@ -176,55 +223,18 @@
             }
           ],
           "default": null,
-          "title": "Description"
+          "description": "摘要使用的模型 ID；None 表示继承主模型",
+          "title": "Summary Model"
         },
-        "ephemeral": {
-          "default": false,
-          "title": "Ephemeral",
-          "type": "boolean"
-        },
-        "value": {
-          "$ref": "#/$defs/EnvValue"
+        "summary_keep_messages": {
+          "default": 40,
+          "description": "生成摘要时保留的最近消息条数",
+          "exclusiveMinimum": 0,
+          "title": "Summary Keep Messages",
+          "type": "integer"
         }
       },
-      "required": [
-        "value"
-      ],
-      "title": "EnvEntry",
-      "type": "object"
-    },
-    "EnvValue": {
-      "properties": {
-        "type": {
-          "default": "",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "title": "EnvValue",
-      "type": "object"
-    },
-    "Environment": {
-      "properties": {
-        "value": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/EnvValue"
-              },
-              {
-                "$ref": "#/$defs/EnvEntry"
-              }
-            ]
-          },
-          "title": "Value",
-          "type": "object"
-        }
-      },
-      "title": "Environment",
+      "title": "CompactionConfig",
       "type": "object"
     },
     "HandleConfig": {
@@ -411,6 +421,26 @@
         "url"
       ],
       "title": "MCPServerConfig",
+      "type": "object"
+    },
+    "MemoryConfig": {
+      "description": "持久化记忆配置",
+      "properties": {
+        "database_file": {
+          "default": "memories.sqlite3",
+          "description": "持久化记忆数据库文件名，位于插件数据目录下",
+          "title": "Database File",
+          "type": "string"
+        },
+        "max_records_per_scope": {
+          "default": 256,
+          "description": "每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录",
+          "exclusiveMinimum": 0,
+          "title": "Max Records Per Scope",
+          "type": "integer"
+        }
+      },
+      "title": "MemoryConfig",
       "type": "object"
     },
     "MindleConfig": {
@@ -605,20 +635,22 @@
       "type": "object"
     },
     "SandboxConfig": {
-      "description": "mirage沙箱配置",
+      "description": "Mirage沙箱配置",
       "properties": {
         "enabled": {
           "default": false,
-          "description": "是否启用沙箱（文件与shell能力）\n\n需要 sandlock CLI 在 PATH 上（Linux 6.12+），详见 README 部署说明",
+          "description": "是否启用沙箱（文件与shell能力）\n\n需要 sandlock CLI 在 PATH 上。生产内核 6.8 的 Landlock 只有 ABI v4，\n低于 sandlock 要求的 v6，启动时会自动启用 wrapper 注入\n`--allow-degraded`（见 MIGRATION_PLAN_PYDANTIC_AI.md 4.3.0.1）。",
           "title": "Enabled",
           "type": "boolean"
         },
         "environment": {
-          "$ref": "#/$defs/Environment",
-          "default": {
-            "value": {}
+          "additionalProperties": {
+            "type": "string"
           },
-          "description": "沙箱环境变量，注入到每个会话\n\n注意：这些变量对工作区内的所有进程可见，不要在此存放敏感密钥"
+          "default": {},
+          "description": "沙箱环境变量，注入到每个会话\n\n注意：这些变量对工作区内的所有进程可见，不要在此存放敏感密钥",
+          "title": "Environment",
+          "type": "object"
         },
         "memory_limit": {
           "default": "512M",
@@ -628,14 +660,14 @@
         },
         "max_concurrent_sandboxes": {
           "default": 4,
-          "description": "同时存活的最大沙箱数，超出后LRU关闭（工作区目录保留，文件不丢）",
+          "description": "同时存活的最大沙箱数，超出后LRU关闭",
           "exclusiveMinimum": 0,
           "title": "Max Concurrent Sandboxes",
           "type": "integer"
         },
         "idle_timeout_minutes": {
           "default": 30,
-          "description": "空闲沙箱回收阈值（分钟），超时后关闭（工作区目录保留）",
+          "description": "空闲沙箱回收阈值（分钟），超时后关闭",
           "exclusiveMinimum": 0,
           "title": "Idle Timeout Minutes",
           "type": "integer"
@@ -652,26 +684,56 @@
           "description": "沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录",
           "title": "Workspace Dir",
           "type": "string"
+        },
+        "landlock_degrade": {
+          "default": "auto",
+          "description": "Landlock ABI 不足时的策略\n\n- `auto`（默认）：按 `sandlock check` 的结果自动决定，ABI < v6 时启用\n  wrapper 注入 `--allow-degraded`\n- `always`：始终注入降级参数\n- `strict`：ABI 不足 v6 即报错（不降级）",
+          "enum": [
+            "auto",
+            "always",
+            "strict"
+          ],
+          "title": "Landlock Degrade",
+          "type": "string"
+        },
+        "landlock_real_binary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "真实 sandlock 可执行文件的绝对路径\n\n留空（默认）= 生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH（如 systemd 托管）\n时才需显式指定。",
+          "title": "Landlock Real Binary"
         }
       },
       "title": "SandboxConfig",
       "type": "object"
     },
     "SessionConfig": {
-      "description": "会话历史存储配置",
+      "description": "会话历史存储配置（消息缓冲区 + 数据库）",
       "properties": {
         "db_file": {
           "default": "agent_sessions.sqlite3",
-          "description": "会话历史SQLite数据库文件名，位于插件数据目录",
+          "description": "会话历史 SQLite 数据库文件名，位于插件数据目录",
           "title": "Db File",
           "type": "string"
         },
-        "compaction_window_size": {
-          "default": 80,
-          "description": "读时压缩滑动窗口大小（items数，含工具调用对）\n\n每轮对话约产生2-8个items（user+工具调用对+assistant）；\n窗口外的items不再发送给模型，但仍保留在数据库中。",
+        "buffer_max_size": {
+          "default": 100,
+          "description": "消息缓冲区最大条数，超出后丢弃最早的消息",
           "exclusiveMinimum": 0,
-          "title": "Compaction Window Size",
+          "title": "Buffer Max Size",
           "type": "integer"
+        },
+        "buffer_cache_file": {
+          "default": "session_messages_cache.json",
+          "description": "消息缓冲区缓存文件名，位于插件缓存目录",
+          "title": "Buffer Cache File",
+          "type": "string"
         }
       },
       "title": "SessionConfig",
@@ -823,50 +885,45 @@
             "system_prompt_extras": {}
           }
         },
-        "memory_database_file": {
-          "default": "memories.sqlite3",
-          "description": "持久化记忆数据库文件名，位于插件数据目录下",
-          "title": "Memory Database File",
-          "type": "string"
+        "compaction": {
+          "$ref": "#/$defs/CompactionConfig",
+          "default": {
+            "trigger_fraction": 0.8,
+            "keep_pairs": 3,
+            "min_clear_tokens": 2000,
+            "context_window": null,
+            "summary_target_fraction": null,
+            "summary_model": null,
+            "summary_keep_messages": 40
+          }
         },
-        "memory_max_records_per_scope": {
-          "default": 256,
-          "description": "每个用户或群聊最多保留的记忆条数，超出后淘汰最久未更新的记录",
-          "exclusiveMinimum": 0,
-          "title": "Memory Max Records Per Scope",
-          "type": "integer"
-        },
-        "session_messages_max_size": {
-          "default": 100,
-          "description": "会话消息缓冲区最大条数，超出后会丢弃最早的消息",
-          "title": "Session Messages Max Size",
-          "type": "integer"
-        },
-        "session_messages_cache_file": {
-          "default": "session_messages_cache.json",
-          "description": "会话消息缓冲区缓存文件名，位于插件数据目录下",
-          "title": "Session Messages Cache File",
-          "type": "string"
+        "memory": {
+          "$ref": "#/$defs/MemoryConfig",
+          "default": {
+            "database_file": "memories.sqlite3",
+            "max_records_per_scope": 256
+          }
         },
         "session": {
           "$ref": "#/$defs/SessionConfig",
           "default": {
             "db_file": "agent_sessions.sqlite3",
-            "compaction_window_size": 80
+            "buffer_max_size": 100,
+            "buffer_cache_file": "session_messages_cache.json"
           }
         },
         "sandbox": {
           "$ref": "#/$defs/SandboxConfig",
           "default": {
             "enabled": false,
-            "environment": {
-              "value": {}
-            },
+            "environment": {},
             "memory_limit": "512M",
             "max_concurrent_sandboxes": 4,
             "idle_timeout_minutes": 30,
             "sweeper_interval_minutes": 5,
-            "workspace_dir": "sandboxes/"
+            "workspace_dir": "sandboxes/",
+            "landlock_degrade": "auto",
+            "landlock_real_binary": null
           }
         },
         "image_caption": {
@@ -1667,20 +1724,30 @@
           "system_prompt_file": "Kanade-v4.md",
           "vision": false
         },
-        "memory_database_file": "memories.sqlite3",
-        "memory_max_records_per_scope": 256,
-        "session_messages_max_size": 100,
-        "session_messages_cache_file": "session_messages_cache.json",
+        "compaction": {
+          "context_window": null,
+          "keep_pairs": 3,
+          "min_clear_tokens": 2000,
+          "summary_keep_messages": 40,
+          "summary_model": null,
+          "summary_target_fraction": null,
+          "trigger_fraction": 0.8
+        },
+        "memory": {
+          "database_file": "memories.sqlite3",
+          "max_records_per_scope": 256
+        },
         "session": {
-          "compaction_window_size": 80,
+          "buffer_cache_file": "session_messages_cache.json",
+          "buffer_max_size": 100,
           "db_file": "agent_sessions.sqlite3"
         },
         "sandbox": {
           "enabled": false,
-          "environment": {
-            "value": {}
-          },
+          "environment": {},
           "idle_timeout_minutes": 30,
+          "landlock_degrade": "auto",
+          "landlock_real_binary": null,
           "max_concurrent_sandboxes": 4,
           "memory_limit": "512M",
           "sweeper_interval_minutes": 5,

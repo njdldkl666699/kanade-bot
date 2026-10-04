@@ -33,7 +33,6 @@ from .matcher import (
 )
 
 require("crystal")
-
 from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
 
 
@@ -74,24 +73,28 @@ async def handle_chat_interrupt(event: Event):
 
 @chat_compact.handle()
 async def handle_chat_compact(event: Event):
-    """手动清理会话存储：删除滑动窗口外的历史items，控制数据库体积
+    """查看会话存储统计：DB 全量保留，压缩后实际发送的条数更少
 
-    注意：发送给模型的历史已由滑动窗口自动截断，本命令仅做存储层物理清理。
+    注意：数据库为 append-only 全量保留，本命令**不删除任何消息**。
     """
     session_id = extract_session_info_sync(event).session_id
     try:
         result = await chat_manager.compact_session(session_id)
     except Exception as e:  # noqa: BLE001
-        logger.opt(exception=e).warning(f"清理会话{session_id}存储时发生错误")
-        await chat_compact.finish(f"清理会话存储失败（会话可能正在处理中）：{e}")
+        logger.opt(exception=e).warning(f"查询会话{session_id}存储时发生错误")
+        await chat_compact.finish(f"查询会话存储失败（会话可能正在处理中）：{e}")
     if result is None:
-        await chat_compact.finish("会话不存在（还未开始过对话），无需清理")
+        await chat_compact.finish("会话不存在（还未开始过对话），或尚无历史记录")
 
-    lines = [
-        f"存储清理{'完成' if result['removed'] else '完成（无可清理内容）'}",
-        f"历史items：{result['total']} → {result['kept']}（删除{result['removed']}条窗口外items）",
-    ]
-    await chat_compact.finish("\n".join(lines))
+    await chat_compact.finish(
+        "\n".join(
+            [
+                "会话存储统计（数据库全量保留，不做物理删除）",
+                f"已存消息：{result['total']} 条",
+                f"压缩后实际发送：{result['kept']} 条",
+            ]
+        )
+    )
 
 
 @chat_monitor.handle()
