@@ -1,64 +1,28 @@
-"""mirage 沙箱（Pydantic AI `WorkspaceBackend` 后端）。
-
-每个聊天会话对应一个 mirage Workspace：虚拟文件系统 + shell + 运行时全部在
-bot 进程内，native 进程（python3）交给 sandlock 用 Landlock/seccomp 约束。
-相比 Docker 容器，每会话内存约 0.1MB（实测 5 会话：140.3MB → 144.7MB），
-且没有 docker daemon 依赖与容器冷启动。
-
-`MirageBackend` 把 mirage Workspace 适配到 Pydantic AI 的 `WorkspaceBackend`
-协议，隔离语义完全沿用现状（已实测）：
-
-- 工作区外路径**不存在**（VFS 隔离），模型读不到 bot 的 config.yaml / 源码；
-- python3 经 sandlock（Landlock + seccomp）约束，`max_memory` 生效；
-- 挂载前缀 = 宿主 realpath，免 FUSE。
-
-规模控制沿用两层策略（进程内沙箱没有容器级资源限额）：
-
-1. 空闲 TTL：超过 `idle_timeout_minutes` 未使用的工作区被关闭；
-2. LRU 上限：同时存活数超过 `max_concurrent_sandboxes` 时淘汰最久未使用的；
-   单个 native 进程的内存由 sandlock 的 `memory_limit` 约束。
-
-注意 `MountMode` 必须是 EXEC 而非 WRITE：WRITE 下 python3 会以
-`not in EXEC mode` 失败（exit 126）。
-"""
-
 import asyncio
+import os
 import posixpath
 import re
 import shlex
 import shutil
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
-from typing import Any
 
 from mirage import MountMode, Workspace
+from mirage.agents.pydantic_ai import PydanticAIWorkspace
 from mirage.runtime.sandbox.sandlock import SandlockRuntime
-from mirage.types import FileType
-from mirage.utils.errors import NoMountError
 from mirage.vfs.disk import DiskVFS
 from nonebot import get_driver, logger
-from pydantic_ai.workspaces import (
-    CommandResult,
-    FileEntry,
-    WorkspaceCommand,
-    WorkspaceRef,
-    WorkspaceTimeoutError,
-    WorkspaceUnavailableError,
-)
 
 from ..config import cfg
 
 SANDLOCK_ENV_PATH = "/usr/local/bin:/usr/bin:/bin"
 """sandlock 受限子进程的 PATH：只给常见系统目录，避免把宿主环境整体透传进去。"""
 
-_MAX_SYMLINKS = 40
-"""realpath 跟随的符号链接上限，与 Linux MAXSYMLINKS 一致（超出即报 ELOOP）"""
-
-_ELOOP = 40
-"""POSIX ELOOP：Too many levels of symbolic links"""
+ENV_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""沙箱环境变量名的合法形态（防 shell 注入）"""
 
 LANDLOCK_REQUIRED_ABI = 6
 """sandlock 要求的最低 Landlock ABI（Linux 6.12+）"""
@@ -80,8 +44,6 @@ DEGRADED_PROTECTIONS = (
 LANDLOCK_WRAPPER = """#!/bin/sh
 # 注入 Landlock 降级参数后 exec 真正的 sandlock。
 # 必须在 "--" 之前插入，否则会被当成被沙箱命令的参数。
-# 用 `sub=$1; shift` 而非 "$@" 切片：${{@:2}} 是 bash 扩展，/bin/sh(dash) 不支持，
-# 会静默失效（沙箱看似运行、实际未降级）。
 sub="$1"; shift
 exec "{real_sandlock}" "$sub" \\
     --allow-degraded signal-scope \\
@@ -105,22 +67,15 @@ def _parse_abi(text: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _decode(raw: bytes | str) -> str:
-    """字节输出转文本；无法解码的字节替换为 U+FFFD，绝不丢弃"""
-    if isinstance(raw, str):
-        return raw
-    return raw.decode("utf-8", errors="replace")
-
-
 def check_sandlock() -> int:
     """校验 sandlock CLI 可用，返回宿主 Landlock ABI 版本
 
-    缺失 CLI 或 Landlock 完全不可用即报错（不做静默回退）。
+    缺失 CLI 或 Landlock 完全不可用即报错。
     """
     if shutil.which("sandlock") is None and not cfg.sandbox.landlock_real_binary:
         raise SandlockUnavailableError(
             "沙箱需要 sandlock CLI 在 PATH 上（https://github.com/multikernel/sandlock）。"
-            "请安装后重启；如需临时关闭沙箱，可将 chat.sandbox.enabled 设为 false"
+            "请安装后重启；如需关闭沙箱，可将 chat.sandbox.enabled 设为 false"
         )
 
     try:
@@ -149,17 +104,7 @@ def check_sandlock() -> int:
 
 
 def ensure_landlock(bin_dir: Path) -> int | None:
-    """按 ABI 情况决定是否生成降级 wrapper，返回宿主 ABI（未启用降级时为 None）
-
-    - ABI ≥ v6 → 用真 sandlock，无需 wrapper；
-    - v4 ≤ ABI < v6 → 生成 wrapper 注入 `--allow-degraded`，并在日志中
-      明确打印失去的保护；
-    - ABI < v4 → `check_sandlock` 已报错，不会走到这里。
-
-    生成后**自检**一次：用 wrapper 跑一条带 v6 protection 的命令，
-    确认没有报「protection unavailable」。否则降级没生效却看不出来，
-    是最危险的失败模式。
-    """
+    """按 ABI 情况决定是否生成降级 wrapper，返回宿主 ABI（未启用降级时为 None）"""
     abi = check_sandlock()
     mode = cfg.sandbox.landlock_degrade
 
@@ -204,323 +149,136 @@ def ensure_landlock(bin_dir: Path) -> int | None:
         f"({wrapper})。失去的保护：{'、'.join(DEGRADED_PROTECTIONS)}"
         f"（防进程逃逸维度）；文件系统隔离与内存限额不受影响。"
     )
-    # mirage 用 shutil.which("sandlock") 查找，PATH 前置让它们命中 wrapper。
-    # 注意 wrapper 内部的 exec 用的是绝对路径（子进程 PATH 被 --clean-env 清空）。
-    import os
-
     os.environ["PATH"] = f"{bin_dir}:{os.environ.get('PATH', '')}"
     logger.info(f"已将沙箱降级 wrapper 目录前置到 PATH: {bin_dir}")
     return abi
 
 
-@dataclass
-class MirageBackend:
-    """mirage Workspace → Pydantic AI `WorkspaceBackend` 协议适配
+class KanadeWorkspace(PydanticAIWorkspace):
+    """Mirage 官方 `PydanticAIWorkspace` 的工作区根绑定版
 
-    实现 `SupportsCommands` + `SupportsFilesystem` + `SupportsRealpath`，
-    因此 `Workspace` 会把文件操作直接交给 VFS，而不是退化成 shell 实现。
+    官方实现见 `mirage.agents.pydantic_ai.backend`：文件操作（read/write/
+    edit/ls）直通 VFS Ops 层、按**虚拟绝对路径**寻址，shell 操作（execute/
+    grep/glob）走 `Workspace.shell()`。
+
+    本项目采用 mirage「免 FUSE」布局：挂载前缀 = 宿主真实路径，虚拟路径与
+    真实路径一致，sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。
+    该布局下官方 backend 收到**相对路径**会落到 VFS 根 `/`（宿主系统视图的
+    overlay）——读则 FileNotFoundError，写则**静默落空**（宿主工作区无文件）。
+    这里把相对路径统一绑定到工作区根，与 `execute` 的 session cwd（初始化为
+    工作区根）语义对齐。
+
+    另补上官方实现缺失的 `execute` 超时（官方接受 `timeout` 参数但不生效）。
     """
 
-    workspace: Workspace
-    """底层 mirage Workspace"""
+    def __init__(self, workspace: Workspace, root: str, session_id: str | None = None) -> None:
+        super().__init__(workspace, sandbox_id="mirage", session_id=session_id)
+        self._root = root
 
-    root: str
-    """工作区根的绝对路径（宿主 realpath，与虚拟路径一致）"""
+    def _bind(self, path: str) -> str:
+        """相对路径挂到工作区根，绝对路径原样归一化
 
-    session_id: str
-    """mirage 会话 ID（shell 状态的宿主）"""
-
-    environment: dict[str, str] = field(default_factory=dict)
-    """注入到每个命令的环境变量"""
-
-    _ref: WorkspaceRef | None = field(default=None, init=False)
-    _closed: bool = field(default=False, init=False)
-
-    # ===== WorkspaceBackend =====
-
-    @property
-    def ref(self) -> WorkspaceRef | None:
-        return self._ref
-
-    @property
-    def read_only(self) -> bool:
-        return False
-
-    def durable_policy(self) -> tuple[object, ...]:
-        return ()
-
-    async def working_dir(self) -> str:
-        return self.root
-
-    # ===== SupportsRealpath =====
-
-    async def realpath(self, path: str) -> str:
-        """在 VFS 内逐段解析符号链接
-
-        不能用宿主 `Path.resolve()`：VFS 里的链接在宿主目录未必存在，
-        且工作区外的路径在 VFS 中根本不存在。
-
-        必须**逐段**解析（而不是只看末段）才能处理 `link/missing` 这种形态：
-        链接在中间，结果要一路跟到底。
+        归一化后逃出工作区根的路径（`../..` 等）无需专门拦截：VFS 里只有
+        工作区一个挂载，界外路径不存在，操作自然失败。
         """
-        return await self._realpath(self._abs(path), _MAX_SYMLINKS)
+        if not path.startswith("/"):
+            path = posixpath.join(self._root, path)
+        return posixpath.normpath(path)
 
-    async def _realpath(self, path: str, budget: int) -> str:
-        segments = [s for s in path.split("/") if s not in ("", ".")]
-        resolved: list[str] = []
-        for index, segment in enumerate(segments):
-            if segment == "..":
-                if resolved:
-                    resolved.pop()
-                continue
-            candidate = "/" + "/".join([*resolved, segment])
-            try:
-                target = await self.workspace.vfs.readlink(candidate, session_id=self.session_id)
-            except OSError:
-                resolved.append(segment)
-                continue
+    async def aexecute(self, command: str, timeout: int | None = None):
+        """执行命令；官方实现忽略 timeout，这里补上（超时取消整个 shell 协程）"""
+        if timeout is None or timeout <= 0:
+            return await super().aexecute(command)
+        async with asyncio.timeout(timeout):
+            return await super().aexecute(command)
 
-            budget -= 1
-            if budget <= 0:
-                raise OSError(_ELOOP, "Too many levels of symbolic links", path)
-            # 相对目标从链接**所在目录**（即 resolved，不含链接名自身）起算
-            if target.startswith("/"):
-                base = target
-            else:
-                base = "/" + "/".join([*resolved, target])
-            rest = segments[index + 1 :]
-            return await self._realpath(posixpath.join(base, *rest), budget)
-        return "/" + "/".join(resolved)
+    async def aread_bytes(self, path: str) -> bytes:
+        return await super().aread_bytes(self._bind(path))
 
-    @staticmethod
-    def _normalize(path: str) -> str:
-        """纯文本归一化：解析 `.`/`..`，不消除符号链接"""
-        parts: list[str] = []
-        for segment in path.split("/"):
-            if segment in ("", "."):
-                continue
-            if segment == "..":
-                if parts:
-                    parts.pop()
-                continue
-            parts.append(segment)
-        return "/" + "/".join(parts)
+    async def aexists(self, path: str) -> bool:
+        return await super().aexists(self._bind(path))
 
-    # ===== SupportsCommands =====
+    async def aread(self, path: str, offset: int = 0, limit: int = 2000) -> str:
+        return await super().aread(self._bind(path), offset, limit)
 
-    async def run(
+    async def awrite(self, path: str, content: str | bytes):
+        return await super().awrite(self._bind(path), content)
+
+    async def aedit(
         self,
-        command: WorkspaceCommand,
-        *,
-        shell: bool = False,
-        env: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> CommandResult:
-        """在工作区里执行命令，返回完整输出
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ):
+        return await super().aedit(self._bind(path), old_string, new_string, replace_all)
 
-        `command` 为字符串时必须 `shell=True`，为 argv 序列时必须 `shell=False`；
-        不匹配抛 `TypeError`（官方 `WorkspaceBackendSuite` 的硬契约）。
+    async def als_info(self, path: str):
+        return await super().als_info(self._bind(path))
 
-        非零退出码是**正常结果**（不是异常）；超时抛 `WorkspaceTimeoutError`；
-        工作区已销毁抛 `WorkspaceUnavailableError`。
-        """
-        if isinstance(command, str):
-            if not shell:
-                raise TypeError(
-                    "a string command requires shell=True; an argv sequence requires shell=False"
-                )
-            line = command
-        else:
-            if shell:
-                raise TypeError(
-                    "an argv sequence requires shell=False; a string command requires shell=True"
-                )
-            if not command:
-                raise ValueError("command must not be empty")
-            line = shlex.join(command)
-
-        merged_env = {**self.environment, **dict(env or {})}
-
-        try:
-            if timeout is None:
-                io_result = await self.workspace.shell(
-                    line,
-                    session_id=self.session_id,
-                    cwd=self.root,
-                    env=merged_env or None,
-                )
-            else:
-                async with asyncio.timeout(timeout):
-                    io_result = await self.workspace.shell(
-                        line,
-                        session_id=self.session_id,
-                        cwd=self.root,
-                        env=merged_env or None,
-                    )
-        except TimeoutError as e:
-            raise WorkspaceTimeoutError(f"命令执行超时（{timeout}s）: {line}") from e
-        except Exception as e:
-            if self._closed:
-                raise WorkspaceUnavailableError("沙箱工作区已关闭") from e
-            raise
-
-        return CommandResult(
-            exit_code=io_result.exit_code,
-            stdout=_decode(await io_result.materialize_stdout()),
-            stderr=_decode(await io_result.materialize_stderr()),
+    async def agrep_raw(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        ignore_hidden: bool = True,
+    ):
+        # 官方默认搜 VFS 根 '/'，这里改默认搜工作区根
+        return await super().agrep_raw(
+            pattern, self._bind(path) if path else self._root, glob, ignore_hidden
         )
 
-    # ===== SupportsFilesystem =====
-
-    def _abs(self, path: str) -> str:
-        """相对路径挂到工作区根下（工作区外的路径在 VFS 里不存在）"""
-        return path if path.startswith("/") else posixpath.join(self.root, path)
-
-    async def read_bytes(self, path: str) -> bytes:
-        return await self.workspace.vfs.read(self._abs(path), session_id=self.session_id)
-
-    async def write_bytes(self, path: str, data: bytes) -> None:
-        """写文件，自动创建缺失的父目录，并穿过符号链接写"""
-        target = self._abs(path)
-        parent = posixpath.dirname(target) or "/"
-        await self._check_dir(parent)
-        if not await self.exists(parent):
-            await self.make_dir(parent)
-        await self.workspace.vfs.write(target, data, session_id=self.session_id)
-
-    async def _check_dir(self, path: str) -> None:
-        """确认路径不是已存在的普通文件（是文件则抛 NotADirectoryError）"""
-        try:
-            st = await self.workspace.vfs.stat(path, session_id=self.session_id)
-        except (FileNotFoundError, NoMountError):
-            return  # 不存在的父目录由写入方自己创建
-        if st.type != FileType.DIRECTORY:
-            raise NotADirectoryError(f"不是目录: {path}")
-
-    async def stat(self, path: str) -> FileEntry:
-        st = await self.workspace.vfs.stat(self._abs(path), session_id=self.session_id)
-        return FileEntry(
-            name=st.name or posixpath.basename(path),
-            path=self._abs(path),
-            is_dir=st.type == FileType.DIRECTORY,
-            size=st.size,
-        )
-
-    async def list_dir(self, path: str) -> Sequence[FileEntry]:
-        """列出目录项（非递归）
-
-        mirage 的 `readdir` 返回的是**完整路径**而非名字，这里取 basename 作为
-        `name`，并直接用完整路径拼 `path`。
-        """
-        target = self._abs(path)
-        entries = []
-        for child in await self.workspace.vfs.readdir(target, session_id=self.session_id):
-            entries.append(
-                FileEntry(
-                    name=posixpath.basename(child),
-                    path=child,
-                    is_dir=await self._is_dir(child),
-                    size=await self._size(child),
-                )
-            )
-        return entries
-
-    async def _is_dir(self, path: str) -> bool:
-        """是否为目录（跟随符号链接；循环链接退回链接自身，判为非目录）"""
-        try:
-            st = await self.workspace.vfs.stat(path, session_id=self.session_id)
-        except OSError:
-            try:
-                st = await self.workspace.vfs.stat(path, nofollow=True, session_id=self.session_id)
-            except OSError:
-                return False
-        return st.type == FileType.DIRECTORY
-
-    async def _size(self, path: str) -> int | None:
-        try:
-            st = await self.workspace.vfs.stat(path, session_id=self.session_id)
-        except OSError:
-            return None
-        return st.size
-
-    async def make_dir(self, path: str) -> None:
-        target = self._abs(path)
-        # 目标已存在：目录视为成功（mkdir -p），文件则抛 FileExistsError
-        try:
-            st = await self.workspace.vfs.stat(target, session_id=self.session_id)
-        except (FileNotFoundError, NoMountError):
-            st = None
-        else:
-            if st.type == FileType.DIRECTORY:
-                return
-            raise FileExistsError(f"已存在且不是目录: {target}")
-
-        # 逐级创建（mkdir -p 语义），但父路径是文件时报 NotADirectoryError
-        parts = [p for p in target.split("/") if p]
-        current = ""
-        for part in parts:
-            current = f"{current}/{part}"
-            await self._check_dir(posixpath.dirname(current) or "/")
-            try:
-                await self.workspace.vfs.mkdir(current, session_id=self.session_id)
-            except FileExistsError:
-                continue
-
-    async def remove(self, path: str) -> None:
-        """删除文件或目录树；符号链接删的是链接本身，不跟随
-
-        走 shell 的 `rm -rf`：VFS 逐层递归遇到循环链接会死循环，
-        而 `rm -rf` 天然不跟随符号链接。
-        """
-        target = self._abs(path)
-        if target == self.root or self.root.startswith(target.rstrip("/") + "/"):
-            raise ValueError(f"拒绝删除工作区根或其祖先: {path}")
-        if not await self.exists(target):
-            raise FileNotFoundError(f"路径不存在: {path}")
-        result = await self.run(["rm", "-rf", target])
-        if result.exit_code != 0:
-            raise OSError(result.stderr.strip() or f"删除失败: {path}")
-
-    async def exists(self, path: str) -> bool:
-        try:
-            await self.workspace.vfs.stat(self._abs(path), session_id=self.session_id)
-        except (FileNotFoundError, NotADirectoryError, NoMountError):
-            return False
-        return True
+    async def aglob_info(self, pattern: str, path: str = "/"):
+        # 官方默认从 VFS 根 '/' 找，这里改默认从工作区根找
+        target = self._bind(path) if path and path != "/" else self._root
+        return await super().aglob_info(pattern, target)
 
 
 @dataclass
 class SandboxSession:
-    """一个聊天会话的沙箱：workspace + backend"""
+    """沙箱：workspace + backend"""
 
     workspace_dir: Path
     workspace: Workspace
-    backend: MirageBackend
+    backend: KanadeWorkspace
+    session_id: str
     last_used: float = field(default_factory=time.monotonic)
+    _closed: bool = field(default=False, init=False, repr=False)
 
     @property
     def root(self) -> str:
-        """工作区根的绝对路径（模型需要用它拼绝对路径）"""
+        """工作区根的绝对路径"""
         return str(self.workspace_dir)
 
     async def running(self) -> bool:
-        return not self.backend._closed and not self.workspace._shutting_down
+        return not self._closed and not self.workspace._shutting_down
 
-    # 兼容工具层（tool.py 直接用沙箱读写文件）
-    async def read(self, path: Path) -> Any:
-        import io
+    # --- 工具层使用
 
-        return io.BytesIO(await self.backend.read_bytes(str(path)))
+    def _abs(self, path: Path) -> str:
+        """相对路径挂到工作区根的虚拟路径"""
+        p = str(path)
+        return p if p.startswith("/") else posixpath.join(self.root, p)
 
-    async def write(self, path: Path, data: Any) -> None:
+    async def read(self, path: Path) -> BytesIO:
+        return BytesIO(await self.workspace.vfs.read(self._abs(path), session_id=self.session_id))
+
+    async def write(self, path: Path, data: BytesIO) -> None:
+        """写文件（可覆盖），自动逐级创建缺失的父目录"""
         content = data.read()
-        if isinstance(content, str):
-            content = content.encode("utf-8")
-        await self.backend.write_bytes(str(path), content)
+        target = self._abs(path)
+        current = ""
+        for part in [p for p in posixpath.dirname(target).split("/") if p]:
+            current = f"{current}/{part}"
+            try:
+                await self.workspace.vfs.mkdir(current, session_id=self.session_id)
+            except FileExistsError:
+                continue
+        await self.workspace.vfs.write(target, content, session_id=self.session_id)
 
 
 class SandboxManager:
-    """聊天会话的沙箱池：惰性创建、空闲TTL/LRU回收"""
+    """沙箱池：惰性创建、空闲TTL/LRU回收"""
 
     def __init__(self):
         self._sandboxes: dict[str, SandboxSession] = {}
@@ -546,15 +304,11 @@ class SandboxManager:
         return name
 
     def _workspace_dir(self, session_id: str) -> Path:
-        """会话对应的宿主工作区目录
-
-        必须 `resolve()`：`/tmp` 在多数系统上是 symlink，不解析会让虚拟挂载
-        前缀与真实路径不一致，导致写入落进 workspace overlay 而宿主目录为空。
-        """
+        """会话对应的宿主工作区目录"""
         return (self._root_dir / self._safe_name(session_id)).resolve()
 
     def delete_workspace(self, session_id: str) -> None:
-        """删除会话的工作区目录（重置会话时调用）"""
+        """删除会话的工作区目录"""
         workspace_dir = self._workspace_dir(session_id)
         if workspace_dir.parent != self._root_dir:
             logger.warning(f"拒绝删除沙箱目录（不在根目录下）: {workspace_dir}")
@@ -564,12 +318,7 @@ class SandboxManager:
     # ===== mirage 运行时 =====
 
     def _build_runtime(self, workspace_dir: Path) -> SandlockRuntime:
-        """构造 sandlock 运行时：只委派 python3，其余命令走 mirage 内置实现
-
-        不捕获 `@external`：让 mirage 内置的 cat/grep/ls/echo/sed/find/curl 在
-        VFS 内执行（相对路径正常，且经过 mirage 的策略与观测管线）。只把 python3
-        交给宿主 CPython，才能拿到完整 stdlib 与三方库。
-        """
+        """构造 sandlock 运行时：只委派 python3，其余命令走 mirage 内置实现"""
         return SandlockRuntime(
             captures=("python3",),
             config={
@@ -605,14 +354,18 @@ class SandboxManager:
             return managed
 
     def workspace_root(self, session_id: str) -> str:
-        """会话工作区根的绝对路径（供系统提示词告知模型）"""
+        """会话工作区根的绝对路径"""
         return str(self._workspace_dir(session_id))
 
     async def _create(self, session_id: str) -> SandboxSession:
-        """构建 Workspace + mirage 会话 + WorkspaceBackend
+        """构建 Workspace + mirage 会话 + 官方 Pydantic AI backend
 
         挂载前缀 = DiskVFS 自己的宿主 realpath：虚拟路径与真实路径一致，
         sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。
+
+        会话初始化（cd + export）走 shell 命令：不传 per-call `cwd` 时命令
+        直接跑在持久 session 上，`cd`/`export` 会留在 session 状态里，
+        之后的 `execute` 即以工作区根为 cwd、带配置的环境变量。
         """
         workspace_dir = self._workspace_dir(session_id)
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -630,22 +383,32 @@ class SandboxManager:
         mirage_session = f"kanade-{self._safe_name(session_id)}"
         workspace.create_session(mirage_session)
 
-        backend = MirageBackend(
-            workspace=workspace,
-            root=str(workspace_dir),
-            session_id=mirage_session,
-            environment=dict(cfg.sandbox.environment),
-        )
-        backend._ref = WorkspaceRef(provider="mirage", id=self._safe_name(session_id))
+        init_parts = [f"cd {shlex.quote(str(workspace_dir))}"]
+        for key, value in cfg.sandbox.environment.items():
+            if not ENV_KEY_RE.fullmatch(key):
+                await workspace.close()
+                raise ValueError(f"沙箱环境变量名不合法: {key!r}")
+            init_parts.append(f"export {key}={shlex.quote(value)}")
+
+        io = await workspace.shell("; ".join(init_parts), session_id=mirage_session)
+        if io.exit_code != 0:
+            stderr = (await io.materialize_stderr()).decode("utf-8", "replace")
+            await workspace.close()
+            raise RuntimeError(f"沙箱会话初始化失败（cd/export）: {stderr.strip()}")
 
         return SandboxSession(
             workspace_dir=workspace_dir,
             workspace=workspace,
-            backend=backend,
+            backend=KanadeWorkspace(
+                workspace=workspace,
+                root=str(workspace_dir),
+                session_id=mirage_session,
+            ),
+            session_id=mirage_session,
         )
 
     async def destroy(self, session_id: str) -> None:
-        """销毁会话沙箱（保留工作区目录，下次 acquire 直接复用）"""
+        """销毁会话沙箱"""
         async with self._lock:
             managed = self._sandboxes.pop(session_id, None)
         if managed is None:
@@ -653,14 +416,14 @@ class SandboxManager:
         await self._close(managed)
 
     async def _close(self, managed: SandboxSession) -> None:
-        managed.backend._closed = True
+        managed._closed = True
         try:
             await managed.workspace.close()
         except Exception as e:  # noqa: BLE001
             logger.warning(f"关闭沙箱工作区时发生错误: {e}")
 
     async def destroy_all(self) -> None:
-        """销毁全部沙箱（保留工作区目录）"""
+        """销毁全部沙箱"""
         async with self._lock:
             managed_list = list(self._sandboxes.values())
             self._sandboxes.clear()
@@ -670,18 +433,18 @@ class SandboxManager:
     # ===== 回收策略 =====
 
     async def _evict_over_limit(self, *, exclude: str | None = None) -> None:
-        """超过最大存活数时LRU淘汰（工作区目录保留）"""
+        """超过最大存活数时LRU淘汰"""
         limit = cfg.sandbox.max_concurrent_sandboxes
         candidates = [(sid, m) for sid, m in self._sandboxes.items() if sid != exclude]
         candidates.sort(key=lambda item: item[1].last_used)
         overflow = len(candidates) + (1 if exclude else 0) - limit
         for sid, managed in candidates[: max(overflow, 0)]:
             self._sandboxes.pop(sid, None)
-            logger.info(f"沙箱数量超过上限{limit}，LRU关闭会话{sid}的沙箱（工作区保留）")
+            logger.info(f"沙箱数量超过上限{limit}，LRU关闭会话{sid}的沙箱")
             await self._close(managed)
 
     async def _sweep_once(self) -> None:
-        """回收空闲超时的沙箱（工作区目录保留）"""
+        """回收空闲超时的沙箱"""
         now = time.monotonic()
         timeout_sec = cfg.sandbox.idle_timeout_minutes * 60
         expired = [
@@ -689,9 +452,7 @@ class SandboxManager:
         ]
         for sid, managed in expired:
             self._sandboxes.pop(sid, None)
-            logger.info(
-                f"会话{sid}的沙箱空闲超过{cfg.sandbox.idle_timeout_minutes}分钟，关闭（工作区保留）"
-            )
+            logger.info(f"会话{sid}的沙箱空闲超过{cfg.sandbox.idle_timeout_minutes}分钟，关闭")
             await self._close(managed)
 
     async def _sweeper_loop(self) -> None:

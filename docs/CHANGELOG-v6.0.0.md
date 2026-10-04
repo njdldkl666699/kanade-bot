@@ -265,3 +265,119 @@
   另需 `PluginManager` 正式加载插件才能满足 localstore 的
   "Cannot detect caller plugin"（它靠栈帧回溯 `__nonebot_plugin__`），
   故采用空壳模块方案
+
+---
+
+# v6.0.0-beta.4 更新日志
+
+> 本版本分两部分：**上一提交**（`0ac2d76`）将系统提示词重构为模块化配置
+> ——片段文件 + 变量替换，按变化频率分层以命中 provider 前缀缓存；
+> **本次变更**接入 mirage 官方 Pydantic AI backend 与 `pydantic-ai-backend`
+> 的 Console 工具集，删除自写的 `WorkspaceBackend` 协议适配层，并合并压缩
+> 参数 / 提示词配置模型。
+
+## 第一部分：系统提示词模块化（上一提交）
+
+### 破坏性变更
+
+- **`BaseAgentConfig` 移除 `system_prompt_file`**：系统提示词不再是单个
+  整块文件，改为各子类自行声明；chat 换用新的 `prompt` 配置段
+  （`files` / `sections` / `fallback` / `vars`）
+- **提示词文件迁移**：`Kanade-wiki.md` 迁为 `config/chat/prompts/wiki.md`；
+  `Kanade-v1~v4.md` 保留为历史文件，不再被加载
+
+### 新增
+
+- **模块化系统提示词**（`agent/prompt.py` + `config/chat/prompts/` 目录）：
+  原先一整块写死的字符串（Kanade-v4.md）+ `system_prompt_extras` 占位符
+  替换 + 沙箱/群聊说明硬编码在动态指令里按条件拼接，拆为 9 个静态片段
+  （identity / chat_style / lore_qa / tool_usage / tools /
+  system_notifications / wiki / abbreviations / environment）+ 2 个条件
+  片段（sandbox / group_chat），可单独调整、可复用
+- **按变化频率分两层**：
+  - 静态层（`prompt.files`）：进程恒定的内容，构造时求值一次，渲染为多个
+    具名 `InstructionPart(dynamic=False)`，id 形如 `agent:identity`
+  - 会话层（`prompt.sections`）：每会话恒定的内容（群名、沙箱工作区），
+    每轮渲染为单个 `dynamic=True` 的 part，`when` 变量为假时整段跳过
+- **内置注入变量**：环境信息、会话信息、沙箱、功能开关；`prompt.vars`
+  可注入自定义常量并覆盖内置变量（优先级最高）
+- **模板只替换已知变量**：未知占位符原样保留并记日志——`{{happy}}`、
+  `{{表情包名称}}` 是表情包引用的活约定，必须原样发给模型（正则仅匹配
+  ASCII 标识符，中文占位符天然不命中）
+
+### 改进
+
+- **前缀缓存友好**：分层的动机不是渲染开销（19KB 正则替换一轮 ~100µs，
+  可忽略），而是 provider 前缀缓存——系统提示词位于消息列表最前，任何
+  一个字节变化都会让后面整块失效。当前时间从系统提示词移出，改由
+  `current_time_line()` 附到用户消息（时间每分钟变一次，放前缀里等于每轮
+  必崩缓存）；发送者信息同理（已由 `_build_send_prompt` 写入用户消息，
+  提示词里的 `{{user_info}}` 属重复）
+- 片段间连接交给 `InstructionPart.join`，不再手动拼分隔线
+- 验证：同一会话连续两轮 instructions 逐字节一致；19084 字符中静态层占
+  19040
+
+## 第二部分：官方工作区后端与 Console 工具集（本次变更）
+
+### 破坏性变更
+
+- **沙箱工具集替换**：`pydantic-ai-harness` 的 `Shell` + `FileSystem`
+  能力改为新依赖 `pydantic-ai-backend`（≥0.2.16）的 `ConsoleCapability`，
+  模型可见的沙箱工具变为标准 Console 工具集：`execute` / `read_file` /
+  `write_file` / `edit_file` / `grep` / `glob` / `ls`（工具名变化，沙箱
+  提示词片段已同步更新）；权限规则用 `PERMISSIVE_RULESET`——隔离边界由
+  mirage VFS + Landlock 提供，不在工具层再拦一道
+- **运行期工具过滤移除**：`PrepareTools` capability 删除，工具回到静态
+  列表，不再按运行期状态（记忆作用域、TTS 配置）从 schema 中隐藏
+- **自写 `MirageBackend` 删除（约 370 行）**：改为 mirage 官方
+  `PydanticAIWorkspace` 的子类 `KanadeWorkspace`，只保留必要修正（见
+  「新增」）
+- **workspace 注入方式变化**：`run_stream_events(workspace=...)` per-run
+  参数移除，沙箱 backend 改经 `ChatDeps.backend` 依赖注入
+- **`CompactionParams` 数据类移除**：与 `CompactionConfig`（pydantic 配置
+  模型）合一；mark 参数序列化直接用 `model_dump()` / `model_validate()`，
+  参数指纹改为 `model_dump_json()`
+- **`prompt_config.py` 删除**：`ChatPromptConfig` 并入 `chat/config.py`
+- **单轮模型请求数上限从 100 放宽为不限制**（`REQUEST_LIMIT = None`）
+
+### 新增
+
+- **官方 backend 的三处必要修正**（`KanadeWorkspace`）：
+  1. **相对路径绑定工作区根**：官方按虚拟绝对路径寻址，本项目「免 FUSE」
+     布局下相对路径会落到 VFS 根 `/`（宿主系统视图 overlay）——读抛
+     FileNotFoundError、写**静默落空**（宿主工作区无文件）
+  2. **`execute` 超时**：官方接受 `timeout` 参数但不生效，子类以
+     `asyncio.timeout` 真正取消整个 shell 协程
+  3. **`grep` / `glob` 默认搜索根**从 VFS 根 `/` 改为工作区根
+- **沙箱会话初始化**：在持久 mirage session 上执行一次
+  `cd <工作区根>; export K=V`（变量名正则校验防 shell 注入），之后的
+  `execute` 天然继承 cwd 与环境变量（原先靠每次 shell 调用传
+  `cwd` / `env`）
+- **测试重写**（`tests/chat/test_mirage_backend.py`）：官方 backend 行为
+  契约测试——相对路径写入落宿主（子进程验证）、execute 的 cwd 与环境
+  注入、超时取消、grep/glob 默认根、绝对虚拟路径不受绑定影响、非零退出
+  是正常结果、`SandboxSession.write` 自动建父目录且可覆盖（官方 `awrite`
+  拒绝覆盖）、`delete_workspace` 在挂载存活时也真删宿主目录、`..` 越界
+  失败、`KanadeWorkspace` 必须是官方子类（防止回退成重写协议）
+- **测试引导适配**（`tests/chat/test_pai_agent.py`）：`session_store` /
+  `compaction` 传递导入 `chat/config.py` 后（beta.3 测试从未导入过它），
+  壳模块方案需再补三件事——`nonebot.load_plugin()` 正式加载
+  `model_updater`（`require` 需要，且 localstore 靠正式插件的栈帧回溯）、
+  把 localstore 调用方探测固定为该插件（壳模块探测不到）、`LOCALSTORE_*_DIR`
+  指向临时目录（config 模块级初始化会写出默认 `chat_configs.json`）
+
+### 改进
+
+- **`send_file` 免临时文件**：沙箱工作区本就落在宿主目录（DiskVFS），直接
+  用宿主路径上传 OneBot 文件，去掉「临时目录落盘 → 上传 → 删除」三步，
+  并加路径越界校验
+- **`image_search` 复用全局 `BaiDu` 客户端**：原先每次搜索新建实例
+- **`view_image` 分支修正**：不支持视觉且未配置转述模型时返回明确提示
+- **代码净减约 450 行**（+864 / −1313）：beta.3 迁移期写下的设计性大段
+  docstring 全面精简（设计记录由 `docs/` 承载，代码只留短注释）；清理
+  `memory.py` 等处残留的 Copilot 字样；版本号升至 `v6.0.0-beta.4`
+
+### 已知问题
+
+- `/压缩会话` 计划改为手动触发一次 LLM 会话压缩（代码已留 TODO，当前仍
+  为统计报告）

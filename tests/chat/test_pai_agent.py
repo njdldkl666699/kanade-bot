@@ -21,6 +21,13 @@ from pathlib import Path
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
+# localstore 根目录指向临时目录：chat/config.py 模块级初始化会读取（缺失时写出）
+# 默认配置文件，避免落在仓库或用户真实数据目录
+_LOCALSTORE_TMP = Path(tempfile.mkdtemp(prefix="test-pai-agent-localstore-"))
+os.environ.setdefault("LOCALSTORE_CONFIG_DIR", str(_LOCALSTORE_TMP / "config"))
+os.environ.setdefault("LOCALSTORE_CACHE_DIR", str(_LOCALSTORE_TMP / "cache"))
+os.environ.setdefault("LOCALSTORE_DATA_DIR", str(_LOCALSTORE_TMP / "data"))
+
 REPO_ROOT = Path(__file__).parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -37,6 +44,18 @@ nonebot.init()
 _chat_pkg = types.ModuleType("kanade_bot.plugins.chat")
 _chat_pkg.__path__ = [str(REPO_ROOT / "kanade_bot" / "plugins" / "chat")]  # type: ignore[attr-defined]
 sys.modules.setdefault("kanade_bot.plugins.chat", _chat_pkg)
+
+# `chat/config.py`（被 session_store / compaction 传递导入）require 了 model_updater。
+# 必须经 PluginManager 正式加载而非直接 import：model_updater 内部使用 localstore 的
+# 目录函数，后者靠栈帧回溯 `__nonebot_plugin__` 定位调用方插件。
+nonebot.load_plugin("kanade_bot.plugins.model_updater")
+
+# chat 包是壳模块、不是正式插件，chat/config.py 模块级初始化（configs_file_path）里
+# localstore 的调用方探测会失败。把调用方固定为已正式加载的 model_updater
+# （localstore 目录已指向临时目录，无副作用）。
+import nonebot_plugin_localstore as _localstore
+
+_localstore._try_get_caller_plugin = lambda: nonebot.get_plugin("model_updater")  # type: ignore[assignment]
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import PrepareTools
@@ -56,8 +75,8 @@ from pydantic_ai.usage import UsageLimits
 
 from kanade_bot.plugins.chat.agent import session_store as store_mod
 from kanade_bot.plugins.chat.agent import compaction as compaction_mod
+from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
 
-CompactionParams = compaction_mod.CompactionParams
 SessionStore = store_mod.SessionStore
 
 CLEARED = "[tool result cleared]"
@@ -68,7 +87,8 @@ TEST_PARAMS = CompactionParams(
     # 生产用 trigger_fraction 相对模型真实窗口，不设这一项。
     context_window=200,
     keep_pairs=1,
-    min_clear_tokens=0,
+    # 清理收益至少 1 个 token 才动手，相当于「不设阈值」
+    min_clear_tokens=1,
 )
 """测试用压缩参数：窗口小 ⇒ 必然触发；keep_pairs=1 便于断言"""
 
@@ -428,9 +448,9 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         await store.add_compaction_mark(
             "c1",
             compaction_mod.CompactionMark(
-                strategy=compaction_mod.STRATEGY_SUMMARIZE,
-                params=TEST_PARAMS.to_json(),
-                result=compaction_mod.fingerprint(snapshot),
+                strategy="summarizing",
+                params=TEST_PARAMS.model_dump(),
+                result=compaction_mod._messages_fingerprint(snapshot),
                 fingerprint=TEST_PARAMS.fingerprint(),
                 applied_at=0.0,
             ),

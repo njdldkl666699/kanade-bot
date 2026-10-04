@@ -93,18 +93,14 @@
               "identity.md",
               "chat_style.md",
               "lore_qa.md",
-              "environment.md",
               "tool_usage.md",
               "tools.md",
               "system_notifications.md",
               "wiki.md",
-              "abbreviations.md"
+              "abbreviations.md",
+              "environment.md"
             ],
             "sections": [
-              {
-                "file": "session.md",
-                "when": ""
-              },
               {
                 "file": "sandbox.md",
                 "when": "sandbox_enabled"
@@ -112,23 +108,19 @@
               {
                 "file": "group_chat.md",
                 "when": "is_group"
-              },
-              {
-                "file": "web_search.md",
-                "when": "mcp_enabled"
               }
             ],
             "fallback": "你是一只可爱的猫娘。",
             "vars": {}
           },
-          "description": "模块化系统提示词配置：按顺序拼接提示词目录下的文件，并注入内置变量"
+          "description": "模块化系统提示词配置"
         }
       },
       "title": "AgentConfig",
       "type": "object"
     },
     "ChatPromptConfig": {
-      "description": "聊天Agent的模块化系统提示词配置\n\n默认值直接落在字段上，而不是只挂在 `AgentConfig.prompt` 的字段默认值里：\n后者会被 YAML 里的部分配置整段绕过（只写 `prompt: {dir: ...}` 时，\n`files` 会退回父类的空列表，而不是这里的默认清单）。",
+      "description": "聊天Agent的模块化系统提示词配置",
       "properties": {
         "dir": {
           "default": "prompts/",
@@ -141,14 +133,14 @@
             "identity.md",
             "chat_style.md",
             "lore_qa.md",
-            "environment.md",
             "tool_usage.md",
             "tools.md",
             "system_notifications.md",
             "wiki.md",
-            "abbreviations.md"
+            "abbreviations.md",
+            "environment.md"
           ],
-          "description": "静态层片段文件名（相对 `dir`），按顺序拼接，只在启动时求值一次\n\n只能放**进程恒定**的内容；片段之间由框架用空行分隔，无需手动加分隔线。",
+          "description": "静态层片段文件名（相对 `dir`），按顺序拼接\n\n只允许出现**进程恒定**的内容，构造时一次性求值。",
           "items": {
             "type": "string"
           },
@@ -158,20 +150,12 @@
         "sections": {
           "default": [
             {
-              "file": "session.md",
-              "when": ""
-            },
-            {
               "file": "sandbox.md",
               "when": "sandbox_enabled"
             },
             {
               "file": "group_chat.md",
               "when": "is_group"
-            },
-            {
-              "file": "web_search.md",
-              "when": "mcp_enabled"
             }
           ],
           "description": "会话层片段，在 `files` 之后按配置顺序拼接，每轮重新求值\n\n只能放**每会话恒定**的内容。",
@@ -192,7 +176,7 @@
             "type": "string"
           },
           "default": {},
-          "description": "自定义模板变量，可覆盖内置变量；优先级最高\n\n适合放不会变的常量；逐轮变化的量不要放这里，它会跟着静态层一起被缓存住。",
+          "description": "自定义模板变量，可覆盖内置变量；优先级最高\n\n适合放不会变的注入常量。",
           "title": "Vars",
           "type": "object"
         }
@@ -265,20 +249,20 @@
       "properties": {
         "trigger_fraction": {
           "default": 0.8,
-          "description": "触发压缩的上下文占用比例（按模型真实上下文窗口解析）\n\n用比例而非绝对 token 数：一个配置对所有模型都正确，换个模型也不必重新校准。",
+          "description": "触发清理的上下文占用比例",
           "title": "Trigger Fraction",
           "type": "number"
         },
         "keep_pairs": {
           "default": 3,
-          "description": "清空旧工具结果时保留的最近工具调用对数\n\n只清空旧工具**结果**的内容，消息结构与位置不变，\n因此 provider 侧的前缀缓存仍然命中。",
+          "description": "`ClearToolResults` 保留的最近工具调用对数",
           "exclusiveMinimum": 0,
           "title": "Keep Pairs",
           "type": "integer"
         },
         "min_clear_tokens": {
           "default": 2000,
-          "description": "清理收益低于此 token 数则跳过本次清理\n\n清理会改写消息内容、使该点之后的 prompt cache 失效；\n收益太小不值得破坏缓存，故宁可不清理。",
+          "description": "清理收益低于此 token 数则跳过；**仅在线生效**",
           "exclusiveMinimum": 0,
           "title": "Min Clear Tokens",
           "type": "integer"
@@ -306,7 +290,7 @@
             }
           ],
           "default": null,
-          "description": "超过此上下文占用比例才升级到 LLM 摘要档；None 表示不启用摘要档\n\n超过预算时先做零成本的工具结果清理，仍超预算才调用 LLM 生成摘要。\n摘要不可重放（非确定性），会把压缩后的完整历史存入数据库。",
+          "description": "`TieredCompaction` 的停止预算（上下文占用比例）；None 表示不启用摘要档",
           "title": "Summary Target Fraction"
         },
         "summary_model": {
@@ -600,7 +584,7 @@
         },
         "when": {
           "default": "",
-          "description": "条件变量名：该变量为真值时才拼接本段，否则整段跳过（省 token）。\n\n空串表示无条件拼接。",
+          "description": "条件变量名\n\n该变量为真值时才拼接本段，否则整段跳过。空串表示无条件拼接。",
           "title": "When",
           "type": "string"
         }
@@ -756,7 +740,7 @@
       "properties": {
         "enabled": {
           "default": false,
-          "description": "是否启用沙箱（文件与shell能力）\n\n需要 sandlock CLI 在 PATH 上。生产内核 6.8 的 Landlock 只有 ABI v4，\n低于 sandlock 要求的 v6，启动时会自动启用 wrapper 注入\n`--allow-degraded`（见 MIGRATION_PLAN_PYDANTIC_AI.md 4.3.0.1）。",
+          "description": "是否启用沙箱（文件与shell能力）\n\n需要 sandlock CLI 在 PATH 上",
           "title": "Enabled",
           "type": "boolean"
         },
@@ -771,7 +755,7 @@
         },
         "memory_limit": {
           "default": "512M",
-          "description": "sandlock受限子进程的内存上限（仅约束python3等native进程）",
+          "description": "sandlock受限子进程的内存上限",
           "title": "Memory Limit",
           "type": "string"
         },
@@ -784,14 +768,14 @@
         },
         "idle_timeout_minutes": {
           "default": 30,
-          "description": "空闲沙箱回收阈值（分钟），超时后关闭",
+          "description": "空闲沙箱回收阈值，超时后关闭",
           "exclusiveMinimum": 0,
           "title": "Idle Timeout Minutes",
           "type": "integer"
         },
         "sweeper_interval_minutes": {
           "default": 5,
-          "description": "后台回收任务扫描间隔（分钟）",
+          "description": "后台回收任务扫描间隔",
           "exclusiveMinimum": 0,
           "title": "Sweeper Interval Minutes",
           "type": "integer"
@@ -804,7 +788,7 @@
         },
         "landlock_degrade": {
           "default": "auto",
-          "description": "Landlock ABI 不足时的策略\n\n- `auto`（默认）：按 `sandlock check` 的结果自动决定，ABI < v6 时启用\n  wrapper 注入 `--allow-degraded`\n- `always`：始终注入降级参数\n- `strict`：ABI 不足 v6 即报错（不降级）",
+          "description": "Landlock ABI 不足时的策略\n\n- `auto`（默认）：按 `sandlock check` 的结果自动决定，\n  ABI < v6 时启用wrapper 注入 `--allow-degraded`\n- `always`：始终注入降级参数\n- `strict`：ABI 不足 v6 即报错",
           "enum": [
             "auto",
             "always",
@@ -823,7 +807,7 @@
             }
           ],
           "default": null,
-          "description": "真实 sandlock 可执行文件的绝对路径\n\n留空（默认）= 生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH（如 systemd 托管）\n时才需显式指定。",
+          "description": "真实 sandlock 可执行文件的绝对路径\n\n默认：生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH时才需显式指定。",
           "title": "Landlock Real Binary"
         }
       },
@@ -831,11 +815,11 @@
       "type": "object"
     },
     "SessionConfig": {
-      "description": "会话历史存储配置（消息缓冲区 + 数据库）",
+      "description": "会话历史存储配置",
       "properties": {
         "db_file": {
           "default": "agent_sessions.sqlite3",
-          "description": "会话历史 SQLite 数据库文件名，位于插件数据目录",
+          "description": "会话历史 SQLite 数据库文件名",
           "title": "Db File",
           "type": "string"
         },
@@ -848,7 +832,7 @@
         },
         "buffer_cache_file": {
           "default": "session_messages_cache.json",
-          "description": "消息缓冲区缓存文件名，位于插件缓存目录",
+          "description": "消息缓冲区缓存文件名",
           "title": "Buffer Cache File",
           "type": "string"
         }
@@ -1005,18 +989,14 @@
                 "identity.md",
                 "chat_style.md",
                 "lore_qa.md",
-                "environment.md",
                 "tool_usage.md",
                 "tools.md",
                 "system_notifications.md",
                 "wiki.md",
-                "abbreviations.md"
+                "abbreviations.md",
+                "environment.md"
               ],
               "sections": [
-                {
-                  "file": "session.md",
-                  "when": ""
-                },
                 {
                   "file": "sandbox.md",
                   "when": "sandbox_enabled"
@@ -1024,14 +1004,18 @@
                 {
                   "file": "group_chat.md",
                   "when": "is_group"
-                },
-                {
-                  "file": "web_search.md",
-                  "when": "mcp_enabled"
                 }
               ],
               "vars": {}
             }
+          }
+        },
+        "session": {
+          "$ref": "#/$defs/SessionConfig",
+          "default": {
+            "db_file": "agent_sessions.sqlite3",
+            "buffer_max_size": 100,
+            "buffer_cache_file": "session_messages_cache.json"
           }
         },
         "compaction": {
@@ -1051,14 +1035,6 @@
           "default": {
             "database_file": "memories.sqlite3",
             "max_records_per_scope": 256
-          }
-        },
-        "session": {
-          "$ref": "#/$defs/SessionConfig",
-          "default": {
-            "db_file": "agent_sessions.sqlite3",
-            "buffer_max_size": 100,
-            "buffer_cache_file": "session_messages_cache.json"
           }
         },
         "sandbox": {
@@ -1874,18 +1850,14 @@
               "identity.md",
               "chat_style.md",
               "lore_qa.md",
-              "environment.md",
               "tool_usage.md",
               "tools.md",
               "system_notifications.md",
               "wiki.md",
-              "abbreviations.md"
+              "abbreviations.md",
+              "environment.md"
             ],
             "sections": [
-              {
-                "file": "session.md",
-                "when": ""
-              },
               {
                 "file": "sandbox.md",
                 "when": "sandbox_enabled"
@@ -1893,10 +1865,6 @@
               {
                 "file": "group_chat.md",
                 "when": "is_group"
-              },
-              {
-                "file": "web_search.md",
-                "when": "mcp_enabled"
               }
             ],
             "vars": {}
@@ -1904,6 +1872,11 @@
           "provider": null,
           "reasoning_effort": null,
           "vision": false
+        },
+        "session": {
+          "buffer_cache_file": "session_messages_cache.json",
+          "buffer_max_size": 100,
+          "db_file": "agent_sessions.sqlite3"
         },
         "compaction": {
           "context_window": null,
@@ -1917,11 +1890,6 @@
         "memory": {
           "database_file": "memories.sqlite3",
           "max_records_per_scope": 256
-        },
-        "session": {
-          "buffer_cache_file": "session_messages_cache.json",
-          "buffer_max_size": 100,
-          "db_file": "agent_sessions.sqlite3"
         },
         "sandbox": {
           "enabled": false,

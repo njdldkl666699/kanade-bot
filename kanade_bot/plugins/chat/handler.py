@@ -71,6 +71,7 @@ async def handle_chat_interrupt(event: Event):
     await chat_interrupt.finish("已中断当前正在进行的回复，等待中的消息将照常处理")
 
 
+# TODO 改为手动触发一次LLM会话压缩
 @chat_compact.handle()
 async def handle_chat_compact(event: Event):
     """查看会话存储统计：DB 全量保留，压缩后实际发送的条数更少

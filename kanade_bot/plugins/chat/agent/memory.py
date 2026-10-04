@@ -33,7 +33,7 @@ class MemoryRecord:
 
 @dataclass
 class MemoryContext:
-    """Current sender identity for one serialized Copilot session."""
+    """当前聊天会话的发送者身份，用于确定长期记忆可用的 user/group 作用域。"""
 
     session_id: str
     platform: PlatformType | None = None
@@ -48,7 +48,7 @@ class MemoryContext:
 
     def update(self, session_info: SessionInfo) -> None:
         if session_info.session_id != self.session_id:
-            raise ValueError("不能使用其他 Copilot 会话的信息更新记忆上下文")
+            raise ValueError("不能使用其他会话的信息更新记忆上下文")
         self.platform = session_info.platform
         self.user_id = session_info.user_id
         self.group_id = session_info.group_id

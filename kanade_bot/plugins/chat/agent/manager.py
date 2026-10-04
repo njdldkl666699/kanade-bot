@@ -1,138 +1,110 @@
-"""聊天会话管理器（Pydantic AI）。
-
-职责：管理会话历史（`SessionStore`：append-only 全量存储 + 压缩事件标记）、
-会话锁、消息缓冲区、系统通知、群聊记忆身份切换，并提供流式发送
-（watchdog 超时取消 + 空响应回退重发 + 截断续写）、重置、中断、存储统计等操作。
-
-流式使用 `agent.run_stream_events()`——**完整 agent 循环**（工具调用后继续
-生成），而不是 `run_stream()`（后者只提交首个匹配输出，可能跳过工具调用）。
-"""
-
 import asyncio
 import base64
 import json
 from collections import deque
-from typing import Any
 
 from nonebot import get_driver, logger
-from pydantic_ai import Agent, FunctionToolCallEvent, PartEndEvent, RunContext
-from pydantic_ai.capabilities import PrepareTools
+from pydantic_ai import Agent, AgentRunEvents, FunctionToolCallEvent, PartEndEvent, RunContext
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, TextPart, UserContent
 from pydantic_ai.toolsets.abstract import AbstractToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.usage import UsageLimits
-from pydantic_ai_harness import FileSystem, Shell
+from pydantic_ai_backends import ConsoleCapability
+from pydantic_ai_backends.permissions import PERMISSIVE_RULESET
 
 from kanade_bot.utils.pai_runtime import CONTINUE_PROMPT, build_model_settings, get_model
 from kanade_bot.utils.parse import ImageInput, build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
-from ..config import cfg
-from .compaction import CompactionParams, RecordingCompaction, build_compaction_capability
+from ..config import CompactionConfig, cfg
+from .compaction import RecordingCompaction, build_compaction_capability
 from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryStore
 from .prompt import ChatPrompt, current_time_line
 from .sandbox import SandboxManager
 from .session_store import SessionStore
-from .tool import build_tools, prepare_tools
-
-agent = cfg.agent
+from .tool import build_tools
 
 EMPTY_RESPONSE_MAX_RETRIES = 2
-"""空响应（整轮无文本输出且无工具调用，模型把答案写进了推理通道）的最大重发
-次数，含首发共1+2次尝试。重发前会回退本轮写入的消息，避免历史残留无效轮次。"""
+"""空响应（一轮请求无文本输出且无工具调用）的最大重发次数"""
 
-REQUEST_LIMIT = 100
+REQUEST_LIMIT: int | None = None
 """单次会话运行的模型请求数上限。
 
-Pydantic AI 默认 50；本项目存在长工具链（沙箱 shell + 多次文件读写），
-偏紧会误伤，故显式放宽。设为 `None` 可关闭该保护。
+Pydantic AI 默认 50；设为 `None` 可关闭该保护。
 """
 
 MAX_CONTINUATIONS = 5
-"""单轮内因 `max_output_tokens` 截断而续写的最大次数，防止无限续写"""
+"""单轮内因length截断而续写的最大次数"""
 
 
 class EmptyResponseError(RuntimeError):
-    """重发耗尽后模型仍返回空响应（整轮无文本输出且无工具调用）。
+    """重发耗尽后模型仍返回空响应
 
-    抛出前已回退本轮写入的消息，历史中没有残留。"""
+    抛出前已回退本轮写入的消息"""
 
 
 class ChatSessionManager:
     """聊天会话管理器：会话存储、消息缓冲区、会话锁与Agent运行"""
 
     def __init__(self):
-        self._memory_store = MemoryStore(
+        self._store = SessionStore(cfg.session.db_file_path)
+        """会话存储"""
+
+        self.memory_store = MemoryStore(
             cfg.memory.database_file_path,
             max_memories_per_scope=cfg.memory.max_records_per_scope,
         )
-        self.memory_store = self._memory_store
-        """记忆存储（供工具层访问）"""
+        """记忆存储"""
         self._memory_contexts: dict[str, MemoryContext] = {}
 
-        compaction_cfg = cfg.compaction
-        self._compaction_params = CompactionParams(
-            trigger_fraction=compaction_cfg.trigger_fraction,
-            keep_pairs=compaction_cfg.keep_pairs,
-            min_clear_tokens=compaction_cfg.min_clear_tokens,
-            context_window=compaction_cfg.context_window,
-            summary_target_fraction=compaction_cfg.summary_target_fraction,
-            summary_model=compaction_cfg.summary_model,
-            summary_keep_messages=compaction_cfg.summary_keep_messages,
-        )
+        self._compaction_params: CompactionConfig = cfg.compaction
         self._compaction: RecordingCompaction = build_compaction_capability(self._compaction_params)
-        self._store = SessionStore(cfg.session.db_file_path)
-        """会话存储（append-only 全量 + 压缩事件标记）"""
 
         self._prompt = ChatPrompt(cfg)
-        """模块化系统提示词渲染器（见 `prompt.py`）"""
-
-        self._session_locks: dict[str, asyncio.Lock] = {}
-        """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID"""
+        """模块化系统提示词渲染器"""
 
         self._sessions_messages: dict[str, deque[str]] = {}
         """会话消息缓冲区，用于存储尚未发送到模型的消息"""
         self._sessions_system_notification: dict[str, str] = {}
         """会话系统通知，键为会话ID，值为系统通知内容"""
 
-        self._streams: dict[str, Any] = {}
-        """进行中的流式运行（`AgentRunEvents`），键为会话ID，用于中断"""
+        self._streams: dict[str, AgentRunEvents[str]] = {}
+        """进行中的流式运行，键为会话ID，用于中断"""
 
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID"""
         self._global_lock = asyncio.Lock()
         """全局资源锁，对各字典的修改操作加锁，确保协程安全"""
 
         self._mcp_toolsets: list[AbstractToolset[ChatDeps]] = []
-        """MCP 工具集。`Agent.toolsets` 是只读属性，而 MCP 连接发生在 Agent 构造之后的
-        on_startup 阶段，因此每次运行通过 per-run toolsets 参数传入。"""
+        """MCP 工具集"""
         self._sandbox_manager: SandboxManager | None = None
 
-        # capability 注册顺序（硬性约束）：**压缩 → 工具过滤**。
-        # 官方明确：request-only 注入器必须排在压缩之后，否则会被压缩丢弃；
-        # 反过来压缩若排在工具过滤之后，会把已过滤的结果再次改写。
-        capabilities: list[Any] = [self._compaction, PrepareTools(prepare_tools)]
+        capabilities: list[AbstractCapability] = [self._compaction]
         if cfg.sandbox.enabled:
             self._sandbox_manager = SandboxManager()
-            # 官方 Shell/FileSystem 能力：命令与文件读写都走 `ctx.workspace`，
-            # 即本项目的 mirage `MirageBackend`。命令名黑名单**清空**：
-            # 隔离边界由 mirage VFS + Landlock 提供，不需要工具层再拦一道
-            # （默认黑名单含 rm/dd 等，会影响模型的正常编辑与清理操作）。
-            capabilities.append(Shell(denied_commands=[], default_timeout=120.0))
-            capabilities.append(FileSystem())
+            capabilities.append(
+                ConsoleCapability(
+                    permissions=PERMISSIVE_RULESET,
+                    include_background=False,
+                    image_support=cfg.agent.vision,
+                    profile="agent",
+                )
+            )
 
         self._agent: Agent[ChatDeps] = Agent(
             name="kanade-bot-chat",
-            # 静态层（`dynamic=False`）占提示词绝大部分体积且字节稳定，能命中
-            # provider 前缀缓存；会话层每轮重算，落在缓存边界之后。
             instructions=[
                 *self._prompt.static_instructions,
                 self._session_instructions,
             ],
             deps_type=ChatDeps,
-            model=get_model(agent),
-            model_settings=build_model_settings(agent),
+            model=get_model(cfg.agent),
+            model_settings=build_model_settings(cfg.agent),
             tools=build_tools(),
             capabilities=capabilities,
         )
@@ -182,7 +154,7 @@ class ChatSessionManager:
 
     async def _start_mcp(self) -> None:
         """连接MCP服务器并把可用工具集挂到Agent"""
-        mcp_configs = agent.mcp_servers
+        mcp_configs = cfg.agent.mcp_servers
         if not mcp_configs:
             return
 
@@ -227,14 +199,7 @@ class ChatSessionManager:
     # ===== Agent 会话层指令 =====
 
     def _session_instructions(self, ctx: RunContext[ChatDeps]) -> str:
-        """按当前会话渲染会话层提示词（群名、沙箱工作区、功能开关）
-
-        片段在 `ChatPrompt` 构造时已读入缓存，这里只做条件过滤与变量替换：
-        沙箱说明仅在启用沙箱时出现、群聊说明仅在群聊中出现（见 `config/chat/prompts/`）。
-
-        当前时间刻意不在任何一层，而是由 `current_time_line()` 附到用户消息——
-        系统提示词位于消息前缀，每轮变动会让整块缓存失效。
-        """
+        """按当前会话渲染会话层提示词"""
         return self._prompt.session_instructions(ctx.deps)
 
     # ===== 会话与缓冲区 =====
@@ -293,7 +258,6 @@ class ChatSessionManager:
             prompt_parts.append("\n$ 下面是这次用户对你的消息：")
             prompt_parts.append(prompt)
 
-        # 时间走用户消息而非系统提示词：后者在消息前缀，每轮变动会让整块缓存失效
         prompt_parts.append(current_time_line())
 
         if system_notification:
@@ -377,6 +341,7 @@ class ChatSessionManager:
                 memory_context=memory_context,
                 sandbox=sandbox_session,
                 sandbox_root=sandbox_root,
+                backend=sandbox_session.backend if sandbox_session is not None else None,
             )
 
             # 恢复历史：全量原始消息 + 按 marks 重放压缩
@@ -399,9 +364,6 @@ class ChatSessionManager:
                             deps=deps,
                             usage_limits=UsageLimits(request_limit=REQUEST_LIMIT),
                             toolsets=self._mcp_toolsets or None,
-                            workspace=(
-                                sandbox_session.backend if sandbox_session is not None else None
-                            ),
                         )
                         async with events as stream:
                             self._streams[session_id] = stream
@@ -415,12 +377,12 @@ class ChatSessionManager:
                                     except StopAsyncIteration:
                                         break
                                     except TimeoutError:
-                                        # 相邻事件间隔超时：取消运行（中断在途 LLM 请求
-                                        # 与工具循环，进程内取消即真正停止）
+                                        # 相邻事件间隔超时：取消运行
+                                        # 中断在途 LLM 请求与工具循环，进程内取消即真正停止
                                         stream.cancel()
                                         raise TimeoutError(
                                             f"Timeout after {timeout}s waiting for stream events"
-                                        ) from None
+                                        )
 
                                     if isinstance(event, PartEndEvent):
                                         part = event.part
@@ -438,10 +400,8 @@ class ChatSessionManager:
                             history = [*history, *run]
                             await self._store.append(session_id, run)
 
-                        # 输出因 max_output_tokens 截断：续写（历史已入库，
-                        # 续写输入只需一句提示）
-                        # 注意 `run` 末条一定是 ModelResponse，finish_reason 只存在于
-                        # ModelResponse 上（ModelRequest 无此字段）
+                        # 输出因 max_output_tokens 截断：续写
+                        # 历史已入库，续写输入只需一句提示
                         if (
                             run
                             and isinstance(run[-1], ModelResponse)
@@ -461,7 +421,7 @@ class ChatSessionManager:
                             continue
                         break
 
-                    # 记录本轮发生过的压缩（一条 mark，恢复时重放）
+                    # 记录本轮发生过的压缩
                     await self._record_compaction(session_id, history)
 
                     if produced or tool_called:
@@ -489,7 +449,7 @@ class ChatSessionManager:
                         self._sessions_messages[session_id].clear()
 
     async def _record_compaction(self, session_id: str, history: list[ModelMessage]) -> None:
-        """本轮结束后把发生的压缩记成一条 mark（恢复时重放）"""
+        """本轮结束后把发生的压缩记成一条 mark"""
         mark = await self._compaction.take_mark(history)
         if mark is not None:
             await self._store.add_compaction_mark(session_id, mark)
@@ -500,10 +460,10 @@ class ChatSessionManager:
     async def _build_user_content(
         self, send_prompt: str, images: list[ImageInput] | None
     ) -> list[UserContent]:
-        """构建本轮用户输入：文本 + 图片（vision 直传，否则转述/占位）"""
+        """构建本轮用户输入：文本 + 图片"""
         content: list[UserContent] = []
 
-        if agent.vision:
+        if cfg.agent.vision:
             content.append(send_prompt)
             for image in images or []:
                 content.append(
@@ -524,7 +484,7 @@ class ChatSessionManager:
                 if caption:
                     parts.append(f"\n$ 图片 {image.name} 的文字描述: \n{caption}")
                     continue
-            parts.append(f"\n[收到图片 {image.name}，但当前无法查看图片内容]")
+            parts.append(f"\n$ 收到图片 {image.name}，但当前无法查看图片内容")
         content.append("\n".join(parts))
         return content
 
@@ -544,8 +504,9 @@ class ChatSessionManager:
                 logger.warning(f"清空会话{session_id}历史时发生错误: {e}")
 
             if self._sandbox_manager is not None:
-                # 不保留工作区：重置即彻底清除沙箱文件
+                # 销毁沙箱
                 await self._sandbox_manager.destroy(session_id)
+                # 删除工作区目录
                 self._sandbox_manager.delete_workspace(session_id)
 
     async def interrupt_session_turn(self, session_id: str) -> bool | None:

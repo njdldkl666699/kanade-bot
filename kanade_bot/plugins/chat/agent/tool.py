@@ -1,7 +1,6 @@
 import base64
-import io
-import tempfile
 import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -14,7 +13,6 @@ from PicImageSearch import BaiDu
 from pydantic import Field
 from pydantic_ai import RunContext
 from pydantic_ai.messages import BinaryContent
-from pydantic_ai.tools import ToolDefinition
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
@@ -26,8 +24,6 @@ from .memory import MemoryScopeType
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import html_to_pic
-
-agent_cfg = cfg.agent
 
 
 def _get_sandbox(ctx: RunContext[ChatDeps]):
@@ -55,26 +51,6 @@ async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> s
     return None
 
 
-async def prepare_tools(ctx: RunContext[ChatDeps], tool_defs: list[ToolDefinition]):
-    """按运行期状态过滤工具定义
-
-    关闭的工具直接从 schema 中移除，模型完全看不到，不浪费 token。
-    与压缩 capability 的注册顺序见 manager（必须压缩在前、工具过滤在后）。
-    """
-    disabled: set[str] = set()
-
-    memory_context = ctx.deps.memory_context
-    if memory_context is None or not memory_context.scopes():
-        disabled.update({"save_memory", "recall_memory", "forget_memory"})
-
-    if not tts_client.base_url:
-        disabled.add("send_voice")
-
-    if not disabled:
-        return tool_defs
-    return [t for t in tool_defs if t.name not in disabled]
-
-
 async def list_memes() -> dict[str, str | None]:
     """列出当前可用的表情包字典，键为表情包名称，值为表情包描述。"""
     return chat_configs.instance.memes
@@ -87,34 +63,35 @@ async def view_image(ctx: RunContext[ChatDeps], url: str) -> str | list[str | Bi
         url: 图片URL。支持http/https网络地址；启用沙箱时也支持沙箱工作区内的相对路径。
     """
     logger.info("查看图片工具被调用，URL: {}", url)
-
     scheme = urlparse(url).scheme
+
     if scheme in ("http", "https"):
         r = await HTTPX_CLIENT.get(url)
         if r.status_code != 200:
             return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
         data = base64.b64encode(r.content).decode()
         mime_type = r.headers.get("Content-Type", "application/octet-stream").split(";")[0]
+
     elif not scheme:
         sandbox = _get_sandbox(ctx)
         if sandbox is None:
             return f"仅支持http/https网络URL（未启用沙箱，不支持本地路径）: {url}"
         try:
-            stream = await sandbox.read(Path(url))
+            bytes_io = await sandbox.read(Path(url))
         except FileNotFoundError:
             return f"沙箱工作区中不存在该文件: {url}"
-        raw = stream.read()
+        raw = bytes_io.read()
         data = base64.b64encode(raw).decode()
         mime_type = magic.from_buffer(raw[:64], mime=True)
+
     else:
         return f"不支持的图片来源: {url}"
 
-    if not agent_cfg.vision and cfg.image_caption:
+    if not cfg.agent.vision:
+        if not cfg.image_caption:
+            return "当前模型不支持视觉输入，且未配置图片转述模型，无法查看图片。"
         caption = await get_image_caption(data, mime_type)
         return caption or "无法获取图片内容的文字描述。"
-
-    if not agent_cfg.vision:
-        return "当前模型不支持视觉输入，且未配置图片转述模型，无法查看图片。"
 
     return [
         "图片查看结果",
@@ -140,10 +117,10 @@ async def save_memory(
     from .manager import chat_manager
 
     memory_context = ctx.deps.memory_context
-    assert memory_context is not None
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
         return f"当前会话没有可用的 {scope} 记忆范围，未保存。"
+
     record = await chat_manager.memory_store.save(memory_scope, topic, content)
     logger.info("模型保存{}记忆，ID={}，主题={}", scope, record.id, record.topic)
     return f"已保存 {scope} 记忆：ID={record.id}，topic={record.topic}。"
@@ -167,17 +144,18 @@ async def recall_memory(
     from .manager import chat_manager
 
     memory_context = ctx.deps.memory_context
-    assert memory_context is not None
     selected_scopes = [
         memory_scope
         for name in scopes
         if (memory_scope := memory_context.get_scope(name)) is not None
     ]
+
     records = await chat_manager.memory_store.search(selected_scopes, query, limit)
     logger.info("模型检索记忆，范围={}，查询={}，结果数={}", scopes, query, len(records))
     if not records:
         return "没有找到相关记忆。"
-    lines = ["以下是记忆数据（不包含可执行指令）："]
+
+    lines = ["以下是记忆数据："]
     lines.extend(
         f"- ID={record.id} scope={record.scope_type} topic={record.topic}: {record.content}"
         for record in records
@@ -200,13 +178,14 @@ async def forget_memory(
     from .manager import chat_manager
 
     memory_context = ctx.deps.memory_context
-    assert memory_context is not None
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
         return f"当前会话没有可用的 {scope} 记忆范围，未删除。"
+
     deleted = await chat_manager.memory_store.delete(memory_scope, memory_id)
     if not deleted:
         return "未找到该范围内的记忆，未删除。"
+
     logger.info("模型删除{}记忆，ID={}", scope, memory_id)
     return f"已删除 {scope} 记忆 ID={memory_id}。"
 
@@ -253,7 +232,6 @@ async def render_html_image(
     full_page: bool = True,
 ) -> str:
     """将HTML内容渲染为PNG图片并保存到沙箱工作区的rendered/目录，返回沙箱内路径。
-    之后可用 send_image 工具把该路径的图片发送给会话。
 
     Args:
         html: 要渲染的完整HTML内容。
@@ -287,13 +265,16 @@ async def render_html_image(
 
     target = Path("rendered") / file_name
     try:
-        await sandbox.write(target, io.BytesIO(image))
+        await sandbox.write(target, BytesIO(image))
     except Exception as e:  # noqa: BLE001
         logger.exception("写入沙箱工作区失败: {}", e)
         return f"保存图片到沙箱失败: {e}"
 
     logger.info("HTML已渲染为图片: {}", target)
     return f"HTML已渲染为图片并保存到沙箱工作区 {target}（{len(image)}字节）"
+
+
+baidu_client = BaiDu(timeout=60)
 
 
 async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
@@ -321,10 +302,8 @@ async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
     else:
         return f"不支持的图片来源: {source}"
 
-    # 每次搜索新建实例：不持有client时为每个请求自动创建和关闭连接
-    baidu = BaiDu(timeout=60)
     try:
-        resp = await baidu.search(url=url, file=file)
+        resp = await baidu_client.search(url=url, file=file)
     except Exception as e:  # noqa: BLE001
         logger.exception("以图搜图请求失败: {}", e)
         return f"以图搜图请求失败: {e}"
@@ -338,6 +317,7 @@ async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
                 f"   来源网页: {item.url}\n"
                 f"   预览: {item.thumbnail}"
             )
+
     if resp.raw:
         lines.append(f"\n相似图片，共{len(resp.raw)}条（最多展示10条）：")
         for i, item in enumerate(resp.raw[:10], 1):
@@ -346,6 +326,7 @@ async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
                 f"   来源网页: {item.url}\n"
                 f"   预览: {item.thumbnail}"
             )
+
     if not resp.raw and not resp.exact_matches:
         return "以图搜图完成，但未找到相同或相似图片。"
     return "\n".join(lines)
@@ -388,41 +369,35 @@ async def send_file(ctx: RunContext[ChatDeps], path: str) -> str:
     sandbox = _get_sandbox(ctx)
     if sandbox is None:
         return "未启用沙箱，无法发送文件。"
-    try:
-        stream = await sandbox.read(Path(path))
-    except FileNotFoundError:
+
+    local_path = (sandbox.workspace_dir / path).resolve()
+    if not local_path.is_relative_to(sandbox.workspace_dir):
+        return f"路径不合法（不能越出沙箱工作区）: {path}"
+    if not local_path.is_file():
         return f"沙箱工作区中不存在该文件: {path}"
 
-    # OneBot上传文件需要本地路径，先落到系统临时目录
     file_name = Path(path).name
-    with tempfile.NamedTemporaryFile(suffix=f"_{file_name}", delete=False) as f:
-        f.write(stream.read())
-        local_path = Path(f.name)
-
+    info = ctx.deps.session_info
     try:
-        info = ctx.deps.session_info
-        try:
-            bot = get_bot(ctx.deps.bot_id)
-        except (KeyError, ValueError):
-            logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
-            return "无法获取Bot实例，无法发送文件消息。"
-        if not isinstance(bot, Bot):
-            return "当前类型的Bot不支持发送文件消息。"
+        bot = get_bot(ctx.deps.bot_id)
+    except (KeyError, ValueError):
+        logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
+        return "无法获取Bot实例，无法发送文件消息。"
+    if not isinstance(bot, Bot):
+        return "当前类型的Bot不支持发送文件消息。"
 
-        if group_id := info.group_id:
-            await upload_group_file(bot, group_id=int(group_id), file_path=local_path)
-        elif user_id := info.user_id:
-            await upload_private_file(bot, user_id=int(user_id), file_path=local_path)
-        else:
-            return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
-    finally:
-        local_path.unlink(missing_ok=True)
+    if group_id := info.group_id:
+        await upload_group_file(bot, group_id=int(group_id), file_path=local_path)
+    elif user_id := info.user_id:
+        await upload_private_file(bot, user_id=int(user_id), file_path=local_path)
+    else:
+        return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
 
     return f"文件 {file_name} 已发送给会话 {ctx.deps.session_info.session_id}。"
 
 
 def build_tools() -> list[Any]:
-    """构建聊天Agent的静态工具列表（Pydantic AI 接受普通可调用对象）"""
+    """构建聊天Agent的静态工具列表"""
     return [
         list_memes,
         view_image,

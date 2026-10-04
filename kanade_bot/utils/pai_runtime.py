@@ -86,13 +86,10 @@ def build_model_settings(config: BaseAgentConfig) -> ModelSettings:
     return settings
 
 
-# ===== 拼接续写（无会话的一次性调用场景） =====
+# ===== 拼接续写 =====
 
 CONTINUE_PROMPT = "Please continue from where you left off."
 """截断后续写的提示语"""
-
-TRUNCATED = "length"
-"""表示输出被 `max_output_tokens` 截断的 `finish_reason`"""
 
 
 async def run_with_continuation(
@@ -129,7 +126,7 @@ async def run_with_continuation(
             if (
                 (m := result.all_messages()[-1])
                 and isinstance(m, ModelResponse)
-                and m.finish_reason != TRUNCATED
+                and m.finish_reason != "length"
             ):
                 return "".join(parts)
 

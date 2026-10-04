@@ -1,28 +1,3 @@
-"""会话历史持久化（append-only SQLite + 压缩事件标记）。
-
-**唯一真相源是 `messages` 表**：原始消息只追加、永不修改、永不删除。
-压缩**不回写** `messages` 表，只以 `compaction_marks` 记录「压缩过哪里 +
-用的什么参数 + （摘要档的）产物」。
-
-恢复流程：
-
-```
-history = load(conv_id)                      # 全量原始消息
-for mark in load_compaction_marks(conv_id): # 按写入顺序
-    history = await apply_strategy(history, mark)
-⇒ 结果 == 关闭前最后一次请求实际发送的内容
-```
-
-两个前提（否则一致性破功）：
-
-1. **参数不能漂移**：恢复时用 mark 里记录的参数，不用当前配置；参数指纹
-   不匹配时丢弃旧 marks 并从全量按新参数重放（宁可损失一次缓存也要正确）；
-2. **在线压缩与恢复重放共用 `apply_strategy`**（见 `compaction.py`）。
-
-> `messages` 表按「一条消息一行」存储（不是一批一行），便于按 seq 定位与将来做
-> 全文检索；每轮 `append` 只写本轮新增的部分。
-"""
-
 import asyncio
 import json
 import sqlite3
@@ -34,6 +9,8 @@ from pathlib import Path
 from threading import Lock
 
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+
+from kanade_bot.plugins.chat.config import CompactionConfig
 
 from .compaction import CompactionMark, apply_strategy, build_clear_mark
 
@@ -143,10 +120,9 @@ class SessionStore:
         return row[0] if row else 0
 
     async def truncate(self, conv_id: str, keep: int) -> None:
-        """回退到前 keep 条消息（空响应重发时撤销本轮写入）
+        """回退到前 keep 条消息
 
-        这是**唯一**删除消息的路径，且只删本轮刚写入的尾部数据，
-        同时清掉本轮产生的压缩事件（它们描述的是已被撤销的历史）。
+        这是**唯一**删除消息的路径，且只删本轮刚写入的尾部数据，同时清掉本轮产生的压缩事件。
         """
         await asyncio.to_thread(self._truncate_sync, conv_id, keep)
 
@@ -160,7 +136,7 @@ class SessionStore:
     # ===== 压缩事件标记 =====
 
     async def add_compaction_mark(self, conv_id: str, mark: CompactionMark) -> None:
-        """记录一次压缩事件（在线压缩发生后调用）"""
+        """记录一次压缩事件"""
         await asyncio.to_thread(self._add_mark_sync, conv_id, mark)
 
     def _add_mark_sync(self, conv_id: str, mark: CompactionMark) -> None:
@@ -206,7 +182,7 @@ class SessionStore:
         ]
 
     async def clear_marks(self, conv_id: str) -> None:
-        """丢弃该会话的全部压缩事件（参数漂移时从全量重放）"""
+        """丢弃该会话的全部压缩事件"""
         await asyncio.to_thread(self._clear_marks_sync, conv_id)
 
     def _clear_marks_sync(self, conv_id: str) -> None:
@@ -217,10 +193,10 @@ class SessionStore:
 
     # ===== 恢复 =====
 
-    async def restore(self, conv_id: str, *, params=None) -> list[ModelMessage]:
+    async def restore(self, conv_id: str, *, params: CompactionConfig | None = None):
         """重建会话历史，结果与关闭前最后一次请求发送的内容一致
 
-        `params` 为当前压缩参数；与 marks 记录的不一致时（配置改过），
+        `params` 为当前压缩参数；与 marks 记录的不一致时，
         丢弃旧 marks 并按新参数从全量重放，保证自洽。
         """
 
