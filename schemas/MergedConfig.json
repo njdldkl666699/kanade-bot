@@ -69,12 +69,6 @@
           "title": "Vision",
           "type": "boolean"
         },
-        "system_prompt_file": {
-          "default": "Kanade-v4.md",
-          "description": "系统提示词文件名",
-          "title": "System Prompt File",
-          "type": "string"
-        },
         "mcp_servers": {
           "anyOf": [
             {
@@ -91,17 +85,119 @@
           "description": "MCP服务器配置，键为服务器名称",
           "title": "Mcp Servers"
         },
-        "system_prompt_extras": {
+        "prompt": {
+          "$ref": "#/$defs/ChatPromptConfig",
+          "default": {
+            "dir": "prompts/",
+            "files": [
+              "identity.md",
+              "chat_style.md",
+              "lore_qa.md",
+              "environment.md",
+              "tool_usage.md",
+              "tools.md",
+              "system_notifications.md",
+              "wiki.md",
+              "abbreviations.md"
+            ],
+            "sections": [
+              {
+                "file": "session.md",
+                "when": ""
+              },
+              {
+                "file": "sandbox.md",
+                "when": "sandbox_enabled"
+              },
+              {
+                "file": "group_chat.md",
+                "when": "is_group"
+              },
+              {
+                "file": "web_search.md",
+                "when": "mcp_enabled"
+              }
+            ],
+            "fallback": "你是一只可爱的猫娘。",
+            "vars": {}
+          },
+          "description": "模块化系统提示词配置：按顺序拼接提示词目录下的文件，并注入内置变量"
+        }
+      },
+      "title": "AgentConfig",
+      "type": "object"
+    },
+    "ChatPromptConfig": {
+      "description": "聊天Agent的模块化系统提示词配置\n\n默认值直接落在字段上，而不是只挂在 `AgentConfig.prompt` 的字段默认值里：\n后者会被 YAML 里的部分配置整段绕过（只写 `prompt: {dir: ...}` 时，\n`files` 会退回父类的空列表，而不是这里的默认清单）。",
+      "properties": {
+        "dir": {
+          "default": "prompts/",
+          "description": "提示词目录，相对插件配置目录",
+          "title": "Dir",
+          "type": "string"
+        },
+        "files": {
+          "default": [
+            "identity.md",
+            "chat_style.md",
+            "lore_qa.md",
+            "environment.md",
+            "tool_usage.md",
+            "tools.md",
+            "system_notifications.md",
+            "wiki.md",
+            "abbreviations.md"
+          ],
+          "description": "静态层片段文件名（相对 `dir`），按顺序拼接，只在启动时求值一次\n\n只能放**进程恒定**的内容；片段之间由框架用空行分隔，无需手动加分隔线。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "sections": {
+          "default": [
+            {
+              "file": "session.md",
+              "when": ""
+            },
+            {
+              "file": "sandbox.md",
+              "when": "sandbox_enabled"
+            },
+            {
+              "file": "group_chat.md",
+              "when": "is_group"
+            },
+            {
+              "file": "web_search.md",
+              "when": "mcp_enabled"
+            }
+          ],
+          "description": "会话层片段，在 `files` 之后按配置顺序拼接，每轮重新求值\n\n只能放**每会话恒定**的内容。",
+          "items": {
+            "$ref": "#/$defs/PromptSectionConfig"
+          },
+          "title": "Sections",
+          "type": "array"
+        },
+        "fallback": {
+          "default": "你是一只可爱的猫娘。",
+          "description": "静态层片段全部缺失时的兜底提示词",
+          "title": "Fallback",
+          "type": "string"
+        },
+        "vars": {
           "additionalProperties": {
             "type": "string"
           },
           "default": {},
-          "description": "系统提示词额外内容，键为占位符，值为替换内容的文件名\n\n例如：{\"kanade_wiki\": \"Kanade-wiki.md\"}表示在系统提示词中遇到{{kanade_wiki}}时，\n会将其替换为Kanade-wiki.md文件的内容",
-          "title": "System Prompt Extras",
+          "description": "自定义模板变量，可覆盖内置变量；优先级最高\n\n适合放不会变的常量；逐轮变化的量不要放这里，它会跟着静态层一起被缓存住。",
+          "title": "Vars",
           "type": "object"
         }
       },
-      "title": "AgentConfig",
+      "title": "ChatPromptConfig",
       "type": "object"
     },
     "CompConfig": {
@@ -350,12 +446,6 @@
           "title": "Vision",
           "type": "boolean"
         },
-        "system_prompt_file": {
-          "default": "ImageCaption.md",
-          "description": "系统提示词文件名",
-          "title": "System Prompt File",
-          "type": "string"
-        },
         "mcp_servers": {
           "anyOf": [
             {
@@ -371,6 +461,12 @@
           "default": null,
           "description": "MCP服务器配置，键为服务器名称",
           "title": "Mcp Servers"
+        },
+        "system_prompt_file": {
+          "default": "ImageCaption.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
         }
       },
       "title": "ImageCaptionConfig",
@@ -492,6 +588,27 @@
         }
       },
       "title": "MindleConfig",
+      "type": "object"
+    },
+    "PromptSectionConfig": {
+      "description": "会话层提示词片段",
+      "properties": {
+        "file": {
+          "description": "提示词文件名，相对提示词目录",
+          "title": "File",
+          "type": "string"
+        },
+        "when": {
+          "default": "",
+          "description": "条件变量名：该变量为真值时才拼接本段，否则整段跳过（省 token）。\n\n空串表示无条件拼接。",
+          "title": "When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "title": "PromptSectionConfig",
       "type": "object"
     },
     "ProviderConfig": {
@@ -880,9 +997,41 @@
             "reasoning_effort": null,
             "max_output_tokens": null,
             "vision": false,
-            "system_prompt_file": "Kanade-v4.md",
             "mcp_servers": null,
-            "system_prompt_extras": {}
+            "prompt": {
+              "dir": "prompts/",
+              "fallback": "你是一只可爱的猫娘。",
+              "files": [
+                "identity.md",
+                "chat_style.md",
+                "lore_qa.md",
+                "environment.md",
+                "tool_usage.md",
+                "tools.md",
+                "system_notifications.md",
+                "wiki.md",
+                "abbreviations.md"
+              ],
+              "sections": [
+                {
+                  "file": "session.md",
+                  "when": ""
+                },
+                {
+                  "file": "sandbox.md",
+                  "when": "sandbox_enabled"
+                },
+                {
+                  "file": "group_chat.md",
+                  "when": "is_group"
+                },
+                {
+                  "file": "web_search.md",
+                  "when": "mcp_enabled"
+                }
+              ],
+              "vars": {}
+            }
           }
         },
         "compaction": {
@@ -1367,12 +1516,6 @@
           "title": "Vision",
           "type": "boolean"
         },
-        "system_prompt_file": {
-          "default": "Summarizer.md",
-          "description": "系统提示词文件名",
-          "title": "System Prompt File",
-          "type": "string"
-        },
         "mcp_servers": {
           "anyOf": [
             {
@@ -1388,6 +1531,12 @@
           "default": null,
           "description": "MCP服务器配置，键为服务器名称",
           "title": "Mcp Servers"
+        },
+        "system_prompt_file": {
+          "default": "Summarizer.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
         },
         "bot_name": {
           "default": "宵崎奏",
@@ -1718,10 +1867,42 @@
           "max_output_tokens": null,
           "mcp_servers": null,
           "model": null,
+          "prompt": {
+            "dir": "prompts/",
+            "fallback": "你是一只可爱的猫娘。",
+            "files": [
+              "identity.md",
+              "chat_style.md",
+              "lore_qa.md",
+              "environment.md",
+              "tool_usage.md",
+              "tools.md",
+              "system_notifications.md",
+              "wiki.md",
+              "abbreviations.md"
+            ],
+            "sections": [
+              {
+                "file": "session.md",
+                "when": ""
+              },
+              {
+                "file": "sandbox.md",
+                "when": "sandbox_enabled"
+              },
+              {
+                "file": "group_chat.md",
+                "when": "is_group"
+              },
+              {
+                "file": "web_search.md",
+                "when": "mcp_enabled"
+              }
+            ],
+            "vars": {}
+          },
           "provider": null,
           "reasoning_effort": null,
-          "system_prompt_extras": {},
-          "system_prompt_file": "Kanade-v4.md",
           "vision": false
         },
         "compaction": {
@@ -2565,8 +2746,8 @@
         "reasoning_effort": null,
         "max_output_tokens": null,
         "vision": false,
-        "system_prompt_file": "Summarizer.md",
         "mcp_servers": null,
+        "system_prompt_file": "Summarizer.md",
         "bot_name": "宵崎奏",
         "min_size": 10,
         "max_size": 2048,

@@ -43,11 +43,7 @@ from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from pydantic_ai.models import Model, ModelRequestContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
-from pydantic_ai_harness.compaction import (
-    ClearToolResults,
-    SummarizingCompaction,
-    TieredCompaction,
-)
+from pydantic_ai_harness.compaction import ClearToolResults, SummarizingCompaction, TieredCompaction
 
 AgentDepsT = TypeVar("AgentDepsT")
 
@@ -60,19 +56,16 @@ STRATEGY_SUMMARIZE = "summarizing"
 
 @dataclass
 class CompactionParams:
-    """压缩参数（必须持久化，恢复时用记录值而非当前配置）"""
+    """压缩参数"""
 
     trigger_fraction: float = 0.8
-    """触发清理的上下文占用比例（按模型真实上下文窗口解析）
-
-    用比例而非绝对 token 数：一个配置对所有模型都正确，
-    换个模型也不必重新校准。"""
+    """触发清理的上下文占用比例"""
 
     keep_pairs: int = 3
     """`ClearToolResults` 保留的最近工具调用对数"""
 
     min_clear_tokens: int = 2_000
-    """清理收益低于此 token 数则跳过（保护 prompt cache）；**仅在线生效**"""
+    """清理收益低于此 token 数则跳过；**仅在线生效**"""
 
     context_window: int | None = None
     """上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析"""

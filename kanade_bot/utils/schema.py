@@ -64,9 +64,6 @@ class BaseAgentConfig(AttrDocModel):
     vision: bool = False
     """模型是否支持图片（视觉）输入"""
 
-    system_prompt_file: str
-    """系统提示词文件名"""
-
     mcp_servers: dict[str, MCPServerConfig] | None = None
     """MCP服务器配置，键为服务器名称"""
 

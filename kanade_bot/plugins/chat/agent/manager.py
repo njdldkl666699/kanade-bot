@@ -11,7 +11,6 @@
 import asyncio
 import base64
 import json
-import platform
 from collections import deque
 from typing import Any
 
@@ -19,13 +18,7 @@ from nonebot import get_driver, logger
 from pydantic_ai import Agent, FunctionToolCallEvent, PartEndEvent, RunContext
 from pydantic_ai.capabilities import PrepareTools
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.messages import (
-    BinaryContent,
-    ModelMessage,
-    ModelResponse,
-    TextPart,
-    UserContent,
-)
+from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, TextPart, UserContent
 from pydantic_ai.toolsets.abstract import AbstractToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.usage import UsageLimits
@@ -40,13 +33,12 @@ from .compaction import CompactionParams, RecordingCompaction, build_compaction_
 from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryStore
+from .prompt import ChatPrompt, current_time_line
 from .sandbox import SandboxManager
 from .session_store import SessionStore
 from .tool import build_tools, prepare_tools
 
 agent = cfg.agent
-
-FALLBACK_SYSTEM_PROMPT = "你是一只可爱的猫娘。"
 
 EMPTY_RESPONSE_MAX_RETRIES = 2
 """空响应（整轮无文本输出且无工具调用，模型把答案写进了推理通道）的最大重发
@@ -69,31 +61,8 @@ class EmptyResponseError(RuntimeError):
     抛出前已回退本轮写入的消息，历史中没有残留。"""
 
 
-def _build_system_prompt() -> str:
-    sp_path = agent.system_prompt_file_path
-    if not sp_path.is_file():
-        logger.warning(f"系统提示词文件不存在，路径: {sp_path.absolute()}")
-        return FALLBACK_SYSTEM_PROMPT
-
-    sp = sp_path.read_text(encoding="utf-8")
-    extras = agent.system_prompt_extras_paths
-
-    for k, p in extras.items():
-        if not p.is_file():
-            logger.warning(f"系统提示词额外内容文件不存在，路径: {p.absolute()}")
-            continue
-        content = p.read_text(encoding="utf-8")
-        sp = sp.replace(f"{{{{{k}}}}}", content)
-
-    return sp
-
-
 class ChatSessionManager:
     """聊天会话管理器：会话存储、消息缓冲区、会话锁与Agent运行"""
-
-    system_prompt = _build_system_prompt()
-    """系统提示词"""
-    logger.trace(f"系统提示词:\n{system_prompt}")
 
     def __init__(self):
         self._memory_store = MemoryStore(
@@ -117,6 +86,9 @@ class ChatSessionManager:
         self._compaction: RecordingCompaction = build_compaction_capability(self._compaction_params)
         self._store = SessionStore(cfg.session.db_file_path)
         """会话存储（append-only 全量 + 压缩事件标记）"""
+
+        self._prompt = ChatPrompt(cfg)
+        """模块化系统提示词渲染器（见 `prompt.py`）"""
 
         self._session_locks: dict[str, asyncio.Lock] = {}
         """会话锁，确保同一时间只有一个协程在操作同一个会话，键为会话ID"""
@@ -152,7 +124,12 @@ class ChatSessionManager:
 
         self._agent: Agent[ChatDeps] = Agent(
             name="kanade-bot-chat",
-            instructions=self._dynamic_instructions,
+            # 静态层（`dynamic=False`）占提示词绝大部分体积且字节稳定，能命中
+            # provider 前缀缓存；会话层每轮重算，落在缓存边界之后。
+            instructions=[
+                *self._prompt.static_instructions,
+                self._session_instructions,
+            ],
             deps_type=ChatDeps,
             model=get_model(agent),
             model_settings=build_model_settings(agent),
@@ -234,6 +211,7 @@ class ChatSessionManager:
         if failed:
             logger.warning(f"MCP服务器连接失败: {failed}")
         self._mcp_toolsets = toolsets
+        self._prompt.set_mcp_available(bool(toolsets))
         logger.info(f"已加载{len(toolsets)}个MCP工具集")
 
     async def _shutdown(self):
@@ -246,33 +224,18 @@ class ChatSessionManager:
         if self._sandbox_manager is not None:
             await self._sandbox_manager.destroy_all()
 
-    # ===== Agent 动态指令 =====
+    # ===== Agent 会话层指令 =====
 
-    def _dynamic_instructions(self, ctx: RunContext[ChatDeps]) -> str:
-        """组装系统提示词：静态人格 + 会话动态段"""
-        prompt = self.system_prompt
-        info: SessionInfo = ctx.deps.session_info
+    def _session_instructions(self, ctx: RunContext[ChatDeps]) -> str:
+        """按当前会话渲染会话层提示词（群名、沙箱工作区、功能开关）
 
-        prompt += f"\n* Operationg System: {platform.system()}\n"
+        片段在 `ChatPrompt` 构造时已读入缓存，这里只做条件过滤与变量替换：
+        沙箱说明仅在启用沙箱时出现、群聊说明仅在群聊中出现（见 `config/chat/prompts/`）。
 
-        if ctx.deps.sandbox is not None:
-            workspace_root = ctx.deps.sandbox_root
-            prompt += (
-                f"\n* 你有一个Linux沙箱工作区（mirage虚拟文件系统，"
-                f"由Landlock沙箱约束），可用run_command执行shell命令。\n"
-                f"  工作区根目录（绝对路径）：{workspace_root}\n"
-                "  当前工作目录即为工作区根，文件读写与编辑用 read_file/write_file/edit_file，"
-                "搜索用 search_files/find_files，建目录用create_directory，"
-                "下载用curl，建目录用mkdir 等；\n"
-                "  curl 请用 -s/-L/-o <文件>，**不要用 -m 或 -k**（内置curl暂不支持）；\n"
-                "  工作区文件在会话间持久保留，发送给用户的文件/图片请用\n"
-                "  send_file/send_image 工具从工作区发送。\n"
-            )
-
-        if group_info := build_sender_info(info.group_name, info.group_id):
-            prompt += f"\n当前会话在群聊{group_info}中。\n"
-
-        return prompt
+        当前时间刻意不在任何一层，而是由 `current_time_line()` 附到用户消息——
+        系统提示词位于消息前缀，每轮变动会让整块缓存失效。
+        """
+        return self._prompt.session_instructions(ctx.deps)
 
     # ===== 会话与缓冲区 =====
 
@@ -329,6 +292,9 @@ class ChatSessionManager:
         if prompt:
             prompt_parts.append("\n$ 下面是这次用户对你的消息：")
             prompt_parts.append(prompt)
+
+        # 时间走用户消息而非系统提示词：后者在消息前缀，每轮变动会让整块缓存失效
+        prompt_parts.append(current_time_line())
 
         if system_notification:
             prompt_parts.append("<system_notification>")

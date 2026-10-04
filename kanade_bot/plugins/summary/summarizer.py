@@ -94,9 +94,6 @@ class Summarizer:
     ) -> str:
         """生成会话消息总结，返回总结文本
 
-        输出因max_output_tokens截断（finish_reason=length）时，
-        把已生成内容并入历史并请求继续，拼接为完整总结。
-
         :param session_id: 会话ID
         :param size: 要总结的消息条数，不足则总结全部
         :returns: 模型生成的总结文本，发生错误时抛出异常

@@ -5,12 +5,9 @@ from nonebot import get_plugin_config, require
 from pydantic import BaseModel, PositiveInt
 
 from kanade_bot.utils.common import PlatformType
-from kanade_bot.utils.schema import (
-    AttrDocModel,
-    BaseAgentConfig,
-    ConfigRegistry,
-    generate_schema,
-)
+from kanade_bot.utils.schema import AttrDocModel, BaseAgentConfig, ConfigRegistry, generate_schema
+
+from .agent.prompt_config import ChatPromptConfig
 
 require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import (
@@ -26,22 +23,8 @@ from kanade_bot.plugins.model_updater import load_register_model_from_file
 class AgentConfig(BaseAgentConfig):
     """聊天Agent配置"""
 
-    system_prompt_file: str = "Kanade-v4.md"
-    """系统提示词文件名"""
-    system_prompt_extras: dict[str, str] = {}
-    """系统提示词额外内容，键为占位符，值为替换内容的文件名
-    
-    例如：{"kanade_wiki": "Kanade-wiki.md"}表示在系统提示词中遇到{{kanade_wiki}}时，
-    会将其替换为Kanade-wiki.md文件的内容
-    """
-
-    @property
-    def system_prompt_file_path(self) -> Path:
-        return get_plugin_config_file(self.system_prompt_file)
-
-    @property
-    def system_prompt_extras_paths(self) -> dict[str, Path]:
-        return {k: get_plugin_config_file(f) for k, f in self.system_prompt_extras.items()}
+    prompt: ChatPromptConfig = ChatPromptConfig()
+    """模块化系统提示词配置"""
 
 
 class ImageCaptionConfig(BaseAgentConfig):
@@ -113,21 +96,15 @@ class CompactionConfig(AttrDocModel):
     """会话压缩配置"""
 
     trigger_fraction: float = 0.8
-    """触发压缩的上下文占用比例（按模型真实上下文窗口解析）
-
-    用比例而非绝对 token 数：一个配置对所有模型都正确，换个模型也不必重新校准。"""
+    """触发压缩的上下文占用比例"""
 
     keep_pairs: PositiveInt = 3
-    """清空旧工具结果时保留的最近工具调用对数
-
-    只清空旧工具**结果**的内容，消息结构与位置不变，
-    因此 provider 侧的前缀缓存仍然命中。"""
+    """清空旧工具结果时保留的最近工具调用对数"""
 
     min_clear_tokens: PositiveInt = 2000
     """清理收益低于此 token 数则跳过本次清理
 
-    清理会改写消息内容、使该点之后的 prompt cache 失效；
-    收益太小不值得破坏缓存，故宁可不清理。"""
+    清理会改写消息内容、使该点之后的 prompt cache 失效"""
 
     context_window: int | None = None
     """上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析"""
@@ -135,8 +112,7 @@ class CompactionConfig(AttrDocModel):
     summary_target_fraction: float | None = None
     """超过此上下文占用比例才升级到 LLM 摘要档；None 表示不启用摘要档
 
-    超过预算时先做零成本的工具结果清理，仍超预算才调用 LLM 生成摘要。
-    摘要不可重放（非确定性），会把压缩后的完整历史存入数据库。"""
+    超过预算时先做零成本的工具结果清理，仍超预算才调用 LLM 生成摘要。"""
 
     summary_model: str | None = None
     """摘要使用的模型 ID；None 表示继承主模型"""
@@ -146,16 +122,16 @@ class CompactionConfig(AttrDocModel):
 
 
 class SessionConfig(AttrDocModel):
-    """会话历史存储配置（消息缓冲区 + 数据库）"""
+    """会话历史存储配置"""
 
     db_file: str = "agent_sessions.sqlite3"
-    """会话历史 SQLite 数据库文件名，位于插件数据目录"""
+    """会话历史 SQLite 数据库文件名"""
 
     buffer_max_size: PositiveInt = 100
     """消息缓冲区最大条数，超出后丢弃最早的消息"""
 
     buffer_cache_file: str = "session_messages_cache.json"
-    """消息缓冲区缓存文件名，位于插件缓存目录"""
+    """消息缓冲区缓存文件名"""
 
     @property
     def db_file_path(self) -> Path:
@@ -172,9 +148,7 @@ class SandboxConfig(AttrDocModel):
     enabled: bool = False
     """是否启用沙箱（文件与shell能力）
 
-    需要 sandlock CLI 在 PATH 上。生产内核 6.8 的 Landlock 只有 ABI v4，
-    低于 sandlock 要求的 v6，启动时会自动启用 wrapper 注入
-    `--allow-degraded`（见 MIGRATION_PLAN_PYDANTIC_AI.md 4.3.0.1）。"""
+    需要 sandlock CLI 在 PATH 上"""
 
     environment: dict[str, str] = {}
     """沙箱环境变量，注入到每个会话
@@ -188,10 +162,10 @@ class SandboxConfig(AttrDocModel):
     """同时存活的最大沙箱数，超出后LRU关闭"""
 
     idle_timeout_minutes: PositiveInt = 30
-    """空闲沙箱回收阈值（分钟），超时后关闭"""
+    """空闲沙箱回收阈值，超时后关闭"""
 
     sweeper_interval_minutes: PositiveInt = 5
-    """后台回收任务扫描间隔（分钟）"""
+    """后台回收任务扫描间隔"""
 
     workspace_dir: str = "sandboxes/"
     """沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录"""
@@ -199,17 +173,16 @@ class SandboxConfig(AttrDocModel):
     landlock_degrade: Literal["auto", "always", "strict"] = "auto"
     """Landlock ABI 不足时的策略
 
-    - `auto`（默认）：按 `sandlock check` 的结果自动决定，ABI < v6 时启用
-      wrapper 注入 `--allow-degraded`
+    - `auto`（默认）：按 `sandlock check` 的结果自动决定，
+      ABI < v6 时启用wrapper 注入 `--allow-degraded`
     - `always`：始终注入降级参数
-    - `strict`：ABI 不足 v6 即报错（不降级）"""
+    - `strict`：ABI 不足 v6 即报错"""
 
     landlock_real_binary: str | None = None
     """真实 sandlock 可执行文件的绝对路径
 
-    留空（默认）= 生成 wrapper 时用 `shutil.which("sandlock")` 动态求值，
-    适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH（如 systemd 托管）
-    时才需显式指定。"""
+    留空（默认）：生成 wrapper 时用 `shutil.which("sandlock")` 动态求值，
+    适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH时才需显式指定。"""
 
     @property
     def workspace_dir_path(self) -> Path:
@@ -236,12 +209,10 @@ class ScopedConfig(AttrDocModel):
 
     compaction: CompactionConfig = CompactionConfig()
     """会话压缩配置"""
-
     memory: MemoryConfig = MemoryConfig()
     """持久化记忆配置"""
-
     session: SessionConfig = SessionConfig()
-    """会话历史存储配置（消息缓冲区 + 数据库）"""
+    """会话历史存储配置"""
 
     sandbox: SandboxConfig = SandboxConfig()
     """Mirage沙箱配置"""

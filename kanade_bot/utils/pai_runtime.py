@@ -72,9 +72,7 @@ def get_model(config: BaseAgentConfig) -> OpenAIChatModel:
 def build_model_settings(config: BaseAgentConfig) -> ModelSettings:
     """将配置映射为 `ModelSettings`
 
-    `reasoning_effort` 没有专用字段，走 `extra_body` 透传给 provider
-    （DeepSeek 官方端点已实测：high 会返回 `reasoning_content`，
-    Pydantic AI 把它转成 `ThinkingPart`，不会混进最终文本）。
+    `reasoning_effort` 没有专用字段，走 `extra_body` 透传给 provider。
     """
     extra_body: dict[str, object] = {}
     if config.reasoning_effort:
@@ -105,11 +103,11 @@ async def run_with_continuation(
     message_history: Sequence[ModelMessage] | None = None,
     timeout: float | None = None,
 ) -> str:
-    """运行并返回完整输出：截断（`finish_reason == 'length'`）时把已生成内容
-    作为历史回传并请求继续，拼接为完整文本。
+    """运行并返回完整输出
 
-    适用于无会话的一次性调用（summary / image_caption）；
-    带会话的流式场景由会话管理器自行实现续写。
+    截断（`finish_reason == 'length'`）时把已生成内容作为历史回传并请求继续，拼接为完整文本。
+
+    适用于无会话的一次性调用；带会话的流式场景由会话管理器自行实现续写。
     """
     parts: list[str] = []
     history: Sequence[ModelMessage] | None = message_history

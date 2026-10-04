@@ -1,14 +1,3 @@
-"""聊天Agent宿主工具
-
-所有工具通过 `RunContext[ChatDeps]` 获取当前发送者身份、Bot实例与沙箱会话，
-定义本身是静态的、可全局复用；条件启用（记忆工具、TTS）由 `PrepareTools`
-capability 在每次请求前按 `ctx.deps` 过滤，关闭的工具**完全不进入 schema**。
-
-文件类工具以沙箱工作区为中心：`send_file`/`send_image` 从沙箱读取文件发送
-到聊天平台，`render_html_image` 在宿主侧渲染后把产物写入沙箱工作区；联网
-下载、目录创建等能力由沙箱内 shell（curl/mkdir）承担，不提供专门工具。
-"""
-
 import base64
 import io
 import tempfile

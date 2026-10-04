@@ -1,5 +1,3 @@
-"""图片转述模型。一次性调用，无工具、无会话历史"""
-
 import asyncio
 import base64
 

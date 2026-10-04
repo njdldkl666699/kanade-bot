@@ -37,6 +37,40 @@ sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
 chat:
   agent:
     <<: *deepseek-official
+    # 模块化系统提示词：拼接 config/chat/prompts/ 下的文件
+    #
+    # 分两层，边界是「变化频率」：
+    # - files（静态层）只放进程恒定的内容，启动时求值一次，字节稳定 → 命中前缀缓存
+    # - sections（会话层）只放每会话恒定的内容，每轮重算，落在缓存边界之后
+    # 时间每分钟都变，写进任何一层都会让整块缓存失效，故由用户消息携带。
+    prompt:
+      dir: prompts/ # 提示词目录，相对插件配置目录
+      # 静态层，每个片段渲染成一个独立的 dynamic=False part，id 为 agent:<文件名>
+      # 不写则用默认值（见 chat/agent/prompt_config.py 的 DEFAULT_PROMPT_FILES）
+      files:
+        - identity.md # 身份与角色气质
+        - chat_style.md # 回复风格与约束
+        - lore_qa.md # 设定问答与信息检索
+        - environment.md # 运行环境（操作系统/模型/Python 版本）
+        - tool_usage.md # 工具使用原则
+        - tools.md # 各工具补充说明
+        - system_notifications.md
+        - wiki.md # 角色设定百科全文，篇幅最大；启用 RAG 后可去掉
+        - abbreviations.md # 角色缩写对照表
+      # 会话层，合并成一个 dynamic=True 的 part；when 为真值时才拼接，空串=无条件
+      # 注意：放进这一层的片段，其内容必须在整个会话期间保持不变，否则前缀缓存会失效
+      sections:
+        - file: sandbox.md
+          when: sandbox_enabled # 仅启用沙箱时告知工作区用法
+        - file: group_chat.md
+          when: is_group # 仅群聊时说明群聊场景
+        # 需要联网检索说明时，把下面两行加回来（对应内置变量 mcp_enabled，
+        # 由 MCP 连接结果回填，见 agent/manager.py 的 _start_mcp）：
+        # - file: web_search.md
+        #   when: mcp_enabled
+      # fallback: 你是一只可爱的猫娘。 # 静态层片段全部缺失时的兜底
+      # vars: # 自定义模板变量，可覆盖内置变量
+      #   my_var: my value
     mcp_servers:
       tavily:
         url: https://mcp.tavily.com/mcp

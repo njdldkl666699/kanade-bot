@@ -20,9 +20,10 @@ localstore_use_cwd: true
 chat:
   agent:
     model: deepseek-chat
-    system_prompt_file: Kanade-v4.md
-    system_prompt_extras:
-      kanade_wiki: Kanade-wiki.md
+    # 系统提示词：按顺序拼接 config/chat/prompts/ 下的文件
+    # （具体文件列表见 kanade_bot/plugins/chat/agent/prompt_config.py）
+    prompt:
+      dir: prompts/
   session:
     buffer_max_size: 256
   compaction:
