@@ -32,6 +32,13 @@ class ProviderConfig(AttrDocModel):
     headers: dict[str, str] | None = None
     """额外请求头"""
 
+    supports_max_completion_tokens: bool = False
+    """Chat Completions端点是否接受`max_completion_tokens`字段
+
+    pydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，
+    但绝大多数OpenAI兼容端点只认旧的`max_tokens`，未知字段会被静默忽略，
+    导致输出长度限制实际未生效。仅当端点明确支持时（如OpenAI官方）才设为true。"""
+
 
 class MCPServerConfig(AttrDocModel):
     """MCP服务器配置（Streamable HTTP传输）"""

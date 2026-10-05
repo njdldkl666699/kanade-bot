@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from pydantic_ai import Agent, ModelResponse
 from pydantic_ai.messages import ModelMessage, UserContent
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
@@ -61,9 +62,18 @@ def get_model(config: BaseAgentConfig) -> OpenAIChatModel:
     cache_key = (_client_key(provider), config.model)
     model = _model_cache.get(cache_key)
     if model is None:
+        # pydantic-ai 默认把 max_tokens 设置映射为 max_completion_tokens 发送，
+        # DeepSeek 等兼容端点只认 max_tokens（未知字段被静默忽略，输出限制失效），
+        # 按端点能力声明覆盖映射；未配置 provider（OpenAI 官方端点）保持默认
+        profile = None
+        if provider is not None:
+            profile = OpenAIModelProfile(
+                openai_chat_supports_max_completion_tokens=provider.supports_max_completion_tokens
+            )
         model = OpenAIChatModel(
             config.model,
             provider=OpenAIProvider(openai_client=_get_client(provider)),
+            profile=profile,
         )
         _model_cache[cache_key] = model
     return model

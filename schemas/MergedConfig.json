@@ -639,6 +639,12 @@
           "default": null,
           "description": "额外请求头",
           "title": "Headers"
+        },
+        "supports_max_completion_tokens": {
+          "default": false,
+          "description": "Chat Completions端点是否接受`max_completion_tokens`字段\n\npydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，\n但绝大多数OpenAI兼容端点（DeepSeek官方、SiliconFlow、SenseNova等）只认\n旧的`max_tokens`，未知字段会被静默忽略，导致输出长度限制实际未生效。\n仅当端点明确支持时（如OpenAI官方）才设为true。",
+          "title": "Supports Max Completion Tokens",
+          "type": "boolean"
         }
       },
       "title": "ProviderConfig",
