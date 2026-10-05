@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from nonebot import get_driver, get_plugin_config, logger
 from pydantic_ai import Agent
+from pydantic_ai.usage import RunUsage
 
 from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 
@@ -52,7 +53,7 @@ class Summarizer:
         try:
             with cache_path.open("r", encoding="utf-8") as f:
                 data: dict[str, list[str]] = json.load(f)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"加载总结缓存文件时发生错误: {e}")
             return
 
@@ -70,7 +71,7 @@ class Summarizer:
             with cache_path.open("w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False)
             logger.info(f"已保存{len(self._message_records)}个会话的历史消息记录到缓存文件")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"保存总结缓存文件时发生错误: {e}")
 
     def add_message(self, session_id: str, message: str):
@@ -91,11 +92,13 @@ class Summarizer:
         is_group: bool = False,
         group_or_user_name: str | None = None,
         timeout: float = 120,
+        usage: RunUsage | None = None,
     ) -> str:
         """生成会话消息总结，返回总结文本
 
         :param session_id: 会话ID
         :param size: 要总结的消息条数，不足则总结全部
+        :param usage: 传入的`RunUsage`实例，原地累加本次总结的usage
         :returns: 模型生成的总结文本，发生错误时抛出异常
         """
         if session_id not in self._message_records:
@@ -106,7 +109,8 @@ class Summarizer:
         prompt = prefix + "\n\n".join(messages_slice)
 
         return await asyncio.wait_for(
-            run_with_continuation(self.agent, prompt, max_requests=1), timeout=timeout
+            run_with_continuation(self.agent, prompt, max_requests=1, usage=usage),
+            timeout=timeout,
         )
 
 

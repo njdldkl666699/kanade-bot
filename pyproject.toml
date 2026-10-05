@@ -1,11 +1,12 @@
 [project]
 name = "kanade-bot"
-version = "v6.0.0-beta.5"
+version = "v6.0.0-beta.6"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "anyconfig>=0.15.1",
+  "chinesecalendar>=1.11.0",
   "emoji>=2.15.0",
   "httpx>=0.28.1",
   "mcstatus>=13.0.1",
@@ -71,4 +72,4 @@ nonebot-plugin-picstatus = ["nonebot_plugin_picstatus"]
 nonebot-plugin-githubcard = ["nonebot_plugin_githubcard"]
 
 [tool.ruff.lint]
-ignore = ["B008", "RUF012"]
+ignore = ["B008", "RUF012", "BLE001"]

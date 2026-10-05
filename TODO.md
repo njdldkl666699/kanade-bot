@@ -1,8 +1,6 @@
 - [x] 审查chat模块代码
 - [x] 更新README
 - [x] 更新提示词系统（模块化配置）
-- [ ] 定时任务（system_reminder实现）
-- [ ] 移除`openai-proxy`
 - [x] 内存占用测试
 - [x] 考虑文件编辑工具、shell方案：使用mirage+sandlock
 - [x] 卡池更新
@@ -10,7 +8,9 @@
 - [x] env设置打印/不打印banner，包括Kanade和PydanticAI（在第一次运行agent时）
 - [x] chat配置结构重构
 - [x] 检查gacha十连图片是否被缩放
-- [ ] 聊天、总结按Token计费
-- [ ] 新增查看token消耗等统计数据
+- [x] 聊天、总结按Token计费
+- [x] 新增查看token消耗等统计数据
 - [x] 是否可以不用沙箱池？开销如何？（实测每轮新建仅~5ms，已去池化）
-- [ ] 记忆系统+会话压缩一起设计
+- [ ] 定时任务（system_reminder实现）
+- [ ] 移除`openai-proxy`
+- [ ] 记忆系统重新设计

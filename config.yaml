@@ -19,11 +19,7 @@ localstore_use_cwd: true
 
 chat:
   agent:
-    model: deepseek-chat
-    # 系统提示词：按顺序拼接 config/chat/prompts/ 下的文件
-    # （具体文件列表见 kanade_bot/plugins/chat/agent/prompt_config.py）
-    prompt:
-      dir: prompts/
+    model: deepseek-flash
   session:
     buffer_max_size: 256
   compaction:
@@ -67,7 +63,7 @@ music:
   lyric_default_length: 4
 
 summary:
-  model: deepseek-chat
+  model: deepseek-flash
   system_prompt_file: Summarizer.md
   bot_name: 宵崎奏
   min_size: 10

@@ -238,7 +238,7 @@ async def _(event: ConsoleMessageEvent):
 
     try:
         image = await random_loli_waifu_with_retry()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         await today_waifu.finish(f"获取图片失败：{e}")
 
     p = waifu_cache.set_bytes(platform, user_id, image)
@@ -255,7 +255,7 @@ async def _(event: OneBotMessageEvent):
 
     try:
         image = await random_loli_waifu_with_retry()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         await today_waifu.finish(f"获取图片失败：{e}")
 
     waifu_cache.set_bytes(platform, user_id, image)
@@ -316,7 +316,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
         try:
             image = await random_loli_waifu_with_retry()
             await random_waifu.send(MessageSegment.image(image))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             await random_waifu.finish(f"获取图片失败：{e}")
         succeed_consume(key, platform, user_id)
         return

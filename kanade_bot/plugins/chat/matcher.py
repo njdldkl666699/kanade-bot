@@ -6,7 +6,6 @@ from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 
@@ -36,7 +35,7 @@ chat_monitor = on_message(
 
 chat_reset = on_command(
     "重置会话",
-    aliases={"chat_reset", "chatreset", "重置对话"},
+    aliases={"会话重置", "chat_reset", "chatreset"},
     priority=2,
     permission=SUPERUSER,
     block=True,
@@ -45,7 +44,7 @@ register_matcher(chat_reset, "重置会话")
 
 chat_interrupt = on_command(
     "中断会话",
-    aliases={"chat_interrupt", "chatinterrupt"},
+    aliases={"会话中断", "chat_interrupt", "chatinterrupt"},
     priority=2,
     permission=SUPERUSER,
     block=True,
@@ -54,12 +53,20 @@ register_matcher(chat_interrupt, "中断会话")
 
 chat_compact = on_command(
     "压缩会话",
-    aliases={"chat_compact", "chatcompact"},
+    aliases={"会话压缩", "chat_compact", "chatcompact"},
     priority=2,
     permission=SUPERUSER,
     block=True,
 )
 register_matcher(chat_compact, "压缩会话")
+
+chat_stats = on_command(
+    "会话统计",
+    aliases={"chat_stats", "chatstats"},
+    priority=2,
+    block=True,
+)
+register_matcher(chat_stats, "会话统计")
 
 chat_ban = on_command(
     "聊天拉黑",

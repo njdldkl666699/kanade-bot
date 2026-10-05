@@ -72,9 +72,10 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.usage import UsageLimits
+from pydantic_ai_harness.compaction import compact_now
 
-from kanade_bot.plugins.chat.agent import session_store as store_mod
 from kanade_bot.plugins.chat.agent import compaction as compaction_mod
+from kanade_bot.plugins.chat.agent import session_store as store_mod
 from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
 
 SessionStore = store_mod.SessionStore
@@ -459,6 +460,57 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         reborn = SessionStore(self.db)
         restored = await reborn.restore("c1", params=TEST_PARAMS)
         self.assertEqual(fp(restored), fp(snapshot))
+
+
+# ===== 手动总结级压缩 =====
+
+
+class ManualCompactionTest(unittest.IsolatedAsyncioTestCase):
+    """手动 LLM 摘要压缩：`compact_now` + `build_summary` / `build_summary_mark`"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db = Path(self.tmp.name) / "sessions.sqlite3"
+
+    async def test_manual_compact_record_and_restore(self):
+        """手动压缩 → mark 落库 → 重启恢复与压缩产物一致，DB 全量保留"""
+        store = SessionStore(self.db)
+        history = make_history(6)
+        await store.append("c1", history)
+
+        params = CompactionParams(summary_keep_messages=5)
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        compacted = await compact_now(
+            compaction_mod.build_summary(params),
+            history,
+            model=summary_model,
+            conversation_id="c1",
+        )
+        self.assertIsNot(compacted, history, "历史超过保留尾部时应发生摘要压缩")
+        self.assertLess(len(compacted), len(history))
+        self.assertEqual(compaction_mod.extract_summary(compacted), "这是摘要")
+
+        mark = compaction_mod.build_summary_mark(params, compacted)
+        self.assertEqual(mark.strategy, "summarizing")
+        self.assertIsNotNone(mark.result)
+        await store.add_compaction_mark("c1", mark)
+
+        reborn = SessionStore(self.db)
+        self.assertEqual(fp(await reborn.restore("c1", params=params)), fp(compacted))
+        self.assertEqual(await reborn.count("c1"), len(history), "DB 仍全量保留")
+
+    async def test_manual_compact_noop_within_keep_tail(self):
+        """历史不超过保留尾部时为无操作，原样返回同一列表"""
+        history = make_history(1)
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        result = await compact_now(
+            compaction_mod.build_summary(CompactionParams(summary_keep_messages=20)),
+            history,
+            model=summary_model,
+        )
+        self.assertIs(result, history)
+        self.assertIsNone(compaction_mod.extract_summary(result))
 
 
 # ===== 流式 =====

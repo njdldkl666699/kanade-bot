@@ -2,8 +2,9 @@ from pathlib import Path
 from typing import Literal
 
 from nonebot import get_plugin_config, require
-from pydantic import BaseModel, PositiveInt
+from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
+from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.common import PlatformType
 from kanade_bot.utils.schema import AttrDocModel, BaseAgentConfig, ConfigRegistry, generate_schema
 
@@ -113,11 +114,14 @@ class CompactionConfig(AttrDocModel):
     trigger_fraction: float = 0.8
     """触发清理的上下文占用比例"""
 
-    keep_pairs: PositiveInt = 3
+    keep_pairs: NonNegativeInt = 3
     """`ClearToolResults` 保留的最近工具调用对数"""
 
-    min_clear_tokens: PositiveInt = 2_000
-    """清理收益低于此 token 数则跳过；**仅在线生效**"""
+    min_clear_tokens: NonNegativeInt | None = None
+    """清理收益低于此 token 数则跳过；**仅在线生效**
+    
+    `None` 表示不启用最小清理阈值。
+    """
 
     context_window: int | None = None
     """上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析"""
@@ -128,7 +132,7 @@ class CompactionConfig(AttrDocModel):
     summary_model: str | None = None
     """摘要使用的模型 ID；None 表示继承主模型"""
 
-    summary_keep_messages: PositiveInt = 40
+    summary_keep_messages: NonNegativeInt = 40
     """生成摘要时保留的最近消息条数"""
 
     def fingerprint(self) -> str:
@@ -181,7 +185,7 @@ class SandboxConfig(AttrDocModel):
     """真实 sandlock 可执行文件的绝对路径
 
     默认：生成 wrapper 时用 `shutil.which("sandlock")` 动态求值，
-    适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH时才需显式指定。"""
+    适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH 时才需显式指定。"""
 
     @property
     def workspace_dir_path(self) -> Path:
@@ -273,6 +277,8 @@ class ScopedConfig(AttrDocModel):
     """
     rag: RAGConfig = RAGConfig()
     tts: TTSConfig = TTSConfig()
+    billing: TokenBillingConfig = TokenBillingConfig()
+    """按Token计费的费率配置"""
 
     configs_file: str = "chat_configs.json"
     """聊天配置文件名"""

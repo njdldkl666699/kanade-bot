@@ -33,11 +33,7 @@ class ProviderConfig(AttrDocModel):
     """额外请求头"""
 
     supports_max_completion_tokens: bool = False
-    """Chat Completions端点是否接受`max_completion_tokens`字段
-
-    pydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，
-    但绝大多数OpenAI兼容端点只认旧的`max_tokens`，未知字段会被静默忽略，
-    导致输出长度限制实际未生效。仅当端点明确支持时（如OpenAI官方）才设为true。"""
+    """Chat Completions端点是否接受`max_completion_tokens`字段"""
 
 
 class MCPServerConfig(AttrDocModel):
@@ -56,7 +52,7 @@ class MCPServerConfig(AttrDocModel):
 class BaseAgentConfig(AttrDocModel):
     """基础Agent配置"""
 
-    model: str | None = None
+    model: str = ""
     """模型ID"""
 
     provider: ProviderConfig | None = None
@@ -67,6 +63,9 @@ class BaseAgentConfig(AttrDocModel):
 
     max_output_tokens: int | None = None
     """模型单次响应的最大输出token数"""
+
+    context_window: int | None = None
+    """上下文窗口"""
 
     vision: bool = False
     """模型是否支持图片（视觉）输入"""

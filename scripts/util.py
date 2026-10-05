@@ -2,8 +2,10 @@ from pathlib import Path
 from typing import Any
 
 import anyconfig
-from nonebot.config import Env
+from nonebot.compat import model_dump, type_validate_python
+from nonebot.config import BaseSettings, Config, Env
 from nonebot.utils import deep_update
+from pydantic import BaseModel
 
 
 def load_configs(
@@ -46,3 +48,16 @@ def load_configs(
 
     # 递归（深度）合并字典
     return env, deep_update(configs, env_configs)
+
+
+def get_config[C: BaseModel](global_config: Config, config: type[C]) -> C:
+    return type_validate_python(
+        config,
+        BaseSettings._settings_build_values(
+            config,
+            model_dump(global_config),
+            env_file=global_config._env_file,
+            env_file_encoding=global_config._env_file_encoding,
+            env_nested_delimiter=global_config._env_nested_delimiter,
+        ),
+    )

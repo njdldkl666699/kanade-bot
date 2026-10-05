@@ -259,14 +259,14 @@ async def render_html_image(
             full_page=full_page,
             viewport={"width": viewport_width, "height": viewport_height},
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("HTML渲染为图片失败: {}", e)
         return f"HTML渲染为图片失败: {e}"
 
     target = Path("rendered") / file_name
     try:
         await sandbox.write(target, BytesIO(image))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("写入沙箱工作区失败: {}", e)
         return f"保存图片到沙箱失败: {e}"
 
@@ -304,7 +304,7 @@ async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
 
     try:
         resp = await baidu_client.search(url=url, file=file)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("以图搜图请求失败: {}", e)
         return f"以图搜图请求失败: {e}"
 

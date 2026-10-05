@@ -14,8 +14,10 @@ from nonebot.message import event_postprocessor
 from nonebot.params import CommandArg
 from nonechat import ConsoleMessage as NoneChatConsoleMessage
 from nonechat.model import Channel
+from pydantic_ai.usage import RunUsage
 
-from kanade_bot.utils.common import get_platform_type
+from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
+from kanade_bot.utils.common import asia_shanghai_now, get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
@@ -24,15 +26,14 @@ from .matcher import summarize
 from .summarizer import summarizer
 
 require("nonebot_plugin_htmlrender")
-require("crystal")
-
 from nonebot_plugin_htmlrender import md_to_pic
 
+require("crystal")
 from kanade_bot.plugins.crystal import (
     HandlerKeyEnum,
     check_user_crystal,
+    consume_crystal,
     finish_fail_consume,
-    succeed_consume,
 )
 
 cfg = get_plugin_config(Config).summary
@@ -130,14 +131,22 @@ async def _(
     group_or_user_name = group_name or session_info.nickname
 
     response = await summarize.send("正在总结中，请稍候...")
-    # 准备总结消息的任务
+    # 准备总结消息的任务（usage 原地累加，供总结完成后按Token计费）
+    usage = RunUsage()
+    turn_start = asia_shanghai_now()
     summary_future = summarizer.summarize(
         session_info.session_id,
         size,
         is_group=bool(group_name),
         group_or_user_name=group_or_user_name,
         timeout=600,
+        usage=usage,
     )
+
+    def _bill_usage() -> None:
+        """按总结实际usage扣费（扣费允许至负数），峰谷按命令触发时间判定"""
+        cost = compute_token_cost(usage, cfg.billing, peak=is_peak_hours(turn_start))
+        consume_crystal(platform, user_id, cost)
 
     if isinstance(bot, OneBot):
 
@@ -149,20 +158,20 @@ async def _(
 
         try:
             summary = await summary_future
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"总结会话{session_info.session_id}发生错误: {e}")
             await try_delete_msg()
             await summarize.finish(f"总结失败: {e}")
 
         image = await md_to_pic(summary)
         await try_delete_msg()
-        succeed_consume(key, platform, user_id)
+        _bill_usage()
         await summarize.finish(OneBotMessageSegment.image(image))
 
     elif isinstance(bot, ConsoleBot):
         try:
             summary = await summary_future
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"总结会话{session_info.session_id}发生错误: {e}")
             await bot.recall_message(
                 message_id=response.message_id,
@@ -175,5 +184,5 @@ async def _(
             channel_id=response.channel_id,
         )
 
-        succeed_consume(key, platform, user_id)
+        _bill_usage()
         await summarize.finish(summary)

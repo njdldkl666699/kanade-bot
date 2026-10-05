@@ -4,17 +4,10 @@
       "description": "聊天Agent配置",
       "properties": {
         "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
+          "default": "",
           "description": "模型ID",
-          "title": "Model"
+          "title": "Model",
+          "type": "string"
         },
         "provider": {
           "anyOf": [
@@ -31,7 +24,15 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
               "type": "string"
             },
             {
@@ -54,6 +55,19 @@
           "default": null,
           "description": "模型单次响应的最大输出token数",
           "title": "Max Output Tokens"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口",
+          "title": "Context Window"
         },
         "vision": {
           "default": false,
@@ -200,7 +214,11 @@
         },
         "hides": {
           "items": {
-            "enum": ["tab", "enter", "exit"],
+            "enum": [
+              "tab",
+              "enter",
+              "exit"
+            ],
             "type": "string"
           },
           "title": "Hides",
@@ -209,7 +227,11 @@
         },
         "disables": {
           "items": {
-            "enum": ["tab", "enter", "exit"],
+            "enum": [
+              "tab",
+              "enter",
+              "exit"
+            ],
             "type": "string"
           },
           "title": "Disables",
@@ -240,16 +262,23 @@
         "keep_pairs": {
           "default": 3,
           "description": "`ClearToolResults` 保留的最近工具调用对数",
-          "exclusiveMinimum": 0,
+          "minimum": 0,
           "title": "Keep Pairs",
           "type": "integer"
         },
         "min_clear_tokens": {
-          "default": 2000,
-          "description": "清理收益低于此 token 数则跳过；**仅在线生效**",
-          "exclusiveMinimum": 0,
-          "title": "Min Clear Tokens",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "清理收益低于此 token 数则跳过；**仅在线生效**\n\n`None` 表示不启用最小清理阈值。",
+          "title": "Min Clear Tokens"
         },
         "context_window": {
           "anyOf": [
@@ -293,7 +322,7 @@
         "summary_keep_messages": {
           "default": 40,
           "description": "生成摘要时保留的最近消息条数",
-          "exclusiveMinimum": 0,
+          "minimum": 0,
           "title": "Summary Keep Messages",
           "type": "integer"
         }
@@ -349,17 +378,10 @@
       "description": "图片转述模型配置",
       "properties": {
         "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
+          "default": "",
           "description": "模型ID",
-          "title": "Model"
+          "title": "Model",
+          "type": "string"
         },
         "provider": {
           "anyOf": [
@@ -376,7 +398,15 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
               "type": "string"
             },
             {
@@ -399,6 +429,19 @@
           "default": null,
           "description": "模型单次响应的最大输出token数",
           "title": "Max Output Tokens"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口",
+          "title": "Context Window"
         },
         "vision": {
           "default": false,
@@ -473,7 +516,9 @@
           "title": "Tools"
         }
       },
-      "required": ["url"],
+      "required": [
+        "url"
+      ],
       "title": "MCPServerConfig",
       "type": "object"
     },
@@ -563,7 +608,9 @@
           "type": "string"
         }
       },
-      "required": ["file"],
+      "required": [
+        "file"
+      ],
       "title": "PromptSectionConfig",
       "type": "object"
     },
@@ -614,7 +661,7 @@
         },
         "supports_max_completion_tokens": {
           "default": false,
-          "description": "Chat Completions端点是否接受`max_completion_tokens`字段\n\npydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，\n但绝大多数OpenAI兼容端点只认旧的`max_tokens`，未知字段会被静默忽略，\n导致输出长度限制实际未生效。仅当端点明确支持时（如OpenAI官方）才设为true。",
+          "description": "Chat Completions端点是否接受`max_completion_tokens`字段",
           "title": "Supports Max Completion Tokens",
           "type": "boolean"
         }
@@ -664,7 +711,10 @@
         "embedding_type": {
           "default": "sentence_transformer",
           "description": "RAG使用的向量化方法\n- `sentence_transformer`需要指定model_name_or_path参数\n- `openai`需要指定openai开头的参数",
-          "enum": ["sentence_transformer", "openai"],
+          "enum": [
+            "sentence_transformer",
+            "openai"
+          ],
           "title": "Embedding Type",
           "type": "string"
         },
@@ -743,7 +793,11 @@
         "landlock_degrade": {
           "default": "auto",
           "description": "Landlock ABI 不足时的策略\n\n- `auto`（默认）：按 `sandlock check` 的结果自动决定，\n  ABI < v6 时启用wrapper 注入 `--allow-degraded`\n- `always`：始终注入降级参数\n- `strict`：ABI 不足 v6 即报错",
-          "enum": ["auto", "always", "strict"],
+          "enum": [
+            "auto",
+            "always",
+            "strict"
+          ],
           "title": "Landlock Degrade",
           "type": "string"
         },
@@ -757,7 +811,7 @@
             }
           ],
           "default": null,
-          "description": "真实 sandlock 可执行文件的绝对路径\n\n默认：生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH时才需显式指定。",
+          "description": "真实 sandlock 可执行文件的绝对路径\n\n默认：生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH 时才需显式指定。",
           "title": "Landlock Real Binary"
         }
       },
@@ -854,8 +908,48 @@
           "type": "boolean"
         }
       },
-      "required": ["name", "url"],
+      "required": [
+        "name",
+        "url"
+      ],
       "title": "TestSiteCfg",
+      "type": "object"
+    },
+    "TokenBillingConfig": {
+      "description": "按Token计费配置（单位：水晶/千token）",
+      "properties": {
+        "peak_input_per_1k": {
+          "default": 12,
+          "description": "高峰时段 缓存未命中输入",
+          "title": "Peak Input Per 1K",
+          "type": "number"
+        },
+        "peak_output_per_1k": {
+          "default": 48,
+          "description": "高峰时段 输出",
+          "title": "Peak Output Per 1K",
+          "type": "number"
+        },
+        "off_peak_input_per_1k": {
+          "default": 6,
+          "description": "空闲时段 缓存未命中输入",
+          "title": "Off Peak Input Per 1K",
+          "type": "number"
+        },
+        "off_peak_output_per_1k": {
+          "default": 24,
+          "description": "空闲时段 输出",
+          "title": "Off Peak Output Per 1K",
+          "type": "number"
+        },
+        "min_cost": {
+          "default": 1,
+          "description": "单轮最低消耗水晶数",
+          "title": "Min Cost",
+          "type": "integer"
+        }
+      },
+      "title": "TokenBillingConfig",
       "type": "object"
     },
     "WordleConfig": {
@@ -885,7 +979,9 @@
           "type": "integer"
         },
         "meanings": {
-          "default": ["中释"],
+          "default": [
+            "中释"
+          ],
           "description": "单词释义类型，根据数据源可以选择多种释义类型",
           "items": {
             "type": "string"
@@ -921,10 +1017,11 @@
         "agent": {
           "$ref": "#/$defs/AgentConfig",
           "default": {
-            "model": null,
+            "model": "",
             "provider": null,
             "reasoning_effort": null,
             "max_output_tokens": null,
+            "context_window": null,
             "vision": false,
             "mcp_servers": null,
             "prompt": {
@@ -968,7 +1065,7 @@
           "default": {
             "trigger_fraction": 0.8,
             "keep_pairs": 3,
-            "min_clear_tokens": 2000,
+            "min_clear_tokens": null,
             "context_window": null,
             "summary_target_fraction": null,
             "summary_model": null,
@@ -1028,6 +1125,17 @@
             "model": null,
             "voice": null
           }
+        },
+        "billing": {
+          "$ref": "#/$defs/TokenBillingConfig",
+          "default": {
+            "peak_input_per_1k": 12.0,
+            "peak_output_per_1k": 48.0,
+            "off_peak_input_per_1k": 6.0,
+            "off_peak_output_per_1k": 24.0,
+            "min_cost": 1
+          },
+          "description": "按Token计费的费率配置"
         },
         "configs_file": {
           "default": "chat_configs.json",
@@ -1369,17 +1477,10 @@
     "kanade_bot__plugins__summary__config__ScopedConfig": {
       "properties": {
         "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
+          "default": "",
           "description": "模型ID",
-          "title": "Model"
+          "title": "Model",
+          "type": "string"
         },
         "provider": {
           "anyOf": [
@@ -1396,7 +1497,15 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
               "type": "string"
             },
             {
@@ -1419,6 +1528,19 @@
           "default": null,
           "description": "模型单次响应的最大输出token数",
           "title": "Max Output Tokens"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口",
+          "title": "Context Window"
         },
         "vision": {
           "default": false,
@@ -1471,6 +1593,17 @@
           "description": "消息记录的缓存文件名",
           "title": "Message Records File",
           "type": "string"
+        },
+        "billing": {
+          "$ref": "#/$defs/TokenBillingConfig",
+          "default": {
+            "peak_input_per_1k": 12.0,
+            "peak_output_per_1k": 48.0,
+            "off_peak_input_per_1k": 6.0,
+            "off_peak_output_per_1k": 24.0,
+            "min_cost": 1
+          },
+          "description": "按Token计费的费率配置"
         }
       },
       "title": "ScopedConfig",
@@ -1505,7 +1638,10 @@
         "image_provider": {
           "default": "sensenova",
           "description": "图片创作（文生图/图片编辑）使用的提供商，可选`sensenova`或`agnes`。视频生成仅支持`agnes`。",
-          "enum": ["sensenova", "agnes"],
+          "enum": [
+            "sensenova",
+            "agnes"
+          ],
           "title": "Image Provider",
           "type": "string"
         },
@@ -1645,14 +1781,22 @@
     "alconna_conflict_resolver": {
       "default": "default",
       "description": "命令冲突解决策略，default 为保留两个命令，raise 为抛出异常，ignore 为忽略新命令，replace 为替换旧命令",
-      "enum": ["raise", "default", "ignore", "replace"],
+      "enum": [
+        "raise",
+        "default",
+        "ignore",
+        "replace"
+      ],
       "title": "Alconna Conflict Resolver",
       "type": "string"
     },
     "alconna_context_style": {
       "anyOf": [
         {
-          "enum": ["bracket", "parentheses"],
+          "enum": [
+            "bracket",
+            "parentheses"
+          ],
           "type": "string"
         },
         {
@@ -1763,9 +1907,10 @@
       "$ref": "#/$defs/kanade_bot__plugins__chat__config__ScopedConfig",
       "default": {
         "agent": {
+          "context_window": null,
           "max_output_tokens": null,
           "mcp_servers": null,
-          "model": null,
+          "model": "",
           "prompt": {
             "dir": "prompts/",
             "fallback": "你是一只可爱的猫娘。",
@@ -1804,7 +1949,7 @@
         "compaction": {
           "context_window": null,
           "keep_pairs": 3,
-          "min_clear_tokens": 2000,
+          "min_clear_tokens": null,
           "summary_keep_messages": 40,
           "summary_model": null,
           "summary_target_fraction": null,
@@ -1841,6 +1986,13 @@
           "model": null,
           "voice": null
         },
+        "billing": {
+          "min_cost": 1,
+          "off_peak_input_per_1k": 6.0,
+          "off_peak_output_per_1k": 24.0,
+          "peak_input_per_1k": 12.0,
+          "peak_output_per_1k": 48.0
+        },
         "configs_file": "chat_configs.json",
         "fail_image_file": "chat_fail.jpg",
         "memes_dir": "memes/"
@@ -1858,7 +2010,9 @@
       "type": "string"
     },
     "command_sep": {
-      "default": ["."],
+      "default": [
+        "."
+      ],
       "description": "命令的分隔标记，用于将文本形式的命令切分为元组（实际的命令名）。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_SEP=[\".\"]\n        ```",
       "items": {
         "type": "string"
@@ -1868,7 +2022,9 @@
       "uniqueItems": true
     },
     "command_start": {
-      "default": ["/"],
+      "default": [
+        "/"
+      ],
       "description": "命令的起始标记，用于判断一条消息是不是命令。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_START=[\"/\", \"\"]\n        ```",
       "items": {
         "type": "string"
@@ -1966,7 +2122,10 @@
     },
     "github_type": {
       "default": 1,
-      "enum": [0, 1],
+      "enum": [
+        0,
+        1
+      ],
       "title": "Github Type",
       "type": "integer"
     },
@@ -2336,6 +2495,18 @@
       "title": "Port",
       "type": "integer"
     },
+    "print_kanade_banner": {
+      "default": true,
+      "description": "是否打印宵崎奏Bot的启动横幅",
+      "title": "Print Kanade Banner",
+      "type": "boolean"
+    },
+    "print_pydantic_ai_banner": {
+      "default": true,
+      "description": "是否打印Pydantic AI首次运行Agent时的横幅",
+      "title": "Print Pydantic Ai Banner",
+      "type": "boolean"
+    },
     "proxy": {
       "anyOf": [
         {
@@ -2366,7 +2537,11 @@
     },
     "ps_bg_lolicon_r18_type": {
       "default": 0,
-      "enum": [0, 1, 2],
+      "enum": [
+        0,
+        1,
+        2
+      ],
       "title": "Ps Bg Lolicon R18 Type",
       "type": "integer"
     },
@@ -2410,7 +2585,13 @@
       "type": "integer"
     },
     "ps_command": {
-      "default": ["运行状态", "状态", "zt", "yxzt", "status"],
+      "default": [
+        "运行状态",
+        "状态",
+        "zt",
+        "yxzt",
+        "status"
+      ],
       "items": {
         "type": "string"
       },
@@ -2460,7 +2641,9 @@
       "type": "boolean"
     },
     "ps_ignore_disk_ios": {
-      "default": ["^(loop|zram)\\d*$"],
+      "default": [
+        "^(loop|zram)\\d*$"
+      ],
       "items": {
         "type": "string"
       },
@@ -2468,7 +2651,9 @@
       "type": "array"
     },
     "ps_ignore_nets": {
-      "default": ["^lo(op)?\\d*$|^(Loopback|本地连接)"],
+      "default": [
+        "^lo(op)?\\d*$|^(Loopback|本地连接)"
+      ],
       "items": {
         "type": "string"
       },
@@ -2489,7 +2674,9 @@
       "type": "array"
     },
     "ps_ignore_procs": {
-      "default": ["^System Idle Process$"],
+      "default": [
+        "^System Idle Process$"
+      ],
       "items": {
         "type": "string"
       },
@@ -2523,7 +2710,10 @@
     },
     "ps_proc_sort_by": {
       "default": "cpu",
-      "enum": ["cpu", "mem"],
+      "enum": [
+        "cpu",
+        "mem"
+      ],
       "title": "Ps Proc Sort By",
       "type": "string"
     },
@@ -2624,17 +2814,25 @@
     "summary": {
       "$ref": "#/$defs/kanade_bot__plugins__summary__config__ScopedConfig",
       "default": {
-        "model": null,
+        "model": "",
         "provider": null,
         "reasoning_effort": null,
         "max_output_tokens": null,
+        "context_window": null,
         "vision": false,
         "mcp_servers": null,
         "system_prompt_file": "Summarizer.md",
         "bot_name": "宵崎奏",
         "min_size": 10,
         "max_size": 2048,
-        "message_records_file": "summary_message_records.json"
+        "message_records_file": "summary_message_records.json",
+        "billing": {
+          "min_cost": 1,
+          "off_peak_input_per_1k": 6.0,
+          "off_peak_output_per_1k": 24.0,
+          "peak_input_per_1k": 12.0,
+          "peak_output_per_1k": 48.0
+        }
       }
     },
     "superusers": {
@@ -2745,14 +2943,18 @@
         "default_dictionary": "CET4",
         "min_length": 3,
         "max_length": 13,
-        "meanings": ["中释"],
+        "meanings": [
+          "中释"
+        ],
         "crystal_bonus_map": {},
         "hinted_crystal_bonus_map": {}
       },
       "description": "猜单词配置"
     }
   },
-  "required": ["watchdog"],
+  "required": [
+    "watchdog"
+  ],
   "title": "MergedConfig",
   "type": "object"
 }

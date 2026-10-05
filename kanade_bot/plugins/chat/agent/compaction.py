@@ -3,7 +3,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic_ai.capabilities.abstract import AbstractCapability
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    SystemPromptPart,
+)
 from pydantic_ai.models import Model, ModelRequestContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
@@ -66,6 +71,51 @@ def build_clear_mark(params: CompactionConfig) -> CompactionMark:
         fingerprint=params.fingerprint(),
         applied_at=time.time(),
     )
+
+
+def build_summary(params: CompactionConfig) -> SummarizingCompaction:
+    """构造摘要档策略（在线分层压缩与手动压缩共用同一构造）
+
+    手动压缩经 `compact_now` 直接调用 `compact`，不经过触发判断，
+    `max_fraction` 仅为满足构造校验；摘要档未启用
+    （`summary_target_fraction` 为 None）时以 1.0 占位。
+    """
+    return SummarizingCompaction(
+        model=params.summary_model,
+        max_fraction=params.summary_target_fraction or 1.0,
+        keep_messages=params.summary_keep_messages,
+    )
+
+
+def build_summary_mark(params: CompactionConfig, result: list[ModelMessage]) -> CompactionMark:
+    """按当前参数与摘要产物构造一条摘要档 mark
+
+    摘要由 LLM 生成、非确定性，无法重放，必须把完整产物存进
+    `result`，恢复时直接使用（见 `apply_strategy`）。
+    """
+    return CompactionMark(
+        strategy="summarizing",
+        params=params.model_dump(),
+        result=ModelMessagesTypeAdapter.dump_json(result),
+        fingerprint=params.fingerprint(),
+        applied_at=time.time(),
+    )
+
+
+_SUMMARY_PREFIX = "Summary of previous conversation:\n\n"
+"""摘要 Part 的前缀（与 pydantic_ai_harness `_summarizing_compaction` 约定一致）"""
+
+
+def extract_summary(messages: list[ModelMessage]) -> str | None:
+    """从压缩后的历史中取出摘要文本（手动压缩命令预览用），无摘要返回 None"""
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if isinstance(part, SystemPromptPart):
+                text = part.content.removeprefix(_SUMMARY_PREFIX)
+                return text.strip() or None
+    return None
 
 
 async def apply_strategy(
@@ -144,13 +194,7 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
         if _messages_fingerprint(await apply_strategy(pre, candidate)) == target:
             return candidate
         # 否则说明触发了摘要档，必须存完整快照
-        return CompactionMark(
-            strategy="summarizing",
-            params=dumped,
-            result=target,
-            fingerprint=self.params.fingerprint(),
-            applied_at=time.time(),
-        )
+        return build_summary_mark(self.params, final_history)
 
 
 def build_compaction_capability(params: CompactionConfig = CompactionConfig()):
@@ -160,14 +204,7 @@ def build_compaction_capability(params: CompactionConfig = CompactionConfig()):
         strategy = clear
     else:
         strategy = TieredCompaction(
-            tiers=[
-                clear,
-                SummarizingCompaction(
-                    model=params.summary_model,
-                    max_fraction=params.summary_target_fraction,
-                    keep_messages=params.summary_keep_messages,
-                ),
-            ],
+            tiers=[clear, build_summary(params)],
             target_fraction=params.summary_target_fraction,
             context_window=params.context_window,
         )

@@ -444,3 +444,99 @@
   能力注入 `OpenAIModelProfile` 覆盖字段映射；未配置 provider 时保持
   pydantic-ai 默认。附请求捕获脚本 `tests/chat/capture_chat_request.py`
   （经 openai-proxy 抓取一次完整上游请求体，用于验证实际发送字段）
+
+---
+
+# v6.0.0-beta.6 更新日志
+
+> 本版本实现聊天与总结的**按 Token 计费**（峰谷费率、按量结算）；运行时从
+> OpenAI 兼容端点 `/models` 自动获取上下文窗口与最大输出；`/压缩会话` 从
+> 统计报告升级为手动触发 LLM 摘要压缩（beta.4 遗留 TODO），并新增
+> `/会话统计` 命令；沙箱从「每轮新建即弃」改回**会话常驻**。
+
+## 破坏性变更
+
+- **聊天/总结水晶消耗改为按量计费**（`config/crystal/crystal_config.json`
+  中「聊天」「总结」的值从固定数字改为 `"按Token计费"` 文字描述）：
+  - 使用门槛从「余额 ≥ 固定消耗」变为**余额 > 0**（按量功能的预检查在
+    crystal 层只看正余额），实际消耗由插件在轮次/总结结束后按真实 usage
+    结算
+  - 新增 `consume_crystal()`：按量扣减**允许扣至负数**，不做预检查，
+    计费时机与金额由调用方决定；固定扣减路径（`succeed_consume` 等）
+    遇到文字描述配置直接 assert 报错
+  - chat 不再在首条回复到达时固定扣水晶，改为轮次正常结束（有文本产出
+    且非主动回复）时经 `on_usage` 回调结算；总结在成功后按 usage 结算
+- **沙箱改回会话常驻**（`chat/agent/sandbox.py`）：`SandboxManager` 为
+  每个会话维护常驻沙箱（首次使用创建、跨轮保留），shell 会话状态
+  （`cd` / `export` / 后台进程）跨轮不丢；会话重置或进程退出时统一关闭
+  （`_shutdown` 调 `close_all`）。beta.5 的「每轮新建即弃」被取代，
+  每轮 `create()` 变为幂等获取
+- **`/压缩会话` 语义变更**：不再是存储统计报告（该职能移交
+  `/会话统计`），而是**不论是否达到自动触发阈值，立即把早期历史压缩为
+  一条 LLM 摘要**；会话忙时（3s 内拿不到会话锁）直接失败并提示可先
+  `/中断会话`
+- `BaseAgentConfig.model` 类型从 `str | None` 收紧为 `str`（默认空串，
+  未配置时 `get_model` 照旧报错）
+
+## 新增
+
+- **按 Token 计费**（`utils/billing.py`，新依赖 `chinesecalendar`）：
+  - 峰谷判定 `is_peak_hours`：工作日（排除法定节假日，chinesecalendar
+    数据不支持该年份或依赖缺失时退化为仅按周末）的 9:00-12:00、
+    14:00-18:00 为高峰；周末与节假日全天空闲
+  - 计费规则 `compute_token_cost`：输入只按**缓存未命中部分**计费
+    （`input_tokens - cache_read_tokens`），输出全量（含 reasoning）；
+    向上取整（先 round 截断浮点噪声再 ceil，防整数值因 1e-15 误差多进位），
+    单轮不低于 `min_cost`
+  - usage 口径：一轮内**全部补全请求累计**（含空响应重发与 length 续写），
+    由 manager 的 `on_usage` 回调与 `run_with_continuation(usage=...)`
+    原地累加；峰谷按**本轮用户消息时间**判定，不由结算时刻漂移
+  - 费率经 `chat.billing` / `summary.billing` 配置（默认高峰输入 12 /
+    输出 48、空闲 6 / 24 水晶每千 token，最低 1）
+- **模型元数据自动获取**（`utils/pai_runtime.py`）：未显式配置时从
+  OpenAI 兼容端点 `/models` 响应提取 `context_window` 与
+  `max_output_tokens`（兼容 DeepSeek 风格 `context_window` /
+  `max_output_tokens` 与 OpenRouter 风格 `context_length` /
+  `max_output_length`），结果按 `(client, model)` 缓存、失败静默；
+  `context_window` 优先级为**显式配置 > /models 端点 > genai-prices
+  快照回填**——仅在拿到值时才传 profile 字段，显式传 `None` 会因
+  pydantic fields_set 语义阻止快照回填；`BaseAgentConfig` 新增
+  `context_window` 配置项
+- **`/会话统计` 命令**（SUPERUSER，别名 `chat_stats` / `chatstats`）：
+  报告当前模型与窗口上限、上下文 token 估算（含窗口占比）、消息条数
+  （DB 全量 vs 压缩后实际发送）、沙箱工作区文件列表（限深 3 层、
+  最多 10 条，超出省略）
+- **crystal 新导出 API**：`consume_crystal`（按量扣减）与 `get_crystal`
+  （查余额）
+- **`get_config()`**（`scripts/util.py`）：从 NoneBot 全局配置统一提取
+  插件配置（env 文件、嵌套分隔符语义与 NoneBot `get_plugin_config`
+  一致）；`bot.py` 与 `scripts/github_watchdog.py` 复用，watchdog 里
+  手抄的同名实现（约 25 行）删除
+
+## 改进
+
+- **手动压缩与在线压缩共用构造**：`build_summary` 统一构造摘要档
+  `SummarizingCompaction`（未启用摘要档时以 1.0 占位 max_fraction），
+  `build_summary_mark` 统一落 mark（摘要为 LLM 非确定性产物，无法重放，
+  完整快照存入 `result`）；在线 `TieredCompaction` 与手动 `compact_now`
+  走同一路径
+- **命令别名补全语序**：`重置会话`/`会话重置`、`中断会话`/`会话中断`、
+  `压缩会话`/`会话压缩` 两种语序均可触发
+- **压缩配置放宽**：`keep_pairs` / `summary_keep_messages` 允许 0
+  （`NonNegativeInt`）；`min_clear_tokens` 允许 `None`（不启用最小
+  清理阈值）
+- **空响应标记修正**：chat 流式消费中 `replied` 改为收到**非空**内容才
+  置位（原先首条 part 到达即置位，与「没有收到任何回复」的误报判定
+  语义不符）
+- ruff 全局忽略 `BLE001`，清理全仓 20 处行内 `# noqa: BLE001`
+- README 精简约 90 行：沙箱 Landlock 降级细节、会话历史/压缩/存储设计
+  段落移除（设计记录由 `docs/` 与代码注释承载），watchdog 配置说明收敛
+- `config-example.yaml` 同步：示例模型换 `deepseek-flash`、新增
+  `billing` 锚点段与 `print_*_banner`、prompt 段落改引用默认值
+- **测试**（4 个新文件 + 扩充）：`tests/test_billing.py`（峰谷边界
+  含左闭右开、午休/周末/国庆、费率计算含缓存命中与最低消耗）；
+  `tests/crystal/test_consume_crystal.py`（允许负数余额、预检查门槛）；
+  `tests/chat/test_pai_runtime.py`（/models 字段提取两风格、profile
+  填充与快照回填不被显式 None 阻断）；`test_pai_agent.py` 新增
+  ManualCompactionTest（手动压缩 mark 落库 → 重启恢复与产物一致、
+  DB 全量保留、保留尾部内无操作）

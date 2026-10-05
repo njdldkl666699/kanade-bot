@@ -131,8 +131,12 @@ class CrystalConfig(AttrDocModel):
     - `first_use_bonus`: `int` 首次使用水晶系统的额外奖励水晶数
     """
 
-    handler_consumes: dict[HandlerKeyEnum, int] = {}
-    """每个命令的处理函数消耗的水晶，键为唯一ID，值为消耗的水晶数"""
+    handler_consumes: dict[HandlerKeyEnum, int | str] = {}
+    """每个命令的处理函数消耗的水晶，键为唯一ID
+
+    值为 `int` 时按固定数值预检查并扣除；
+    值为 `str` 时视为文字描述，表示该功能由插件自行按量计费
+    """
     handler_consume_failed_templates: list[str] = [
         "嗯…水晶好像不够。需要 {consume} 水晶…还差一些。",
         "啊…不行。当前水晶有{crystal}，需要 {consume} 水晶…有点可惜。",

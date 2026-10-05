@@ -13,7 +13,8 @@ from nonebot.log import default_format
 from nonebot.utils import escape_tag
 
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
-from scripts.util import load_configs
+from kanade_bot.utils.schema import KanadeConfig
+from scripts.util import get_config, load_configs
 
 # 配置 NoneBot 的日志记录器，记录全量日志到文件
 log_file_path = Path("cache/kanade.log")
@@ -67,12 +68,12 @@ def init_nonebot(
         _env_file=((".env", _env_file) if isinstance(_env_file, (str, os.PathLike)) else _env_file),
     )
 
-    if config.print_kanade_banner:
+    kanade_cfg = get_config(config, KanadeConfig)
+    if kanade_cfg.print_kanade_banner:
         from kanade_bot.utils.banner import get_kanade
 
         print(get_kanade())
-
-    if not config.print_pydantic_ai_banner:
+    if not kanade_cfg.print_pydantic_ai_banner:
         os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
     logger.configure(extra={"nonebot_log_level": config.log_level}, patcher=nonebot._log_patcher)

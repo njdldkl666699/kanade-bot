@@ -13,8 +13,10 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
+from pydantic_ai.usage import RunUsage
 
-from kanade_bot.utils.common import PlatformType, get_platform_type
+from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
+from kanade_bot.utils.common import PlatformType, asia_shanghai_now, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
 from kanade_bot.utils.parse import (
     TextFormat,
@@ -29,7 +31,7 @@ from .ban import is_banned
 from .config import cfg, chat_configs
 
 require("crystal")
-from kanade_bot.plugins.crystal import HandlerKeyEnum, succeed_consume
+from kanade_bot.plugins.crystal import consume_crystal
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import md_to_pic
@@ -199,6 +201,18 @@ async def send_message_in_chunks(
 
     session_info = await extract_session_info(event, bot)
 
+    def _bill_usage(usage: RunUsage, produced: bool) -> None:
+        """轮次正常结束时按实际usage计费（扣费允许至负数）
+
+        有文本产出且非主动回复才扣费；峰谷按本轮用户消息时间判定。
+        """
+        if not produced or auto_reply:
+            return
+        cost = compute_token_cost(usage, cfg.billing, peak=is_peak_hours(turn_start))
+        consume_crystal(get_platform_type(event), event.get_user_id(), cost)
+
+    turn_start = asia_shanghai_now()
+
     replied = False
     try:
         # 流式消费：每条助手消息一到达就立即处理发送，无需等待全部生成完毕。
@@ -213,21 +227,14 @@ async def send_message_in_chunks(
                 reply_text=reply_text,
                 images=attachments,
                 timeout=600,
+                on_usage=_bill_usage,
             )
         ) as contents:
             async for content in contents:
-                if not replied:
-                    replied = True
-                    # 扣减水晶（一轮对话只扣减一次）
-                    if not auto_reply:
-                        succeed_consume(
-                            HandlerKeyEnum.CHAT,
-                            get_platform_type(event),
-                            event.get_user_id(),
-                        )
-
                 if not (content := content.strip()):
                     continue
+                # 收到非空回复，标记已回复（否则结束后会误报“没有收到任何回复”）
+                replied = True
 
                 if isinstance(event, OneBotMessageEvent):
                     segments = _extract_segments_preserving_code(content)
@@ -242,7 +249,7 @@ async def send_message_in_chunks(
                     )
                 else:
                     await matcher.send(content)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("发送消息时发生错误: {}", e)
         # await _send_fail_message(matcher)
         await matcher.finish(f"发送消息时发生错误：{e}")

@@ -3,6 +3,7 @@ from pathlib import Path
 from nonebot import require
 from pydantic import BaseModel
 
+from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.schema import BaseAgentConfig, ConfigRegistry
 
 require("nonebot_plugin_localstore")
@@ -21,6 +22,8 @@ class ScopedConfig(BaseAgentConfig):
     """最大条数，同时也是消息记录的最大条数，超过后会丢弃最早的消息"""
     message_records_file: str = "summary_message_records.json"
     """消息记录的缓存文件名"""
+    billing: TokenBillingConfig = TokenBillingConfig()
+    """按Token计费的费率配置"""
 
     @property
     def system_prompt_file_path(self) -> Path:

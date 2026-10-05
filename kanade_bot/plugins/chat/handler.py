@@ -28,6 +28,7 @@ from .matcher import (
     chat_interrupt,
     chat_monitor,
     chat_reset,
+    chat_stats,
     chat_unban,
     list_memes,
 )
@@ -63,7 +64,7 @@ async def handle_chat_interrupt(event: Event):
     session_id = extract_session_info_sync(event).session_id
     try:
         result = await chat_manager.interrupt_session_turn(session_id)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.opt(exception=e).warning(f"中断会话{session_id}时发生错误")
         await chat_interrupt.finish(f"中断会话失败：{e}")
     if result is None:
@@ -71,31 +72,71 @@ async def handle_chat_interrupt(event: Event):
     await chat_interrupt.finish("已中断当前正在进行的回复，等待中的消息将照常处理")
 
 
-# TODO 改为手动触发一次LLM会话压缩
 @chat_compact.handle()
 async def handle_chat_compact(event: Event):
-    """查看会话存储统计：DB 全量保留，压缩后实际发送的条数更少
+    """手动执行一次 LLM 总结级会话压缩
 
-    注意：数据库为 append-only 全量保留，本命令**不删除任何消息**。
+    不论是否达到自动触发阈值，立即把当前会话的早期历史压缩为一条摘要
     """
     session_id = extract_session_info_sync(event).session_id
     try:
         result = await chat_manager.compact_session(session_id)
-    except Exception as e:  # noqa: BLE001
-        logger.opt(exception=e).warning(f"查询会话{session_id}存储时发生错误")
-        await chat_compact.finish(f"查询会话存储失败（会话可能正在处理中）：{e}")
+    except Exception as e:
+        logger.opt(exception=e).warning(f"手动压缩会话{session_id}时发生错误")
+        await chat_compact.finish(f"会话压缩失败：{e}")
     if result is None:
         await chat_compact.finish("会话不存在（还未开始过对话），或尚无历史记录")
 
-    await chat_compact.finish(
-        "\n".join(
-            [
-                "会话存储统计（数据库全量保留，不做物理删除）",
-                f"已存消息：{result['total']} 条",
-                f"压缩后实际发送：{result['kept']} 条",
-            ]
+    if not result["compacted"]:
+        await chat_compact.finish(
+            f"无可压缩内容：历史 {result['before']} 条均在保留尾部内，无更早消息可摘要"
         )
-    )
+
+    lines = [
+        "✅ 会话压缩完成（LLM 摘要）",
+        f"发送历史：{result['before']} 条 → {result['after']} 条",
+        f"上下文估算：{result['tokens_before']} → {result['tokens_after']} tokens",
+    ]
+    if summary := result.get("summary"):
+        preview = summary if len(summary) <= 300 else summary[:300] + "…"
+        lines.append(f"摘要预览：\n{preview}")
+    lines.append(f"数据库全量保留 {result['total']} 条，不做物理删除")
+    await chat_compact.finish("\n".join(lines))
+
+
+@chat_stats.handle()
+async def handle_chat_stats(event: Event):
+    """查看会话统计：上下文token估算/模型窗口上限、消息条数、工作区文件列表"""
+    session_id = extract_session_info_sync(event).session_id
+    try:
+        result = await chat_manager.session_stats(session_id)
+    except Exception as e:
+        logger.opt(exception=e).warning(f"查询会话{session_id}统计时发生错误")
+        await chat_stats.finish(f"查询会话统计失败（会话可能正在处理中）：{e}")
+    if result is None:
+        await chat_stats.finish("会话不存在（还未开始过对话），或尚无历史记录")
+
+    window = result["context_window"]
+    tokens = result["context_tokens"]
+    window_line = f"{window} tokens" if window else "未知"
+    usage_line = f"{tokens} tokens"
+    if window:
+        usage_line += f"（{tokens / window:.1%}）"
+
+    lines = [
+        "📊 会话统计",
+        f"模型：{result['model']} | 窗口上限：{window_line}",
+        f"上下文估算：{usage_line}",
+        f"消息：数据库全量 {result['total_messages']} 条，压缩后发送 {result['sent_messages']} 条",
+    ]
+
+    if files := result.get("workspace_files"):
+        lines.append(f"工作区文件（{len(files)}）：")
+        lines.extend(f"- {entry}" for entry in files)
+    else:
+        lines.append("工作区：未启用沙箱或工作区为空")
+
+    await chat_stats.finish("\n".join(lines))
 
 
 @chat_monitor.handle()

@@ -1,25 +1,41 @@
 import asyncio
 import base64
 import json
+import os
 from collections import deque
+from pathlib import Path
+from typing import Any
 
 from nonebot import get_driver, logger
 from pydantic_ai import Agent, AgentRunEvents, FunctionToolCallEvent, PartEndEvent, RunContext
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, TextPart, UserContent
+from pydantic_ai.models import Model
 from pydantic_ai.toolsets.abstract import AbstractToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_ai_backends import ConsoleCapability
 from pydantic_ai_backends.permissions import PERMISSIVE_RULESET
+from pydantic_ai_harness.compaction import (
+    compact_now,
+    estimate_context_tokens,
+    resolve_context_window,
+)
 
+from kanade_bot.utils.billing import UsageCallback
 from kanade_bot.utils.pai_runtime import CONTINUE_PROMPT, build_model_settings, get_model
 from kanade_bot.utils.parse import ImageInput, build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import CompactionConfig, cfg
-from .compaction import RecordingCompaction, build_compaction_capability
+from .compaction import (
+    RecordingCompaction,
+    build_compaction_capability,
+    build_summary,
+    build_summary_mark,
+    extract_summary,
+)
 from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryStore
@@ -39,6 +55,46 @@ Pydantic AI 默认 50；设为 `None` 可关闭该保护。
 
 MAX_CONTINUATIONS = 5
 """单轮内因length截断而续写的最大次数"""
+
+COMPACT_LOCK_TIMEOUT = 3
+"""手动压缩等待会话锁的超时秒数，超时视为会话正在处理中"""
+
+MAX_WORKSPACE_ENTRIES = 10
+"""会话统计最多展示的工作区条目数"""
+
+WORKSPACE_WALK_DEPTH = 3
+"""会话统计遍历工作区的最大目录深度"""
+
+
+def _format_size(size: int) -> str:
+    """字节数转人类可读文本"""
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{int(value)} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
+def _list_workspace_files(root: Path) -> list[str]:
+    """列出工作区条目（限深限量），返回 `相对路径 (大小)` 文本列表"""
+    entries: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        depth = len(Path(dirpath).relative_to(root).parts)
+        if depth >= WORKSPACE_WALK_DEPTH:
+            dirnames[:] = []  # 超过深度不再下钻
+        for name in sorted(filenames):
+            path = Path(dirpath) / name
+            entries.append(f"{path.relative_to(root)} ({_format_size(path.stat().st_size)})")
+            if len(entries) >= MAX_WORKSPACE_ENTRIES:
+                entries.append("…（超出部分省略）")
+                return entries
+        for name in sorted(dirnames):
+            entries.append(f"{Path(dirpath, name).relative_to(root)}/")
+            if len(entries) >= MAX_WORKSPACE_ENTRIES:
+                entries.append("…（超出部分省略）")
+                return entries
+    return entries
 
 
 class EmptyResponseError(RuntimeError):
@@ -127,7 +183,7 @@ class ChatSessionManager:
         try:
             with cache_file.open("r", encoding="utf-8") as f:
                 data: dict[str, list[str]] = json.load(f)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"加载会话消息缓冲区缓存时发生错误: {e}")
             return
 
@@ -147,7 +203,7 @@ class ChatSessionManager:
             with cache_file.open("w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False)
             logger.info(f"已保存{len(self._sessions_messages)}个会话的消息缓冲区缓存")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.exception(f"保存会话消息缓冲区缓存时发生错误: {e}")
 
     # ===== 生命周期 =====
@@ -165,7 +221,7 @@ class ChatSessionManager:
             try:
                 toolset: AbstractToolset[ChatDeps] = MCPToolset(server_cfg.url, headers=headers)
                 await toolset.__aenter__()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"MCP服务器{name}连接失败: {e}")
                 failed.append(name)
                 continue
@@ -187,10 +243,12 @@ class ChatSessionManager:
         logger.info(f"已加载{len(toolsets)}个MCP工具集")
 
     async def _shutdown(self):
+        if self._sandbox_manager is not None:
+            await self._sandbox_manager.close_all()
         for toolset in self._mcp_toolsets:
             try:
                 await toolset.__aexit__(None, None, None)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"关闭MCP服务器时发生错误: {e}")
         self._mcp_toolsets = []
 
@@ -286,6 +344,7 @@ class ChatSessionManager:
         reply_text: str | None = None,
         images: list[ImageInput] | None = None,
         timeout: float = 60,
+        on_usage: UsageCallback | None = None,
     ):
         """发送消息到会话，每条助手消息一到达就实时yield其内容。
 
@@ -298,6 +357,7 @@ class ChatSessionManager:
         prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息
         images: 图片附件列表
         timeout: 相邻流事件间的间隔超时，超时后取消运行并抛出TimeoutError
+        on_usage: 轮次正常结束时回调；异常或中途取消时不回调
         """
         session_id = session_info.session_id
         async with await self._ensure_session_lock(session_id):
@@ -326,7 +386,7 @@ class ChatSessionManager:
 
             user_content = await self._build_user_content(send_prompt, images)
 
-            # 沙箱启用时创建本轮沙箱（每轮新建，本轮结束即关闭；文件跨轮保留）
+            # 沙箱启用时获取会话常驻沙箱（首次使用时创建，跨轮保留）
             sandbox_session = None
             sandbox_root = None
             if self._sandbox_manager is not None:
@@ -346,6 +406,7 @@ class ChatSessionManager:
             history = await self._store.restore(session_id, params=self._compaction_params)
 
             try:
+                total_usage = RunUsage()
                 for attempt in range(1 + EMPTY_RESPONSE_MAX_RETRIES):
                     # 记录本轮写入前的消息数，用于空响应回退
                     baseline = len(history)
@@ -397,6 +458,8 @@ class ChatSessionManager:
                         if run:
                             history = [*history, *run]
                             await self._store.append(session_id, run)
+                        # 累计本次运行的usage（含空响应重发与续写）
+                        total_usage.incr(stream.usage)
 
                         # 输出因 max_output_tokens 截断：续写
                         # 历史已入库，续写输入只需一句提示
@@ -423,6 +486,8 @@ class ChatSessionManager:
                     await self._record_compaction(session_id, history)
 
                     if produced or tool_called:
+                        if on_usage is not None:
+                            on_usage(total_usage, produced)
                         return
 
                     # 整轮空响应：回退本轮写入的消息后重发
@@ -441,8 +506,8 @@ class ChatSessionManager:
                         f"（无文本输出且无工具调用），已停止重试"
                     )
             finally:
-                if sandbox_session is not None:
-                    await sandbox_session.close()
+                # 常驻沙箱不在此处关闭：跨轮保留 shell 会话状态，
+                # 仅在会话重置或进程退出时关闭
                 async with self._global_lock:
                     # 清空消息缓冲区
                     if session_id in self._sessions_messages:
@@ -491,7 +556,7 @@ class ChatSessionManager:
     # ===== 管理操作 =====
 
     async def reset_session(self, session_id: str):
-        """清空会话历史、缓冲区、记忆上下文与沙箱。**此操作不可逆**"""
+        """清空会话历史、缓冲区、记忆上下文与沙箱（含常驻沙箱）。**此操作不可逆**"""
         session_lock = await self._ensure_session_lock(session_id)
         async with session_lock:
             async with self._global_lock:
@@ -500,11 +565,11 @@ class ChatSessionManager:
 
             try:
                 await self._store.clear(session_id)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"清空会话{session_id}历史时发生错误: {e}")
 
             if self._sandbox_manager is not None:
-                # 删除工作区目录（沙箱本体每轮即弃，无需另行销毁）
+                await self._sandbox_manager.close(session_id)
                 self._sandbox_manager.delete_workspace(session_id)
 
     async def interrupt_session_turn(self, session_id: str) -> bool | None:
@@ -519,20 +584,79 @@ class ChatSessionManager:
         stream.cancel()
         return True
 
-    async def compact_session(self, session_id: str) -> dict[str, int] | None:
-        """统计会话存储：DB 全量保留，返回（全量条数，实际发送条数）
+    async def compact_session(self, session_id: str) -> dict[str, Any] | None:
+        """手动执行一次 LLM 总结级压缩"""
+        lock = await self._ensure_session_lock(session_id)
+        try:
+            async with asyncio.timeout(COMPACT_LOCK_TIMEOUT):
+                await lock.acquire()
+        except TimeoutError:
+            raise RuntimeError(
+                f"会话正在处理中（{COMPACT_LOCK_TIMEOUT}s内未获得会话锁），可先使用 /中断会话"
+            ) from None
 
-        DB 为 append-only 全量保留，本命令只读不写：报告当前压缩后
-        实际发送给模型的消息数。会话无历史时返回 None。
-        """
+        try:
+            total = await self._store.count(session_id)
+            if total == 0:
+                return None
+
+            messages = await self._store.restore(session_id, params=self._compaction_params)
+            before = len(messages)
+            model = self._agent.model
+            assert isinstance(model, Model), "Agent 构造时传入的必为 Model 实例"
+
+            compacted = await compact_now(
+                build_summary(self._compaction_params),
+                messages,
+                model=model,
+                conversation_id=session_id,
+            )
+            if compacted is messages:
+                # 历史全落在保留尾部内：无可安全摘要的更早消息，未发生压缩
+                logger.info(f"会话{session_id}手动压缩跳过：{before}条均在保留尾部内")
+                return {"compacted": False, "total": total, "before": before, "after": before}
+
+            await self._store.add_compaction_mark(
+                session_id, build_summary_mark(self._compaction_params, compacted)
+            )
+            logger.info(f"会话{session_id}手动压缩完成：{before}条 → {len(compacted)}条")
+            return {
+                "compacted": True,
+                "total": total,
+                "before": before,
+                "after": len(compacted),
+                "tokens_before": estimate_context_tokens(messages),
+                "tokens_after": estimate_context_tokens(compacted),
+                "summary": extract_summary(compacted),
+            }
+        finally:
+            lock.release()
+
+    async def session_stats(self, session_id: str) -> dict[str, Any] | None:
+        """会话统计"""
         session_lock = await self._ensure_session_lock(session_id)
         async with session_lock:
             total = await self._store.count(session_id)
             if total == 0:
                 return None
-            kept = len(await self._store.restore(session_id, params=self._compaction_params))
-            logger.info(f"会话{session_id}存储全量保留：共{total}条，压缩后实际发送{kept}条")
-            return {"total": total, "kept": kept, "removed": 0}
+            messages = await self._store.restore(session_id, params=self._compaction_params)
+
+            model = self._agent.model
+            assert isinstance(model, Model), "Agent 构造时传入的必为 Model 实例"
+            stats: dict[str, Any] = {
+                "model": model.model_name,
+                "context_window": self._compaction_params.context_window
+                or resolve_context_window(model),
+                "context_tokens": estimate_context_tokens(messages),
+                "total_messages": total,
+                "sent_messages": len(messages),
+            }
+
+            if self._sandbox_manager is not None:
+                stats["workspace_files"] = _list_workspace_files(
+                    Path(self._sandbox_manager.workspace_root(session_id))
+                )
+            return stats
 
 
 chat_manager = ChatSessionManager()

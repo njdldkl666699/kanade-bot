@@ -244,7 +244,7 @@ class KanadeWorkspace(PydanticAIWorkspace):
 
 @dataclass
 class SandboxSession:
-    """沙箱：workspace + backend（每轮对话创建，用完即关）"""
+    """沙箱：workspace + backend"""
 
     workspace_dir: Path
     workspace: Workspace
@@ -257,6 +257,10 @@ class SandboxSession:
         """工作区根的绝对路径"""
         return str(self.workspace_dir)
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
     async def close(self) -> None:
         """关闭工作区（幂等）。工作区文件保留在宿主目录，仅丢弃 shell 会话状态"""
         if self._closed:
@@ -264,7 +268,7 @@ class SandboxSession:
         self._closed = True
         try:
             await self.workspace.close()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"关闭沙箱工作区时发生错误: {e}")
 
     # --- 工具层使用
@@ -292,13 +296,16 @@ class SandboxSession:
 
 
 class SandboxManager:
-    """沙箱工厂：每轮对话创建沙箱会话，工作区目录按会话管理"""
+    """沙箱管理器：为每个会话维护一个常驻沙箱，工作区目录按会话管理"""
 
     def __init__(self):
         self._bin_dir: Path | None = None
 
         self._root_dir = cfg.sandbox.workspace_dir_path.resolve()
         self._root_dir.mkdir(parents=True, exist_ok=True)
+
+        self._sessions: dict[str, SandboxSession] = {}
+        """各会话的常驻沙箱，键为会话ID"""
 
         driver = get_driver()
         driver.on_startup(self._startup)
@@ -343,10 +350,26 @@ class SandboxManager:
     # ===== 创建 =====
 
     async def create(self, session_id: str) -> SandboxSession:
-        """为本轮对话新建沙箱（调用方用完需 `close()`）"""
+        """获取会话的常驻沙箱，不存在时创建"""
+        session = self._sessions.get(session_id)
+        if session is not None and not session.closed:
+            return session
         session = await self._create(session_id)
-        logger.info(f"已为会话{session_id}创建沙箱（工作区{session.root}）")
+        self._sessions[session_id] = session
+        logger.info(f"已为会话{session_id}创建常驻沙箱（工作区{session.root}）")
         return session
+
+    async def close(self, session_id: str) -> None:
+        """关闭会话的常驻沙箱（未创建时为空操作）。工作区文件保留在宿主目录"""
+        session = self._sessions.pop(session_id, None)
+        if session is not None:
+            await session.close()
+
+    async def close_all(self) -> None:
+        """关闭所有常驻沙箱"""
+        sessions = [self._sessions.pop(sid) for sid in list(self._sessions)]
+        for session in sessions:
+            await session.close()
 
     def workspace_root(self, session_id: str) -> str:
         """会话工作区根的绝对路径"""

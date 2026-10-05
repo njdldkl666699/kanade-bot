@@ -7,7 +7,7 @@ nickname: [宵崎奏]
 # 是否启用无头模式，如果为true，则不会启动TUI界面。
 console_headless_mode: true
 
-# Provider配置（OpenAI兼容端点）
+# Provider配置
 siliconflow:
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxxxxxx
@@ -23,9 +23,10 @@ deepseek: &deepseek
 
 # 模型配置
 deepseek-official: &deepseek-official
-  model: deepseek-chat
+  model: deepseek-flash
   provider: *deepseek
-  max_output_tokens: 393216
+  reasoning_effort: high
+  vision: true
 
 sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
   model: sensenova-6.8-flash-lite
@@ -37,40 +38,6 @@ sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
 chat:
   agent:
     <<: *deepseek-official
-    # 模块化系统提示词：拼接 config/chat/prompts/ 下的文件
-    #
-    # 分两层，边界是「变化频率」：
-    # - files（静态层）只放进程恒定的内容，启动时求值一次，字节稳定 → 命中前缀缓存
-    # - sections（会话层）只放每会话恒定的内容，每轮重算，落在缓存边界之后
-    # 时间每分钟都变，写进任何一层都会让整块缓存失效，故由用户消息携带。
-    prompt:
-      dir: prompts/ # 提示词目录，相对插件配置目录
-      # 静态层，每个片段渲染成一个独立的 dynamic=False part，id 为 agent:<文件名>
-      # 不写则用默认值（见 chat/agent/prompt_config.py 的 DEFAULT_PROMPT_FILES）
-      files:
-        - identity.md # 身份与角色气质
-        - chat_style.md # 回复风格与约束
-        - lore_qa.md # 设定问答与信息检索
-        - environment.md # 运行环境（操作系统/模型/Python 版本）
-        - tool_usage.md # 工具使用原则
-        - tools.md # 各工具补充说明
-        - system_notifications.md
-        - wiki.md # 角色设定百科全文，篇幅最大；启用 RAG 后可去掉
-        - abbreviations.md # 角色缩写对照表
-      # 会话层，合并成一个 dynamic=True 的 part；when 为真值时才拼接，空串=无条件
-      # 注意：放进这一层的片段，其内容必须在整个会话期间保持不变，否则前缀缓存会失效
-      sections:
-        - file: sandbox.md
-          when: sandbox_enabled # 仅启用沙箱时告知工作区用法
-        - file: group_chat.md
-          when: is_group # 仅群聊时说明群聊场景
-        # 需要联网检索说明时，把下面两行加回来（对应内置变量 mcp_enabled，
-        # 由 MCP 连接结果回填，见 agent/manager.py 的 _start_mcp）：
-        # - file: web_search.md
-        #   when: mcp_enabled
-      # fallback: 你是一只可爱的猫娘。 # 静态层片段全部缺失时的兜底
-      # vars: # 自定义模板变量，可覆盖内置变量
-      #   my_var: my value
     mcp_servers:
       tavily:
         url: https://mcp.tavily.com/mcp
@@ -78,32 +45,19 @@ chat:
           Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
       anysearch:
         url: https://api.anysearch.com/mcp
-  # 会话压缩（比例均相对当前模型的上下文窗口）
   compaction:
-    trigger_fraction: 0.8 # 上下文占用超过此比例才触发
-    keep_pairs: 3 # 保留最近几个工具调用对
-    min_clear_tokens: 2000 # 清理收益太小就跳过，保护缓存
-    # summary_target_fraction: 0.9  # 设了才启用 LLM 摘要档（默认不启用）
-    # summary_model: null            # 摘要模型，null = 继承主模型
-    # summary_keep_messages: 40      # 生成摘要时保留的最近消息条数
-  # 会话历史存储（消息缓冲区 + 数据库）
+    trigger_fraction: 0.8
+    keep_pairs: 3
+    min_clear_tokens: 2000
+    summary_target_fraction: 0.9
+    summary_model: null
+    summary_keep_messages: 0
   session:
-    db_file: agent_sessions.sqlite3
     buffer_max_size: 256
-    buffer_cache_file: session_messages_cache.json
-  # 持久化记忆
   memory:
-    database_file: memories.sqlite3
     max_records_per_scope: 256
-  # 文件能力与shell由Landlock沙箱提供（每轮新建即弃，文件跨轮保留，见sandbox段）
   sandbox:
     enabled: true
-    # 沙箱环境变量（对工作区内所有进程可见，勿存放敏感密钥）
-    environment:
-      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
-    memory_limit: 256M # 受限子进程内存上限
-    workspace_dir: sandboxes/ # 工作区根目录名（插件缓存目录）
-  # 图片转述模型（主模型不支持视觉时用于图片兑底）
   # image_caption:
   #   <<: *sensenova-6-8-flash-lite
   rag:
@@ -111,6 +65,12 @@ chat:
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
     openai_model: BAAI/bge-m3
+  billing: &billing
+    peak_input_per_1k: 12
+    peak_output_per_1k: 48
+    off_peak_input_per_1k: 6
+    off_peak_output_per_1k: 24
+    min_cost: 1
 
 fun:
   lolicon_proxy: example.com
@@ -124,6 +84,7 @@ help:
 
 summary:
   <<: *deepseek-official
+  billing: *billing
 
 tool:
   sensenova_api_key: *sensenova-api_key
@@ -161,4 +122,6 @@ github_type: 0
 watchdog:
   github_token: *github_token
 
+print_kanade_banner: true
+print_pydantic_ai_banner: true
 generate_schemas: false

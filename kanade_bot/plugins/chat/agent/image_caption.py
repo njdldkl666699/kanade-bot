@@ -53,7 +53,7 @@ async def get_image_caption(data: str, mime_type: str) -> str | None:
         content = await asyncio.wait_for(
             run_with_continuation(agent, user_prompt, max_requests=1), timeout=180
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         msg = f"获取图片转述时发生错误: {e}"
         logger.exception(msg)
         return msg
