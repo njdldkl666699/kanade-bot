@@ -6,11 +6,11 @@
 - [x] 内存占用测试
 - [x] 考虑文件编辑工具、shell方案：使用mirage+sandlock
 - [x] 卡池更新
-- [ ] nonebot-plugin-githubcard
-- [ ] env设置打印/不打印banner，包括Kanade和PydanticAI（在第一次运行agent时）
+- [x] nonebot-plugin-githubcard
+- [x] env设置打印/不打印banner，包括Kanade和PydanticAI（在第一次运行agent时）
 - [x] chat配置结构重构
-- [ ] 检查gacha十连图片是否被缩放
+- [x] 检查gacha十连图片是否被缩放
 - [ ] 聊天、总结按Token计费
 - [ ] 新增查看token消耗等统计数据
-- [ ] 是否可以不用沙箱池？开销如何？
+- [x] 是否可以不用沙箱池？开销如何？（实测每轮新建仅~5ms，已去池化）
 - [ ] 记忆系统+会话压缩一起设计

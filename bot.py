@@ -12,7 +12,6 @@ from nonebot.config import DOTENV_TYPE, Config, Env
 from nonebot.log import default_format
 from nonebot.utils import escape_tag
 
-from kanade_bot.utils.banner import get_kanade
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 from scripts.util import load_configs
 
@@ -67,6 +66,14 @@ def init_nonebot(
         **kwargs,
         _env_file=((".env", _env_file) if isinstance(_env_file, (str, os.PathLike)) else _env_file),
     )
+
+    if config.print_kanade_banner:
+        from kanade_bot.utils.banner import get_kanade
+
+        print(get_kanade())
+
+    if not config.print_pydantic_ai_banner:
+        os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
     logger.configure(extra={"nonebot_log_level": config.log_level}, patcher=nonebot._log_patcher)
     logger.opt(colors=True).info(f"Current <y><b>Env: {escape_tag(env.environment)}</b></y>")
@@ -190,6 +197,7 @@ def register_other_configs_and_generate_schema():
     from nonebot_plugin_chatrecorder.config import Config as ChatRecorderConfig
 
     # from nonebot_plugin_datastore.config import Config as DataStoreConfig
+    from nonebot_plugin_githubcard.config import Config as GithubCardConfig
     from nonebot_plugin_htmlrender.config import Config as HTMLRenderConfig
     from nonebot_plugin_localstore.config import Config as LocalStoreConfig
 
@@ -209,6 +217,7 @@ def register_other_configs_and_generate_schema():
         APSchedulerConfig,
         ChatRecorderConfig,
         # DataStoreConfig,
+        GithubCardConfig,
         HTMLRenderConfig,
         LocalStoreConfig,
         # ORMConfig,
@@ -225,7 +234,6 @@ def register_other_configs_and_generate_schema():
 
 
 if __name__ == "__main__":
-    print(get_kanade())
     env, configs = load_configs(Path(__file__).parent)
     init_nonebot(env=env, **configs)
     register_adapters_and_load_plugins()

@@ -5,7 +5,6 @@ import re
 import shlex
 import shutil
 import subprocess
-import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -129,9 +128,13 @@ def ensure_landlock(bin_dir: Path) -> int | None:
     wrapper.write_text(LANDLOCK_WRAPPER.format(real_sandlock=real), encoding="utf-8")
     wrapper.chmod(0o755)
 
-    # 自检：确认降级确实生效（没有 protection unavailable 报错）
+    # 自检：确认降级确实生效
+    python3 = shutil.which("python3")
+    if python3 is None:
+        raise SandlockUnavailableError("自检探针需要 PATH 上有 python3")
+    probe_root = f"/{Path(python3).resolve().parts[1]}"
     probe = subprocess.run(
-        [str(wrapper), "run", "--allow-degraded", "--", "true"],
+        [str(wrapper), "run", "-r", probe_root, "--", python3, "-c", "print(1)"],
         capture_output=True,
         text=True,
         timeout=30,
@@ -144,8 +147,13 @@ def ensure_landlock(bin_dir: Path) -> int | None:
             f"沙箱拒绝启动:\n{(probe.stdout + probe.stderr).strip()}"
         )
 
+    reason = (
+        f"Landlock ABI v{abi} < v{LANDLOCK_REQUIRED_ABI}"
+        if abi < LANDLOCK_REQUIRED_ABI
+        else "landlock_degrade=always"
+    )
     logger.warning(
-        f"Landlock ABI v{abi} < v{LANDLOCK_REQUIRED_ABI}，已启用降级 wrapper "
+        f"{reason}，已启用降级 wrapper "
         f"({wrapper})。失去的保护：{'、'.join(DEGRADED_PROTECTIONS)}"
         f"（防进程逃逸维度）；文件系统隔离与内存限额不受影响。"
     )
@@ -155,7 +163,7 @@ def ensure_landlock(bin_dir: Path) -> int | None:
 
 
 class KanadeWorkspace(PydanticAIWorkspace):
-    """Mirage 官方 `PydanticAIWorkspace` 的工作区根绑定版
+    """mirage 官方 `PydanticAIWorkspace` 的工作区根绑定版
 
     官方实现见 `mirage.agents.pydantic_ai.backend`：文件操作（read/write/
     edit/ls）直通 VFS Ops 层、按**虚拟绝对路径**寻址，shell 操作（execute/
@@ -236,13 +244,12 @@ class KanadeWorkspace(PydanticAIWorkspace):
 
 @dataclass
 class SandboxSession:
-    """沙箱：workspace + backend"""
+    """沙箱：workspace + backend（每轮对话创建，用完即关）"""
 
     workspace_dir: Path
     workspace: Workspace
     backend: KanadeWorkspace
     session_id: str
-    last_used: float = field(default_factory=time.monotonic)
     _closed: bool = field(default=False, init=False, repr=False)
 
     @property
@@ -250,8 +257,15 @@ class SandboxSession:
         """工作区根的绝对路径"""
         return str(self.workspace_dir)
 
-    async def running(self) -> bool:
-        return not self._closed and not self.workspace._shutting_down
+    async def close(self) -> None:
+        """关闭工作区（幂等）。工作区文件保留在宿主目录，仅丢弃 shell 会话状态"""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            await self.workspace.close()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"关闭沙箱工作区时发生错误: {e}")
 
     # --- 工具层使用
 
@@ -278,12 +292,9 @@ class SandboxSession:
 
 
 class SandboxManager:
-    """沙箱池：惰性创建、空闲TTL/LRU回收"""
+    """沙箱工厂：每轮对话创建沙箱会话，工作区目录按会话管理"""
 
     def __init__(self):
-        self._sandboxes: dict[str, SandboxSession] = {}
-        self._lock = asyncio.Lock()
-        self._sweeper_task: asyncio.Task | None = None
         self._bin_dir: Path | None = None
 
         self._root_dir = cfg.sandbox.workspace_dir_path.resolve()
@@ -291,7 +302,6 @@ class SandboxManager:
 
         driver = get_driver()
         driver.on_startup(self._startup)
-        driver.on_shutdown(self._shutdown)
 
     # ===== 路径 =====
 
@@ -330,28 +340,13 @@ class SandboxManager:
             },
         )
 
-    # ===== 获取与销毁 =====
+    # ===== 创建 =====
 
-    async def acquire(self, session_id: str) -> SandboxSession:
-        """获取会话对应的沙箱（惰性创建），刷新使用时间
-
-        工作区根的绝对路径由 `workspace_root(session_id)` 单独查询。
-        """
-        async with self._lock:
-            managed = self._sandboxes.get(session_id)
-            if managed is not None and await managed.running():
-                managed.last_used = time.monotonic()
-                return managed
-
-            managed = await self._create(session_id)
-            self._sandboxes[session_id] = managed
-            logger.info(
-                f"已为会话{session_id}创建沙箱"
-                f"（工作区{managed.root}，当前共存{len(self._sandboxes)}个）"
-            )
-            # 超上限时LRU淘汰（不含刚创建的这个）
-            await self._evict_over_limit(exclude=session_id)
-            return managed
+    async def create(self, session_id: str) -> SandboxSession:
+        """为本轮对话新建沙箱（调用方用完需 `close()`）"""
+        session = await self._create(session_id)
+        logger.info(f"已为会话{session_id}创建沙箱（工作区{session.root}）")
+        return session
 
     def workspace_root(self, session_id: str) -> str:
         """会话工作区根的绝对路径"""
@@ -407,74 +402,9 @@ class SandboxManager:
             session_id=mirage_session,
         )
 
-    async def destroy(self, session_id: str) -> None:
-        """销毁会话沙箱"""
-        async with self._lock:
-            managed = self._sandboxes.pop(session_id, None)
-        if managed is None:
-            return
-        await self._close(managed)
-
-    async def _close(self, managed: SandboxSession) -> None:
-        managed._closed = True
-        try:
-            await managed.workspace.close()
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"关闭沙箱工作区时发生错误: {e}")
-
-    async def destroy_all(self) -> None:
-        """销毁全部沙箱"""
-        async with self._lock:
-            managed_list = list(self._sandboxes.values())
-            self._sandboxes.clear()
-        for managed in managed_list:
-            await self._close(managed)
-
-    # ===== 回收策略 =====
-
-    async def _evict_over_limit(self, *, exclude: str | None = None) -> None:
-        """超过最大存活数时LRU淘汰"""
-        limit = cfg.sandbox.max_concurrent_sandboxes
-        candidates = [(sid, m) for sid, m in self._sandboxes.items() if sid != exclude]
-        candidates.sort(key=lambda item: item[1].last_used)
-        overflow = len(candidates) + (1 if exclude else 0) - limit
-        for sid, managed in candidates[: max(overflow, 0)]:
-            self._sandboxes.pop(sid, None)
-            logger.info(f"沙箱数量超过上限{limit}，LRU关闭会话{sid}的沙箱")
-            await self._close(managed)
-
-    async def _sweep_once(self) -> None:
-        """回收空闲超时的沙箱"""
-        now = time.monotonic()
-        timeout_sec = cfg.sandbox.idle_timeout_minutes * 60
-        expired = [
-            (sid, m) for sid, m in self._sandboxes.items() if now - m.last_used >= timeout_sec
-        ]
-        for sid, managed in expired:
-            self._sandboxes.pop(sid, None)
-            logger.info(f"会话{sid}的沙箱空闲超过{cfg.sandbox.idle_timeout_minutes}分钟，关闭")
-            await self._close(managed)
-
-    async def _sweeper_loop(self) -> None:
-        while True:
-            await asyncio.sleep(cfg.sandbox.sweeper_interval_minutes * 60)
-            try:
-                await self._sweep_once()
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"沙箱回收任务异常: {e}")
-
     # ===== 生命周期 =====
 
     async def _startup(self):
         self._bin_dir = self._root_dir / ".bin"
         ensure_landlock(self._bin_dir)
         logger.info(f"mirage沙箱已就绪，工作区根目录: {self._root_dir}")
-        self._sweeper_task = asyncio.get_running_loop().create_task(self._sweeper_loop())
-
-    async def _shutdown(self):
-        if self._sweeper_task is not None:
-            self._sweeper_task.cancel()
-            self._sweeper_task = None
-        await self.destroy_all()

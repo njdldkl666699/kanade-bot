@@ -55,9 +55,6 @@ def _load_sandbox_module(workspace_root: Path | None = None):
     class FakeSandboxConfig:
         enabled = True
         memory_limit = "256M"
-        max_concurrent_sandboxes = 4
-        idle_timeout_minutes = 30
-        sweeper_interval_minutes = 5
         environment: dict[str, str] = {}
         workspace_dir_path = workspace_root or Path(tempfile.gettempdir())
         landlock_degrade = "auto"
@@ -125,11 +122,11 @@ class OfficialBackendBehaviorTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.mgr = _make_manager(self.module, self.root)
-        self.session = await self.mgr.acquire("behavior")
+        self.session = await self.mgr.create("behavior")
         self.backend = self.session.backend
 
     async def asyncTearDown(self):
-        await self.mgr.destroy_all()
+        await self.session.close()
 
     async def test_relative_write_lands_in_host_workspace(self):
         """相对路径写入必须落到宿主工作区（官方裸实现会静默写进 VFS 根 overlay）"""
@@ -159,11 +156,11 @@ class OfficialBackendBehaviorTest(unittest.IsolatedAsyncioTestCase):
         self.module.cfg.sandbox.environment = {"KANADE_PROBE": "42"}  # type: ignore[attr-defined]
         try:
             mgr = _make_manager(self.module, self.root)
-            session = await mgr.acquire("envtest")
+            session = await mgr.create("envtest")
             try:
                 result = await session.backend.aexecute("echo $KANADE_PROBE")
             finally:
-                await mgr.destroy("envtest")
+                await session.close()
         finally:
             self.module.cfg.sandbox.environment = {}  # type: ignore[attr-defined]
         self.assertEqual(result.output.strip(), "42")
@@ -236,11 +233,11 @@ class IsolationBoundaryTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.mgr = _make_manager(self.module, self.root)
-        self.session = await self.mgr.acquire("chat:iso")
+        self.session = await self.mgr.create("chat:iso")
         self.backend = self.session.backend
 
     async def asyncTearDown(self):
-        await self.mgr.destroy_all()
+        await self.session.close()
 
     async def test_workspace_outside_paths_do_not_exist(self):
         """工作区外的路径在 VFS 里根本不存在"""

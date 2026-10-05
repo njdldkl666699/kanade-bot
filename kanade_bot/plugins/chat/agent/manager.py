@@ -193,8 +193,6 @@ class ChatSessionManager:
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"关闭MCP服务器时发生错误: {e}")
         self._mcp_toolsets = []
-        if self._sandbox_manager is not None:
-            await self._sandbox_manager.destroy_all()
 
     # ===== Agent 会话层指令 =====
 
@@ -328,11 +326,11 @@ class ChatSessionManager:
 
             user_content = await self._build_user_content(send_prompt, images)
 
-            # 沙箱启用时获取（惰性创建）会话沙箱
+            # 沙箱启用时创建本轮沙箱（每轮新建，本轮结束即关闭；文件跨轮保留）
             sandbox_session = None
             sandbox_root = None
             if self._sandbox_manager is not None:
-                sandbox_session = await self._sandbox_manager.acquire(session_id)
+                sandbox_session = await self._sandbox_manager.create(session_id)
                 sandbox_root = self._sandbox_manager.workspace_root(session_id)
 
             deps = ChatDeps(
@@ -443,6 +441,8 @@ class ChatSessionManager:
                         f"（无文本输出且无工具调用），已停止重试"
                     )
             finally:
+                if sandbox_session is not None:
+                    await sandbox_session.close()
                 async with self._global_lock:
                     # 清空消息缓冲区
                     if session_id in self._sessions_messages:
@@ -504,9 +504,7 @@ class ChatSessionManager:
                 logger.warning(f"清空会话{session_id}历史时发生错误: {e}")
 
             if self._sandbox_manager is not None:
-                # 销毁沙箱
-                await self._sandbox_manager.destroy(session_id)
-                # 删除工作区目录
+                # 删除工作区目录（沙箱本体每轮即弃，无需另行销毁）
                 self._sandbox_manager.delete_workspace(session_id)
 
     async def interrupt_session_turn(self, session_id: str) -> bool | None:

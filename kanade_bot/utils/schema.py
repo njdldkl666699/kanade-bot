@@ -84,6 +84,10 @@ class KanadeConfig(AttrDocModel):
     """JSON Schema输出目录"""
     autoclear_cache_dir: str = "auto_clear/"
     """自动清理的缓存目录"""
+    print_kanade_banner: bool = True
+    """是否打印宵崎奏Bot的启动横幅"""
+    print_pydantic_ai_banner: bool = True
+    """是否打印Pydantic AI首次运行Agent时的横幅"""
 
     @property
     def schema_output_dir_path(self) -> Path:

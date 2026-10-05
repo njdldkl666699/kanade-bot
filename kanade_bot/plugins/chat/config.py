@@ -151,7 +151,7 @@ class MemoryConfig(AttrDocModel):
 
 
 class SandboxConfig(AttrDocModel):
-    """Mirage沙箱配置"""
+    """mirage沙箱配置"""
 
     enabled: bool = False
     """是否启用沙箱（文件与shell能力）
@@ -165,15 +165,6 @@ class SandboxConfig(AttrDocModel):
 
     memory_limit: str = "512M"
     """sandlock受限子进程的内存上限"""
-
-    max_concurrent_sandboxes: PositiveInt = 4
-    """同时存活的最大沙箱数，超出后LRU关闭"""
-
-    idle_timeout_minutes: PositiveInt = 30
-    """空闲沙箱回收阈值，超时后关闭"""
-
-    sweeper_interval_minutes: PositiveInt = 5
-    """后台回收任务扫描间隔"""
 
     workspace_dir: str = "sandboxes/"
     """沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录"""
@@ -274,7 +265,7 @@ class ScopedConfig(AttrDocModel):
     """持久化记忆配置"""
 
     sandbox: SandboxConfig = SandboxConfig()
-    """Mirage沙箱配置"""
+    """mirage沙箱配置"""
     image_caption: ImageCaptionConfig | None = None
     """图片转述模型配置，如果为None则不启用图片转述。
 

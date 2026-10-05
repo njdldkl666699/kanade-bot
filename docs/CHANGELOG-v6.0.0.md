@@ -270,13 +270,11 @@
 
 # v6.0.0-beta.4 更新日志
 
-> 本版本分两部分：**上一提交**（`0ac2d76`）将系统提示词重构为模块化配置
-> ——片段文件 + 变量替换，按变化频率分层以命中 provider 前缀缓存；
-> **本次变更**接入 mirage 官方 Pydantic AI backend 与 `pydantic-ai-backend`
-> 的 Console 工具集，删除自写的 `WorkspaceBackend` 协议适配层，并合并压缩
-> 参数 / 提示词配置模型。
+> 本版本分两部分：
+> - `0ac2d76`将系统提示词重构为模块化配置——片段文件 + 变量替换，按变化频率分层以命中 provider 前缀缓存；
+> - `72f86b2`接入 mirage 官方 Pydantic AI backend 与 `pydantic-ai-backend`的 Console 工具集，删除自写的 `WorkspaceBackend` 协议适配层，并合并压缩参数 / 提示词配置模型。
 
-## 第一部分：系统提示词模块化（上一提交）
+## 第一部分：系统提示词模块化 `0ac2d76`
 
 ### 破坏性变更
 
@@ -317,7 +315,7 @@
 - 验证：同一会话连续两轮 instructions 逐字节一致；19084 字符中静态层占
   19040
 
-## 第二部分：官方工作区后端与 Console 工具集（本次变更）
+## 第二部分：官方工作区后端与 Console 工具集 `72f86b2`
 
 ### 破坏性变更
 
@@ -381,3 +379,68 @@
 
 - `/压缩会话` 计划改为手动触发一次 LLM 会话压缩（代码已留 TODO，当前仍
   为统计报告）
+
+---
+
+# v6.0.0-beta.5 更新日志
+
+> 本版本移除沙箱池化层：实测每轮新建沙箱的额外开销仅 ~5ms，TTL/LRU/
+> sweeper 的复杂度不再划算；同时修复 sandlock ≥ 0.8.9 下降级自检探针
+> 必挂、bot 无法启动的问题。另有四项独立变更：接入 githubcard 插件、
+> 十连抽卡渲染增加缩略图磁盘缓存、启动横幅可配置、修复
+> `max_output_tokens` 因端点只认 `max_tokens` 而静默失效。
+
+## 破坏性变更
+
+- **沙箱去池化**（`chat/agent/sandbox.py`，净删约 110 行）：
+  - 每轮对话新建沙箱、本轮结束即关闭；工作区文件落宿主真实目录，
+    跨轮保留语义不变，清空会话仍删除目录
+  - 代价：跨轮 shell 状态（`cd`/`export`/后台进程）不再保留——每轮
+    初始化本就会重置到工作区根 + 配置环境变量，对模型无感
+  - 配置项移除：`chat.sandbox.max_concurrent_sandboxes` /
+    `idle_timeout_minutes` / `sweeper_interval_minutes`
+  - API：`SandboxManager.acquire/destroy/destroy_all` 移除，改为
+    `create(session_id)` + `SandboxSession.close()`
+- **实测依据**（mirage clone main + sandlock 0.8.9）：每轮新建+关闭
+  ~5ms（Workspace 构造 1.5ms + init shell 2-3ms + close 0.4ms）；
+  python3 命令本身的 sandlock 子进程启动 ~33ms 每条命令都要付，池化
+  省不掉；每 workspace 常驻内存 ~0.1MB
+
+## 新增
+
+- **接入 nonebot-plugin-githubcard**（`>=0.4.1`）：聊天中的 GitHub
+  链接自动以卡片形式回复；schema 生成注册 `GithubCardConfig`，示例
+  配置新增顶层 `github_token` / `github_type`，`watchdog.github_token`
+  改以 YAML 锚点复用同一 token（一处配置两处生效）
+- **启动横幅开关**（顶层配置 `print_kanade_banner` /
+  `print_pydantic_ai_banner`，默认均开启）：Kanade 横幅从 `__main__`
+  无条件打印移入 `init_nonebot` 按配置打印（`bot.py` 模块顶部的
+  banner 导入一并去除）；关闭 Pydantic AI 首次运行 Agent 时的横幅经
+  `PYDANTIC_AI_NO_BANNER=1` 环境变量实现
+
+## 改进
+
+- **十连抽卡渲染提速**（`crystal/plugins/gacha/gacha.py`）：新增
+  `render_composed_card_thumbnail` 缩略图磁盘缓存，与全尺寸渲染缓存
+  同目录、文件名含尺寸（`GACHA_THUMBNAIL_SIZE` 变更后旧缓存自动
+  失效）；此前每次十连的每张卡都要解码 940x530 全尺寸图并重新
+  LANCZOS 缩放，缓存命中后直接读小图。附验证脚本
+  `tests/gacha_thumbnail_cache_test.py`（缓存命中与直接缩放逐像素
+  一致、提速效果）与基准 `tests/gacha_render_bench.py`（渲染各阶段
+  耗时拆解）
+
+## 修复
+
+- **sandlock ≥ 0.8.9 降级自检必挂**：`--allow-degraded` 变为必须带值，
+  原探针（裸 flag + exec `true`）clap 直接报错 → `LandlockUnavailableError`
+  → bot 启动失败。探针改为 `-r <python3 顶层目录> -- python3 -c "print(1)"`
+  （实测 `-r /usr/bin` 粒度不够，execvp 仍 Permission denied，需放行到
+  `/usr` 一级）
+- **`max_output_tokens` 从未生效**（`c9c781a`）：pydantic-ai 默认把
+  上限映射为 `max_completion_tokens` 发送，而大部分 OpenAI 兼容端点
+  只认旧的 `max_tokens`，未知字段被静默忽略（不报错），配置的
+  上限实际从未起过作用。`ProviderConfig` 新增
+  `supports_max_completion_tokens`（默认 `false`），`get_model` 按端点
+  能力注入 `OpenAIModelProfile` 覆盖字段映射；未配置 provider 时保持
+  pydantic-ai 默认。附请求捕获脚本 `tests/chat/capture_chat_request.py`
+  （经 openai-proxy 抓取一次完整上游请求体，用于验证实际发送字段）

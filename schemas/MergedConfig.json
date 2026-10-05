@@ -31,15 +31,7 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": [
-                "none",
-                "minimal",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ],
+              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
               "type": "string"
             },
             {
@@ -208,11 +200,7 @@
         },
         "hides": {
           "items": {
-            "enum": [
-              "tab",
-              "enter",
-              "exit"
-            ],
+            "enum": ["tab", "enter", "exit"],
             "type": "string"
           },
           "title": "Hides",
@@ -221,11 +209,7 @@
         },
         "disables": {
           "items": {
-            "enum": [
-              "tab",
-              "enter",
-              "exit"
-            ],
+            "enum": ["tab", "enter", "exit"],
             "type": "string"
           },
           "title": "Disables",
@@ -392,15 +376,7 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": [
-                "none",
-                "minimal",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ],
+              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
               "type": "string"
             },
             {
@@ -497,9 +473,7 @@
           "title": "Tools"
         }
       },
-      "required": [
-        "url"
-      ],
+      "required": ["url"],
       "title": "MCPServerConfig",
       "type": "object"
     },
@@ -589,9 +563,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "file"
-      ],
+      "required": ["file"],
       "title": "PromptSectionConfig",
       "type": "object"
     },
@@ -642,7 +614,7 @@
         },
         "supports_max_completion_tokens": {
           "default": false,
-          "description": "Chat Completions端点是否接受`max_completion_tokens`字段\n\npydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，\n但绝大多数OpenAI兼容端点（DeepSeek官方、SiliconFlow、SenseNova等）只认\n旧的`max_tokens`，未知字段会被静默忽略，导致输出长度限制实际未生效。\n仅当端点明确支持时（如OpenAI官方）才设为true。",
+          "description": "Chat Completions端点是否接受`max_completion_tokens`字段\n\npydantic-ai默认把`max_output_tokens`设置映射为`max_completion_tokens`发送，\n但绝大多数OpenAI兼容端点只认旧的`max_tokens`，未知字段会被静默忽略，\n导致输出长度限制实际未生效。仅当端点明确支持时（如OpenAI官方）才设为true。",
           "title": "Supports Max Completion Tokens",
           "type": "boolean"
         }
@@ -692,10 +664,7 @@
         "embedding_type": {
           "default": "sentence_transformer",
           "description": "RAG使用的向量化方法\n- `sentence_transformer`需要指定model_name_or_path参数\n- `openai`需要指定openai开头的参数",
-          "enum": [
-            "sentence_transformer",
-            "openai"
-          ],
+          "enum": ["sentence_transformer", "openai"],
           "title": "Embedding Type",
           "type": "string"
         },
@@ -742,7 +711,7 @@
       "type": "object"
     },
     "SandboxConfig": {
-      "description": "Mirage沙箱配置",
+      "description": "mirage沙箱配置",
       "properties": {
         "enabled": {
           "default": false,
@@ -765,27 +734,6 @@
           "title": "Memory Limit",
           "type": "string"
         },
-        "max_concurrent_sandboxes": {
-          "default": 4,
-          "description": "同时存活的最大沙箱数，超出后LRU关闭",
-          "exclusiveMinimum": 0,
-          "title": "Max Concurrent Sandboxes",
-          "type": "integer"
-        },
-        "idle_timeout_minutes": {
-          "default": 30,
-          "description": "空闲沙箱回收阈值，超时后关闭",
-          "exclusiveMinimum": 0,
-          "title": "Idle Timeout Minutes",
-          "type": "integer"
-        },
-        "sweeper_interval_minutes": {
-          "default": 5,
-          "description": "后台回收任务扫描间隔",
-          "exclusiveMinimum": 0,
-          "title": "Sweeper Interval Minutes",
-          "type": "integer"
-        },
         "workspace_dir": {
           "default": "sandboxes/",
           "description": "沙箱工作区根目录名，位于插件缓存目录；每个聊天会话一个子目录",
@@ -795,11 +743,7 @@
         "landlock_degrade": {
           "default": "auto",
           "description": "Landlock ABI 不足时的策略\n\n- `auto`（默认）：按 `sandlock check` 的结果自动决定，\n  ABI < v6 时启用wrapper 注入 `--allow-degraded`\n- `always`：始终注入降级参数\n- `strict`：ABI 不足 v6 即报错",
-          "enum": [
-            "auto",
-            "always",
-            "strict"
-          ],
+          "enum": ["auto", "always", "strict"],
           "title": "Landlock Degrade",
           "type": "string"
         },
@@ -910,10 +854,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "name",
-        "url"
-      ],
+      "required": ["name", "url"],
       "title": "TestSiteCfg",
       "type": "object"
     },
@@ -944,9 +885,7 @@
           "type": "integer"
         },
         "meanings": {
-          "default": [
-            "中释"
-          ],
+          "default": ["中释"],
           "description": "单词释义类型，根据数据源可以选择多种释义类型",
           "items": {
             "type": "string"
@@ -1049,9 +988,6 @@
             "enabled": false,
             "environment": {},
             "memory_limit": "512M",
-            "max_concurrent_sandboxes": 4,
-            "idle_timeout_minutes": 30,
-            "sweeper_interval_minutes": 5,
             "workspace_dir": "sandboxes/",
             "landlock_degrade": "auto",
             "landlock_real_binary": null
@@ -1460,15 +1396,7 @@
         "reasoning_effort": {
           "anyOf": [
             {
-              "enum": [
-                "none",
-                "minimal",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ],
+              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
               "type": "string"
             },
             {
@@ -1577,10 +1505,7 @@
         "image_provider": {
           "default": "sensenova",
           "description": "图片创作（文生图/图片编辑）使用的提供商，可选`sensenova`或`agnes`。视频生成仅支持`agnes`。",
-          "enum": [
-            "sensenova",
-            "agnes"
-          ],
+          "enum": ["sensenova", "agnes"],
           "title": "Image Provider",
           "type": "string"
         },
@@ -1720,22 +1645,14 @@
     "alconna_conflict_resolver": {
       "default": "default",
       "description": "命令冲突解决策略，default 为保留两个命令，raise 为抛出异常，ignore 为忽略新命令，replace 为替换旧命令",
-      "enum": [
-        "raise",
-        "default",
-        "ignore",
-        "replace"
-      ],
+      "enum": ["raise", "default", "ignore", "replace"],
       "title": "Alconna Conflict Resolver",
       "type": "string"
     },
     "alconna_context_style": {
       "anyOf": [
         {
-          "enum": [
-            "bracket",
-            "parentheses"
-          ],
+          "enum": ["bracket", "parentheses"],
           "type": "string"
         },
         {
@@ -1900,12 +1817,9 @@
         "sandbox": {
           "enabled": false,
           "environment": {},
-          "idle_timeout_minutes": 30,
           "landlock_degrade": "auto",
           "landlock_real_binary": null,
-          "max_concurrent_sandboxes": 4,
           "memory_limit": "512M",
-          "sweeper_interval_minutes": 5,
           "workspace_dir": "sandboxes/"
         },
         "image_caption": null,
@@ -1944,9 +1858,7 @@
       "type": "string"
     },
     "command_sep": {
-      "default": [
-        "."
-      ],
+      "default": ["."],
       "description": "命令的分隔标记，用于将文本形式的命令切分为元组（实际的命令名）。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_SEP=[\".\"]\n        ```",
       "items": {
         "type": "string"
@@ -1956,9 +1868,7 @@
       "uniqueItems": true
     },
     "command_start": {
-      "default": [
-        "/"
-      ],
+      "default": ["/"],
       "description": "命令的起始标记，用于判断一条消息是不是命令。\n\n    参考[命令响应规则](https://nonebot.dev/docs/advanced/matcher#command)。\n\n    用法:\n        ```conf\n        COMMAND_START=[\"/\", \"\"]\n        ```",
       "items": {
         "type": "string"
@@ -2041,6 +1951,24 @@
       "description": "是否生成JSON Schema文件",
       "title": "Generate Schemas",
       "type": "boolean"
+    },
+    "github_token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Github Token"
+    },
+    "github_type": {
+      "default": 1,
+      "enum": [0, 1],
+      "title": "Github Type",
+      "type": "integer"
     },
     "handle": {
       "$ref": "#/$defs/HandleConfig",
@@ -2438,11 +2366,7 @@
     },
     "ps_bg_lolicon_r18_type": {
       "default": 0,
-      "enum": [
-        0,
-        1,
-        2
-      ],
+      "enum": [0, 1, 2],
       "title": "Ps Bg Lolicon R18 Type",
       "type": "integer"
     },
@@ -2486,13 +2410,7 @@
       "type": "integer"
     },
     "ps_command": {
-      "default": [
-        "运行状态",
-        "状态",
-        "zt",
-        "yxzt",
-        "status"
-      ],
+      "default": ["运行状态", "状态", "zt", "yxzt", "status"],
       "items": {
         "type": "string"
       },
@@ -2542,9 +2460,7 @@
       "type": "boolean"
     },
     "ps_ignore_disk_ios": {
-      "default": [
-        "^(loop|zram)\\d*$"
-      ],
+      "default": ["^(loop|zram)\\d*$"],
       "items": {
         "type": "string"
       },
@@ -2552,9 +2468,7 @@
       "type": "array"
     },
     "ps_ignore_nets": {
-      "default": [
-        "^lo(op)?\\d*$|^(Loopback|本地连接)"
-      ],
+      "default": ["^lo(op)?\\d*$|^(Loopback|本地连接)"],
       "items": {
         "type": "string"
       },
@@ -2575,9 +2489,7 @@
       "type": "array"
     },
     "ps_ignore_procs": {
-      "default": [
-        "^System Idle Process$"
-      ],
+      "default": ["^System Idle Process$"],
       "items": {
         "type": "string"
       },
@@ -2611,10 +2523,7 @@
     },
     "ps_proc_sort_by": {
       "default": "cpu",
-      "enum": [
-        "cpu",
-        "mem"
-      ],
+      "enum": ["cpu", "mem"],
       "title": "Ps Proc Sort By",
       "type": "string"
     },
@@ -2836,18 +2745,14 @@
         "default_dictionary": "CET4",
         "min_length": 3,
         "max_length": 13,
-        "meanings": [
-          "中释"
-        ],
+        "meanings": ["中释"],
         "crystal_bonus_map": {},
         "hinted_crystal_bonus_map": {}
       },
       "description": "猜单词配置"
     }
   },
-  "required": [
-    "watchdog"
-  ],
+  "required": ["watchdog"],
   "title": "MergedConfig",
   "type": "object"
 }
