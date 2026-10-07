@@ -21,6 +21,7 @@ from ..config import cfg, chat_configs
 from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryScopeType
+from .schedule import parse_run_at, scheduled_task_manager
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import html_to_pic
@@ -233,17 +234,20 @@ async def send_voice(ctx: RunContext[ChatDeps], text: str) -> str:
 
 async def render_html_image(
     ctx: RunContext[ChatDeps],
-    html: str,
+    html: str = "",
+    file_path: str = "",
     file_name: str = "",
     viewport_width: int = 1280,
     viewport_height: int = 720,
     wait_ms: int = 0,
     full_page: bool = True,
 ) -> str:
-    """将HTML内容渲染为PNG图片并保存到沙箱工作区的rendered/目录，返回沙箱内路径。
+    """将HTML内容或HTML文件渲染为PNG图片并保存到沙箱工作区的rendered/目录，返回沙箱内路径。
 
     Args:
-        html: 要渲染的完整HTML内容。
+        html: 要渲染的完整HTML内容；与file_path二选一，优先于file_path。
+        file_path: 沙箱工作区内HTML文件的相对路径，无需协议前缀；html为空时使用。
+            HTML内的相对资源路径（图片、iframe等）以沙箱工作区根为基准解析。
         file_name: 保存使用的PNG文件名，仅文件名本身；缺省时自动生成。
         viewport_width: 渲染视口宽度，单位像素，默认1280。
         viewport_height: 渲染视口高度，单位像素，默认720。
@@ -253,6 +257,15 @@ async def render_html_image(
     sandbox = _get_sandbox(ctx)
     if sandbox is None:
         return "未启用沙箱，无法渲染HTML为图片。"
+
+    if not html:
+        if not file_path:
+            return "未提供HTML内容或文件路径，无法渲染为图片。"
+        try:
+            stream = await sandbox.read(Path(file_path))
+        except FileNotFoundError:
+            return f"沙箱工作区中不存在该文件: {file_path}"
+        html = stream.read().decode("utf-8", errors="replace")
 
     # 文件名必须纯净，防止借助文件名做路径穿越
     if Path(file_name).name != file_name:
@@ -267,6 +280,7 @@ async def render_html_image(
             wait=wait_ms,
             full_page=full_page,
             viewport={"width": viewport_width, "height": viewport_height},
+            template_path=f"file://{sandbox.workspace_dir.resolve()}",
         )
     except Exception as e:
         logger.exception("HTML渲染为图片失败: {}", e)
@@ -436,6 +450,46 @@ async def setup_python_env(
     )
 
 
+async def schedule_task(
+    ctx: RunContext[ChatDeps],
+    description: str,
+    run_at: str = "",
+    delay_minutes: float = 0,
+) -> str:
+    """设定一个一次性定时任务，到点后系统会唤醒你处理。
+
+    适合用户要求未来某时刻提醒（如"半小时后提醒我""明天早上8点叫我"），
+    或到点开始/汇报一项工作的场景。到点后你会收到包含任务描述的系统通知，
+    届时应主动向会话反馈处理结果（如提醒对应创建者、汇报任务进展）。
+
+    Args:
+        description: 任务内容的自然语言描述，到点后会原样作为通知发给你
+        run_at: 触发时间，ISO 8601格式（如 2026-10-08T08:00）；留空时用delay_minutes
+        delay_minutes: 距现在的延迟分钟数（可为小数，如0.5表示30秒后）；run_at留空时必须大于0
+    """
+    logger.info(
+        "设定定时任务工具被调用：{}，run_at={}，delay_minutes={}",
+        description,
+        run_at,
+        delay_minutes,
+    )
+    try:
+        fire_at = parse_run_at(run_at, delay_minutes)
+    except ValueError as e:
+        return f"设定定时任务失败：{e}"
+
+    task = await scheduled_task_manager.create(
+        session_info=ctx.deps.session_info,
+        bot_id=ctx.deps.bot_id,
+        description=description.strip(),
+        run_at=fire_at,
+    )
+    return (
+        f"定时任务已设定（ID: {task.task_id}），将于 {fire_at:%Y-%m-%d %H:%M} 触发，"
+        "到点后系统会通知你处理。可以把ID告诉用户，供其用「任务列表」「取消任务」命令查询或取消。"
+    )
+
+
 def build_tools() -> list[Any]:
     """构建聊天Agent的静态工具列表"""
     return [
@@ -450,4 +504,5 @@ def build_tools() -> list[Any]:
         send_image,
         send_file,
         setup_python_env,
+        schedule_task,
     ]

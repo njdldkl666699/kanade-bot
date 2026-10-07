@@ -21,9 +21,9 @@ File operations are restricted to your workspace directory, the system temp dire
 <path_protocols>
 Protocol conventions for path and URL parameters:
 
-- Parameters accepting either local or network paths require a protocol: local paths use absolute paths starting with `file://`, while network paths use full URLs starting with `http://` or `https://`
+- Parameters accepting either local or network paths: network resources use full URLs starting with `http://` or `https://`, while local files use plain paths relative to the sandbox workspace root, without any protocol prefix (`file://` and other schemes are not supported and will be rejected)
 - Network-only parameters use full URLs starting with `http://` or `https://`
-- Local-only parameters use plain paths directly; relative paths are resolved against the current working directory, no protocol prefix needed
+- Local-only parameters use plain workspace-relative paths directly, resolved against the sandbox workspace root; no protocol prefix is needed
 </path_protocols>
 
 General guidelines:

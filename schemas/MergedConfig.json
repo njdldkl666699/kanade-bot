@@ -324,7 +324,7 @@
             }
           ],
           "default": null,
-          "description": "摘要使用的模型 ID；None 表示继承主模型",
+          "description": "摘要使用的模型 ID；`None` 表示继承主模型",
           "title": "Summary Model"
         },
         "summary_keep_messages": {
@@ -824,7 +824,7 @@
         },
         "uv_bin": {
           "default": "uv",
-          "description": "uv 可执行文件（宿主侧创建沙箱虚拟环境的首选方式），PATH 上的名字或绝对路径\n\n不可用时自动回退到宿主 `python3 -m venv` 原生方式（uv 非沙箱必选项）",
+          "description": "uv 可执行文件，PATH 上的名字或绝对路径\n\n不可用时自动回退到宿主 `python3 -m venv` 原生方式",
           "title": "Uv Bin",
           "type": "string"
         },
@@ -838,7 +838,7 @@
             }
           ],
           "default": null,
-          "description": "uv 托管解释器目录（授予沙箱只读，供 venv 符号链接解析）\n\n默认启动时执行 `uv python dir` 动态求值。",
+          "description": "uv 托管解释器目录\n\n默认启动时执行 `uv python dir` 动态求值。",
           "title": "Uv Python Dir"
         },
         "venv_python": {
@@ -855,6 +855,33 @@
         }
       },
       "title": "SandboxConfig",
+      "type": "object"
+    },
+    "ScheduledTaskConfig": {
+      "description": "Agent定时任务配置",
+      "properties": {
+        "data_file": {
+          "default": "scheduled_tasks.json",
+          "description": "定时任务持久化文件名",
+          "title": "Data File",
+          "type": "string"
+        },
+        "retry_limit": {
+          "default": 2,
+          "description": "触发失败后的重试次数（不含首次尝试）",
+          "minimum": 0,
+          "title": "Retry Limit",
+          "type": "integer"
+        },
+        "retry_delay_minutes": {
+          "default": 5,
+          "description": "触发失败后的重试间隔（分钟）",
+          "exclusiveMinimum": 0,
+          "title": "Retry Delay Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "ScheduledTaskConfig",
       "type": "object"
     },
     "SessionConfig": {
@@ -1113,6 +1140,14 @@
             "summary_target_fraction": null,
             "summary_model": null,
             "summary_keep_messages": 40
+          }
+        },
+        "scheduled_task": {
+          "$ref": "#/$defs/ScheduledTaskConfig",
+          "default": {
+            "data_file": "scheduled_tasks.json",
+            "retry_limit": 2,
+            "retry_delay_minutes": 5
           }
         },
         "memory": {
@@ -2005,6 +2040,11 @@
           "summary_model": null,
           "summary_target_fraction": null,
           "trigger_fraction": 0.8
+        },
+        "scheduled_task": {
+          "data_file": "scheduled_tasks.json",
+          "retry_delay_minutes": 5,
+          "retry_limit": 2
         },
         "memory": {
           "database_file": "memories.sqlite3",

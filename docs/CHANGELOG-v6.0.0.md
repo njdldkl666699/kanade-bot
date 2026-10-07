@@ -682,3 +682,65 @@
   `HOME`/`XDG_*` 注入的运行时配置单元测试、图片暂存换名逻辑测试，
   及真实 sandlock 受限进程内字体可读、缓存可写、宿主家目录仍被拒
   的端到端验证
+
+---
+
+# v6.0.0-rc.2 更新日志
+
+> 本版本新增 **Agent 定时任务**：模型可调用 `schedule_task` 工具设定
+> 一次性定时任务，到点后系统主动唤醒会话并把回复发回原群/私聊。
+> 同时把消息投递逻辑抽为独立模块（被动回复与主动发送共用），并让
+> `render_html_image` 支持直接渲染工作区内的 HTML 文件（相对资源以
+> 工作区根解析）。
+
+## 新增
+
+- **Agent 定时任务**（`chat/agent/schedule.py`）：
+  - 新工具 `schedule_task`：以自然语言描述任务，`run_at`（ISO 8601
+    时刻）与 `delay_minutes`（延迟分钟数）二选一指定触发时间，返回
+    任务 ID；非法时间参数以文本反馈模型自行纠正
+  - 到点后由 APScheduler 回调，以**显式 system_notification + 空用户
+    消息**运行一轮唤醒 agent，回复主动发送回原会话（群或私聊）；
+    到点通知包含任务描述、创建者与设定时间
+  - 任务持久化为 JSON（临时文件 + 原子替换），含会话快照与 bot_id，
+    重启后恢复调度；已过期任务跳过并清理；触发失败按配置有限重试，
+    耗尽后丢弃
+  - 触发前预检：目标会话/用户已拉黑则静默放弃；创建者水晶余额为负
+    则不唤醒 agent，直接发文本告知；正常执行按实际 usage 扣创建者
+    水晶（峰谷按触发时刻判定）
+- **新命令**：`/任务列表`（`chat_tasks`）列出当前会话待触发任务；
+  `/取消任务 <ID>`（`chat_task_cancel`）按 ID 取消，仅限本会话创建
+  的任务
+- **新配置段 `chat.scheduled_task`**：`data_file`（持久化文件名）、
+  `retry_limit`（重试次数，不含首次）、`retry_delay_minutes`（重试
+  间隔），默认 `scheduled_tasks.json` / 2 / 5 分钟
+- **消息投递模块**（`chat/deliver.py`）：从 chat.py 抽出
+  `extract_segments_preserving_code`（代码块保护拆分 + 表情包引用
+  替换）与分级批量发送（≤5 按条、≤10 合并转发、>10 合并相邻文本 +
+  长内容转图），新增 `send_onebot_proactive` /
+  `send_text_onebot_proactive` 主动发送；被动回复与定时任务共用
+  同一套解析与发送逻辑
+- **`render_html_image` 支持渲染 HTML 文件**：新增 `file_path` 参数，
+  直接渲染沙箱工作区内的 HTML 文件（与 `html` 二选一），并以
+  `template_path` 把 HTML 内的相对资源路径（图片、iframe 等）锚定到
+  工作区根解析；为此 htmlrender 改用回植 PR #112 的 fork
+  （`backport/pr-112`，为 `html_to_pic` 引入 `template_path` 参数）
+
+## 改进
+
+- 路径协议提示词（`tool_usage.md`）改写：本地路径一律为相对沙箱
+  工作区根的裸路径，`file://` 等协议前缀不再支持——与沙箱实际
+  行为对齐
+- `send_and_wait` 新增 `system_notification` 显式注入参数：不消费
+  排队通知槽位（留待下一轮），且单独视为可运行内容（空 prompt 也
+  能触发生成）
+- 提示词新增 `<schedule_task>` 工具使用指南（适用场景、时间换算、
+  会话级语义）
+- 版本号 v6.0.0-rc.1 → v6.0.0-rc.2
+
+## 测试
+
+- 新增 `tests/chat/test_schedule.py`：时间解析（ISO 8601 / 延迟
+  分钟、时区归一、过去时间与双参数冲突拒绝）、JSON 持久化原子写入、
+  任务生命周期（创建、取消、重启恢复跳过过期、失败重试）单元测试；
+  桩掉 nonebot / apscheduler / crystal 重依赖，只测纯逻辑

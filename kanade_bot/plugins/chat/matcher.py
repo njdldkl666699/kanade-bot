@@ -77,6 +77,22 @@ chat_stats = on_command(
 )
 register_matcher(chat_stats, "会话统计")
 
+chat_task_list = on_command(
+    "任务列表",
+    aliases={"chat_tasks", "chattasks"},
+    priority=2,
+    block=True,
+)
+register_matcher(chat_task_list, "任务列表")
+
+chat_task_cancel = on_command(
+    "取消任务",
+    aliases={"chat_task_cancel", "chattaskcancel"},
+    priority=2,
+    block=True,
+)
+register_matcher(chat_task_cancel, "取消任务")
+
 chat_ban = on_command(
     "聊天拉黑",
     aliases={"chat_ban", "chatban"},

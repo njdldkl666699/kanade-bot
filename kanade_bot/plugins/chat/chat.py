@@ -1,5 +1,4 @@
 import random
-import re
 from contextlib import aclosing
 from pathlib import Path
 from typing import cast
@@ -17,7 +16,7 @@ from pydantic_ai.usage import RunUsage
 
 from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
 from kanade_bot.utils.common import PlatformType, asia_shanghai_now, get_platform_type
-from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
+from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 from kanade_bot.utils.parse import (
     TextFormat,
     guess_format,
@@ -29,12 +28,10 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.manager import chat_manager
 from .ban import is_banned
 from .config import cfg, chat_configs
+from .deliver import extract_segments_preserving_code, send_segments
 
 require("crystal")
 from kanade_bot.plugins.crystal import consume_crystal
-
-require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import md_to_pic
 
 if cfg.rag.enabled:
     from .rag import query
@@ -59,122 +56,19 @@ async def _send_onebot_message(
     content_format: TextFormat = "plaintext",
     first_reply: bool = False,
 ):
-    reply = MessageSegment.reply(event.message_id)
+    """把消息段列表发送回事件来源会话（引用回复仅拼在第一条消息前）"""
 
-    # 根据消息段的数量决定发送方式
-    if not segments:
-        return
+    async def _send(message: OneBotMessage | MessageSegment | str) -> None:
+        await matcher.send(message)
 
-    # # 消息数==1，引用回复
-    # if len(segments) == 1:
-    #     reply = MessageSegment.reply(event.message_id)
-    #     await matcher.send(reply + segments[0])
-
-    # 消息数<=5，按条发送
-    elif len(segments) <= 5:
-        # for segment in segments:
-        #     await matcher.send(segment)
-        for i, segment in enumerate(segments):
-            if first_reply and i == 0:
-                await matcher.send(reply + segment)
-            else:
-                await matcher.send(segment)
-
-    # 消息数>5但<=10，合并转发
-    elif len(segments) <= 10:
-        info = await get_bot_info(bot)
-        node_custom_message = OneBotMessage()
-        for segment in segments:
-            node_custom_message += MessageSegment.node_custom(*info, OneBotMessage(segment))
-        await matcher.send(node_custom_message)
-
-    # 消息数>10，合并相邻的文本消息段
-    else:
-        messages: list[OneBotMessage | str] = []
-        sentinel: str = ""
-        for segment in segments:
-            if segment.type == "text":
-                sentinel += segment.data["text"] + "\n\n"
-            else:
-                if sentinel := sentinel.strip():
-                    messages.append(sentinel)
-                    sentinel = ""
-                messages.append(OneBotMessage(segment))
-        if sentinel := sentinel.strip():
-            messages.append(sentinel)
-
-        # 内容不长，直接发送消息列表
-        if not content_long:
-            for i, message in enumerate(messages):
-                if first_reply and i == 0:
-                    await matcher.send(reply + message)
-                else:
-                    await matcher.send(message)
-            return
-
-        # 内容长的Markdown消息，转换为图片发送
-        if (
-            len(messages) == 1
-            and isinstance(m := messages[0], str)
-            and content_format == "markdown"
-        ):
-            message = MessageSegment.image(await md_to_pic(m))
-            if first_reply:
-                message += MessageSegment.reply(event.message_id)
-            await matcher.send(message)
-            return
-
-        # 内容长的纯文本，作为合并转发消息发送
-        node_custom_message = OneBotMessage()
-        info = await get_bot_info(bot)
-        for message in messages:
-            node_custom_message += MessageSegment.node_custom(*info, message)
-        await matcher.send(node_custom_message)
-
-
-def _extract_segments_preserving_code(content: str) -> list[MessageSegment]:
-    # 用于存储最终的块
-    segments: list[MessageSegment] = []
-
-    # 找到所有代码块的位置，将它们替换为占位符
-    code_blocks = []
-
-    # 匹配 ```...``` 代码块（支持带语言标识）
-    def replace_code_block(match):
-        code_blocks.append(match.group(0))
-        # 返回一个唯一占位符
-        return f"__CODE_BLOCK_{len(code_blocks) - 1}__"
-
-    # 先保护代码块，将代码块替换为占位符
-    content_with_placeholders = re.sub(r"```[\s\S]*?```", replace_code_block, content)
-
-    # 按两个及以上换行拆分（代码块已被保护）
-    temp_chunks = [
-        chunk for chunk in re.split(r"(?:\r?\n){2,}", content_with_placeholders) if chunk.strip()
-    ]
-
-    for chunk in temp_chunks:
-        # 替换回代码块（使用正则确保只替换占位符）
-        for i, code_block in enumerate(code_blocks):
-            chunk = chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
-
-        # 处理表情包引用，格式{{表情包名称}}
-        if meme_match := re.search(r"\{\{(\w+?)\}\}", chunk):
-            chunk = chunk.replace(meme_match.group(0), "")
-            meme_name = meme_match.group(1)
-            if meme_name in chat_configs.instance.memes:
-                meme_path = cfg.memes_dir_path / meme_name
-                if meme_path.is_dir():
-                    image_files = list(meme_path.glob("*"))
-                    if image_files:
-                        selected_image = random.choice(image_files)
-                        segments.append(OneBotMessageSegmentMeme(selected_image))
-
-        # 处理后的文本块，如果不为空，则添加为文本消息段
-        if chunk.strip():
-            segments.append(MessageSegment.text(chunk.strip()))
-
-    return segments
+    await send_segments(
+        _send,
+        bot,
+        segments,
+        reply=MessageSegment.reply(event.message_id) if first_reply else None,
+        content_long=content_long,
+        content_format=content_format,
+    )
 
 
 async def send_message_in_chunks(
@@ -237,7 +131,7 @@ async def send_message_in_chunks(
                 replied = True
 
                 if isinstance(event, OneBotMessageEvent):
-                    segments = _extract_segments_preserving_code(content)
+                    segments = extract_segments_preserving_code(content)
                     await _send_onebot_message(
                         matcher,
                         cast(OneBot, bot),

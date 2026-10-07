@@ -17,6 +17,7 @@ from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_m
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
 from .agent.manager import chat_manager
+from .agent.schedule import scheduled_task_manager
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
 from .config import cfg, chat_configs
@@ -29,6 +30,8 @@ from .matcher import (
     chat_monitor,
     chat_reset,
     chat_stats,
+    chat_task_cancel,
+    chat_task_list,
     chat_unban,
     chat_workspace_clear,
     list_memes,
@@ -177,6 +180,37 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info}：{message_str}"
     await chat_manager.add_message(session_id, message_str)
+
+
+@chat_task_list.handle()
+async def handle_chat_task_list(event: Event):
+    """列出当前会话的Agent定时任务（到点触发的那种）"""
+    session_id = extract_session_info_sync(event).session_id
+    tasks = scheduled_task_manager.list_by_session(session_id)
+    if not tasks:
+        await chat_task_list.finish("当前会话没有定时任务")
+
+    lines = [f"📋 当前会话的定时任务（{len(tasks)}）："]
+    for task in tasks:
+        description = (
+            task.description if len(task.description) <= 40 else task.description[:40] + "…"
+        )
+        creator = f"（by {task.creator_name}）" if task.creator_name else ""
+        lines.append(f"- [{task.task_id}] {task.run_at_dt:%m-%d %H:%M} {description}{creator}")
+    await chat_task_list.finish("\n".join(lines))
+
+
+@chat_task_cancel.handle()
+async def handle_chat_task_cancel(event: Event, arg_msg: Message = CommandArg()):
+    """按ID取消当前会话创建的定时任务"""
+    task_id = arg_msg.extract_plain_text().strip()
+    if not task_id:
+        await chat_task_cancel.finish("请提供要取消的任务ID，可用「任务列表」查询")
+
+    session_id = extract_session_info_sync(event).session_id
+    if await scheduled_task_manager.cancel(task_id, session_id=session_id):
+        await chat_task_cancel.finish(f"已取消定时任务 {task_id}")
+    await chat_task_cancel.finish(f"当前会话不存在任务 {task_id}（可用「任务列表」查询）")
 
 
 @chat_ban.handle()

@@ -350,6 +350,7 @@ class ChatSessionManager:
         images: list[ImageInput] | None = None,
         timeout: float = 60,
         on_usage: UsageCallback | None = None,
+        system_notification: str | None = None,
     ):
         """发送消息到会话，每条助手消息一到达就实时yield其内容。
 
@@ -363,6 +364,7 @@ class ChatSessionManager:
         images: 图片附件列表
         timeout: 相邻流事件间的间隔超时，超时后取消运行并抛出TimeoutError
         on_usage: 轮次正常结束时回调；异常或中途取消时不回调
+        system_notification: 显式注入本轮的系统通知；不消费排队通知槽位，且单独视为可运行内容
         """
         session_id = session_info.session_id
         async with await self._ensure_session_lock(session_id):
@@ -372,13 +374,16 @@ class ChatSessionManager:
 
             async with self._global_lock:
                 messages = self._sessions_messages.get(session_id)
-                if not prompt and not messages and not reply_text and not images:
+                if system_notification is not None:
+                    # 显式注入：不消费排队槽位，排队通知留待下一轮
+                    notice = system_notification
+                else:
+                    # 将系统通知附加到提示词中
+                    notice = self._sessions_system_notification.pop(session_id, None)
+                if not prompt and not messages and not reply_text and not images and not notice:
                     # 没有任何新的消息可发送，直接返回（空生成器）
                     logger.info("发送给模型的消息为空，未触发生成")
                     return
-
-                # 将系统通知附加到提示词中
-                notice = self._sessions_system_notification.pop(session_id, None)
 
             send_prompt = self._build_send_prompt(
                 session_info,

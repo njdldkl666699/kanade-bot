@@ -131,7 +131,7 @@ class CompactionConfig(AttrDocModel):
     """`TieredCompaction` 的停止预算（上下文占用比例）；None 表示不启用摘要档"""
 
     summary_model: str | None = None
-    """摘要使用的模型 ID；None 表示继承主模型"""
+    """摘要使用的模型 ID；`None` 表示继承主模型"""
 
     summary_keep_messages: NonNegativeInt = 40
     """生成摘要时保留的最近消息条数"""
@@ -139,6 +139,23 @@ class CompactionConfig(AttrDocModel):
     def fingerprint(self) -> str:
         """参数指纹：用于检测配置漂移"""
         return self.model_dump_json()
+
+
+class ScheduledTaskConfig(AttrDocModel):
+    """Agent定时任务配置"""
+
+    data_file: str = "scheduled_tasks.json"
+    """定时任务持久化文件名"""
+
+    retry_limit: NonNegativeInt = 2
+    """触发失败后的重试次数（不含首次尝试）"""
+
+    retry_delay_minutes: PositiveInt = 5
+    """触发失败后的重试间隔（分钟）"""
+
+    @property
+    def data_file_path(self) -> Path:
+        return get_plugin_data_file(self.data_file)
 
 
 class MemoryConfig(AttrDocModel):
@@ -285,6 +302,8 @@ class ScopedConfig(AttrDocModel):
     """会话历史存储配置"""
     compaction: CompactionConfig = CompactionConfig()
     """会话压缩配置"""
+    scheduled_task: ScheduledTaskConfig = ScheduledTaskConfig()
+    """Agent定时任务配置"""
     memory: MemoryConfig = MemoryConfig()
     """持久化记忆配置"""
 
