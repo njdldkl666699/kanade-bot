@@ -328,7 +328,7 @@ async def _handle(
         result = await asyncio.to_thread(operation, image_data, _arguments(arg_msg))
     except ImageToolError as e:
         await matcher.finish(str(e))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("imgtool 处理图片失败")
         await matcher.finish(f"处理图片失败：{e}")
     else:  # 防止Pylance误报

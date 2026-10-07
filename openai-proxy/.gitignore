@@ -1,5 +1,0 @@
-config.yaml
-config-*.yaml
-!config-example.yaml
-
-openai-proxy

@@ -151,7 +151,7 @@ def add_duanzi(duanzi: str) -> bool:
     try:
         with duanzi_path.open("w", encoding="utf-8") as f:
             json.dump(duanzi_list, f, ensure_ascii=False, indent=4)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"保存段子列表失败: {e}")
         return False
     return True
@@ -169,7 +169,7 @@ def remove_duanzi(index: int) -> bool:
     try:
         with duanzi_path.open("w", encoding="utf-8") as f:
             json.dump(duanzi_list, f, ensure_ascii=False, indent=4)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"保存段子列表失败: {e}")
         return False
     return True
@@ -184,5 +184,5 @@ def load_duanzi_list():
     try:
         with open(cfg.duanzi_list_file_path, "r", encoding="utf-8") as f:
             duanzi_list = json.load(f)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"加载段子列表失败: {e}")

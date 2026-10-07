@@ -47,11 +47,27 @@ def check_user_crystal(
     platform: PlatformType,
     user_id: str,
 ) -> bool:
-    """检查用户水晶是否足够"""
+    """检查用户水晶是否足够
+
+    固定消耗（`int`配置）比较余额与配置值；
+    按量计费（`str`描述配置）的门槛为余额大于0，实际消耗由插件事后扣减。
+    """
     consume = crystal_config.instance.handler_consumes.get(handler_key, 0)
+    if isinstance(consume, str):
+        return get_crystal(platform, user_id) > 0
     if consume <= 0:
         return True
     return get_crystal(platform, user_id) >= consume
+
+
+def consume_crystal(platform: PlatformType, user_id: str, crystal: int) -> None:
+    """按量扣除水晶，允许扣至负数
+
+    与 `succeed_consume` 不同：不做余额预检查，由调用方自行决定计费时机与金额。
+    """
+    data = crystal_data.instance.get_by_platform(platform)
+    data[user_id] = data.get(user_id, 0) - crystal
+    crystal_data_writer.mark_dirty()
 
 
 def succeed_consume(
@@ -61,6 +77,7 @@ def succeed_consume(
 ):
     """处理水晶消耗成功的情况，并扣除水晶"""
     consume = crystal_config.instance.handler_consumes.get(handler_key, 0)
+    assert not isinstance(consume, str), "固定扣减不支持按量计费的文字描述配置"
     if consume <= 0:
         return True
 
@@ -81,6 +98,7 @@ def consume_and_increment(
 ) -> None:
     """Apply a command cost and its reward as one balance mutation."""
     consume = crystal_config.instance.handler_consumes.get(handler_key, 0)
+    assert not isinstance(consume, str), "固定扣减不支持按量计费的文字描述配置"
     data = crystal_data.instance.get_by_platform(platform)
     current_crystal = data.get(user_id, 0)
     if current_crystal < consume:
@@ -97,6 +115,13 @@ async def finish_fail_consume(
 ):
     """处理水晶不足的情况，发送提示消息并结束事件处理"""
     consume = crystal_config.instance.handler_consumes.get(handler_key, 0)
+    if isinstance(consume, str):
+        # 按量计费：门槛为余额大于0，实际消耗按用量事后结算
+        user_crystal = get_crystal(platform, user_id)
+        await matcher.finish(
+            f"嗯…水晶余额不足（当前 {user_crystal}）。"
+            f"这个功能按Token计费，需要余额大于0才能使用，先去攒一点吧。"
+        )
     user_crystal = get_crystal(platform, user_id)
     template = random.choice(crystal_config.instance.handler_consume_failed_templates)
     message = template.format(consume=consume, crystal=user_crystal)

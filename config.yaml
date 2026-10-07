@@ -19,13 +19,17 @@ localstore_use_cwd: true
 
 chat:
   agent:
-    model: gpt-5-mini
-    reasoning_effort: medium
-    system_prompt_file: Kanade-v4.md
-    system_prompt_extras:
-      kanade_wiki: Kanade-wiki.md
-  memory_max_records_per_scope: 256
-  session_messages_max_size: 256
+    model: deepseek-flash
+  session:
+    buffer_max_size: 256
+  compaction:
+    trigger_fraction: 0.8
+    keep_pairs: 3
+    min_clear_tokens: 2000
+  memory:
+    max_records_per_scope: 256
+  sandbox:
+    enabled: false
   rag:
     enabled: false
     query_n_results: 3
@@ -59,7 +63,7 @@ music:
   lyric_default_length: 4
 
 summary:
-  model: gpt-5-mini
+  model: deepseek-flash
   system_prompt_file: Summarizer.md
   bot_name: 宵崎奏
   min_size: 10

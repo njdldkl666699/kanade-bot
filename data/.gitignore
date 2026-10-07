@@ -1,5 +1,6 @@
-chat/memories.*
+chat/*sqlite3*
 chat/rag_db/
+chat/scheduled_tasks.json
 command_counter/
 crystal/
 gallery/

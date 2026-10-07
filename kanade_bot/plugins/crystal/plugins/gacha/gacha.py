@@ -139,6 +139,36 @@ def render_composed_card_png(card: Card) -> bytes:
     return output.getvalue()
 
 
+def render_composed_card_thumbnail(card: Card) -> Image.Image:
+    """渲染一张卡牌的十连缩略图（带磁盘缓存）
+
+    缓存缩放后的缩略图，与全尺寸缓存同目录，
+    十连时无需重复解码 940x530 全尺寸图并重新缩放
+    """
+    show_trained = card.card_rarity_type.can_train and cfg.show_trained
+    render_file_name = card_file_name(show_trained)
+    width, height = GACHA_THUMBNAIL_SIZE
+    # 文件名包含尺寸，GACHA_THUMBNAIL_SIZE 变更后旧缓存自动失效
+    cache_rendered_file = (
+        f"{card.assetbundle_name}_{Path(render_file_name).stem}_{width}x{height}.png"
+    )
+    cache_file_path = cfg.rendered_cards_dir_path / cache_rendered_file
+    if cache_file_path.is_file():
+        return _open_rgba(cache_file_path)
+
+    thumbnail = ImageOps.fit(
+        render_composed_card(card),
+        GACHA_THUMBNAIL_SIZE,
+        method=Image.Resampling.LANCZOS,
+    )
+
+    # 保存到缓存
+    cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail.save(cache_file_path, format="PNG")
+
+    return thumbnail
+
+
 def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
     """渲染10连抽卡牌"""
     thumbnail_width, thumbnail_height = GACHA_THUMBNAIL_SIZE
@@ -180,11 +210,7 @@ def render_gacha_10_cards(cards: list[Card]) -> Image.Image:
         row, column = divmod(index, GACHA_COLUMNS)
         x = GACHA_PADDING + column * (thumbnail_width + GACHA_GAP)
         y = GACHA_PADDING + row * (thumbnail_height + GACHA_GAP)
-        thumbnail = ImageOps.fit(
-            render_composed_card(card).convert("RGBA"),
-            GACHA_THUMBNAIL_SIZE,
-            method=Image.Resampling.LANCZOS,
-        )
+        thumbnail = render_composed_card_thumbnail(card)
         slot = Image.new("RGBA", GACHA_THUMBNAIL_SIZE, "white")
         slot.alpha_composite(thumbnail)
         slot.putalpha(corner_mask)

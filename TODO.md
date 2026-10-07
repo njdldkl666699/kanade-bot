@@ -1,0 +1,18 @@
+- [x] 审查chat模块代码
+- [x] 更新README
+- [x] 更新提示词系统（模块化配置）
+- [x] 内存占用测试
+- [x] 考虑文件编辑工具、shell方案：使用mirage+sandlock
+- [x] 卡池更新
+- [x] nonebot-plugin-githubcard
+- [x] env设置打印/不打印banner，包括Kanade和PydanticAI（在第一次运行agent时）
+- [x] chat配置结构重构
+- [x] 检查gacha十连图片是否被缩放
+- [x] 聊天、总结按Token计费
+- [x] 新增查看token消耗等统计数据
+- [x] 是否可以不用沙箱池？开销如何？（实测每轮新建仅~5ms，已去池化）
+- [x] /usr/bin/python改为uv -> review代码，写changelog git commit
+- [x] 会话重置不删工作区，添加独立命令
+- [x] 定时任务（system_notification实现：schedule_task工具主动唤醒）
+- [x] 移除`openai-proxy`
+- [ ] 记忆系统重新设计

@@ -8,121 +8,69 @@ nickname: [宵崎奏]
 console_headless_mode: true
 
 # Provider配置
-openrouter:
-  type: openai
-  base_url: https://openrouter.ai/api/v1
-  api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxxx
-opencode:
-  type: openai
-  base_url: https://opencode.ai/zen/v1/
-  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
 siliconflow:
-  type: openai
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 agnes-ai: &agnes-ai
-  type: openai
   base_url: https://api.agnes-ai.cn/v1
   api_key: &agnes-ai-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 sensenova: &sensenova
-  type: openai
   base_url: https://token.sensenova.cn/v1/
   api_key: &sensenova-api_key sk-xxxxxxxxxxxxxxxxxxxxx
+deepseek: &deepseek
+  base_url: https://api.deepseek.com
+  api_key: sk-xxxxxxxxxxxxxxxxxxxxx
 
 # 模型配置
-agnes-3.0-flash: &agnes-3-0-flash
-  model: agnes-3.0-flash
-  provider: *agnes-ai
-  reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 524288
-      max_output_tokens: 65536
-
-sensenova-deepseek-flash: &sensenova-deepseek-flash
+deepseek-official: &deepseek-official
   model: deepseek-flash
-  provider: *sensenova
+  provider: *deepseek
   reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 1048576
-      max_output_tokens: 393216
+  vision: true
 
-sensenova-6.8-flash-lite: &sensenova-6-8-flash-lite
+sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
   model: sensenova-6.8-flash-lite
   provider: *sensenova
   reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 262144
-      max_output_tokens: 65536
-
-op-deepseek-flash: &op-deepseek-flash
-  model: deepseek-flash
-  provider:
-    type: openai
-    base_url: http://localhost:39211/v1
-  reasoning_effort: high
-  model_capabilities:
-    supports:
-      vision: true
-      reasoning_effort: true
-    limits:
-      max_context_window_tokens: 1048576
-      max_output_tokens: 393216
+  vision: true
+  max_output_tokens: 65536
 
 chat:
   agent:
-    <<: *op-deepseek-flash
-    # 禁用内置GitHub MCP（BYOK会话默认注入其18个工具，约占请求体28KB）
-    disabled_mcp_servers:
-      - github-mcp-server
+    <<: *deepseek-official
     mcp_servers:
       tavily:
-        type: http
-        tools: ["*"]
         url: https://mcp.tavily.com/mcp
         headers:
           Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
       anysearch:
-        type: http
-        tools: ["*"]
         url: https://api.anysearch.com/mcp
-    # bash类工具仍建议排除（shell路径校验是启发式的，存在绕过风险）；
-    # 文件编辑/查找工具（create/edit/view/glob/grep）已由权限处理器限制在
-    # 工作目录、allowed_edit_directories与系统临时目录内，可按需启用
-    excluded_tools:
-      - bash
-      - list_bash
-      - read_bash
-      - stop_bash
-      - write_bash
-      - list_agents
-      - read_agent
-      - task
-      - write_agent
-      - ask_user
-      - skill
-    # 文件访问额外允许的目录（工作目录与系统临时目录始终允许）
-    # additional_directories:
-    #   - ~/Projects/Python/kanade-bot/cache/kanade_images
+  compaction:
+    trigger_fraction: 0.8
+    keep_pairs: 3
+    min_clear_tokens: 2000
+    summary_target_fraction: 0.9
+    summary_model: null
+    summary_keep_messages: 0
+  session:
+    buffer_max_size: 256
+  memory:
+    max_records_per_scope: 256
+  sandbox:
+    enabled: true
   # image_caption:
   #   <<: *sensenova-6-8-flash-lite
-  #   available_tools: []
   rag:
     embedding_type: openai
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
     openai_model: BAAI/bge-m3
+  billing: &billing
+    peak_input_per_1k: 12
+    peak_output_per_1k: 48
+    off_peak_input_per_1k: 6
+    off_peak_output_per_1k: 24
+    min_cost: 1
 
 fun:
   lolicon_proxy: example.com
@@ -135,8 +83,8 @@ help:
     `Message`: {message}
 
 summary:
-  <<: *op-deepseek-flash
-  available_tools: []
+  <<: *deepseek-official
+  billing: *billing
 
 tool:
   sensenova_api_key: *sensenova-api_key
@@ -168,7 +116,12 @@ wordle:
     12: 22
     13: 25
 
-watchdog:
-  github_token: github_pat_xxxxxxxxxxxxxxxxxxxxxxx
+github_token: &github_token github_pat_xxxxxxxxxxxxxxxxxxx
+github_type: 0
 
+watchdog:
+  github_token: *github_token
+
+print_kanade_banner: true
+print_pydantic_ai_banner: true
 generate_schemas: false

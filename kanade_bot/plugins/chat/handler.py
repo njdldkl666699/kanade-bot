@@ -16,7 +16,8 @@ from kanade_bot.utils.onebot11 import get_image_path
 from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
-from .agent.copilot import copilot
+from .agent.manager import chat_manager
+from .agent.schedule import scheduled_task_manager
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
 from .config import cfg, chat_configs
@@ -28,12 +29,15 @@ from .matcher import (
     chat_interrupt,
     chat_monitor,
     chat_reset,
+    chat_stats,
+    chat_task_cancel,
+    chat_task_list,
     chat_unban,
+    chat_workspace_clear,
     list_memes,
 )
 
 require("crystal")
-
 from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
 
 
@@ -54,8 +58,24 @@ async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent)
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
     session_info = extract_session_info_sync(event)
-    await copilot.reset_session(session_info.session_id)
-    await chat_reset.finish("会话已重置")
+    await chat_manager.reset_session(session_info.session_id)
+    await chat_reset.finish("会话已重置（工作区文件保留，可用 /清理工作区 删除）")
+
+
+@chat_workspace_clear.handle()
+async def handle_chat_workspace_clear(event: Event):
+    """删除当前会话的沙箱工作区文件，不影响会话历史"""
+    session_id = extract_session_info_sync(event).session_id
+    try:
+        result = await chat_manager.clear_workspace(session_id)
+    except Exception as e:
+        logger.opt(exception=e).warning(f"清理会话{session_id}工作区时发生错误")
+        await chat_workspace_clear.finish(f"清理工作区失败：{e}")
+    if result is None:
+        await chat_workspace_clear.finish("沙箱未启用，无工作区")
+    if not result:
+        await chat_workspace_clear.finish("工作区不存在（尚未创建或已清理）")
+    await chat_workspace_clear.finish("工作区已清理")
 
 
 @chat_interrupt.handle()
@@ -63,61 +83,80 @@ async def handle_chat_interrupt(event: Event):
     """手动中断当前正在进行的回复，等待中的消息不受影响照常处理"""
     session_id = extract_session_info_sync(event).session_id
     try:
-        result = await copilot.interrupt_session_turn(session_id)
-    except Exception as e:  # noqa: BLE001
+        result = await chat_manager.interrupt_session_turn(session_id)
+    except Exception as e:
         logger.opt(exception=e).warning(f"中断会话{session_id}时发生错误")
         await chat_interrupt.finish(f"中断会话失败：{e}")
     if result is None:
         await chat_interrupt.finish("会话不存在（还未开始过对话），无需中断")
-    if not result.interrupted:
-        await chat_interrupt.finish("当前没有正在进行的回复")
     await chat_interrupt.finish("已中断当前正在进行的回复，等待中的消息将照常处理")
 
 
 @chat_compact.handle()
 async def handle_chat_compact(event: Event):
-    """手动压缩会话历史，返回压缩前后的上下文对比"""
-    session_id = extract_session_info_sync(event).session_id
-    await chat_compact.send("正在压缩会话历史，可能需要一会儿…")
-    try:
-        result = await copilot.compact_session(session_id)
-    except Exception as e:  # noqa: BLE001
-        if "Nothing to compact" in str(e):
-            await chat_compact.finish("没有可压缩的内容（会话历史太短）")
-        logger.opt(exception=e).warning(f"压缩会话{session_id}时发生错误")
-        await chat_compact.finish(f"压缩会话失败（会话可能正在处理中）：{e}")
-    if result is None:
-        await chat_compact.finish("会话不存在（还未开始过对话），无需压缩")
+    """手动执行一次 LLM 总结级会话压缩
 
-    lines = [f"压缩{'完成' if result.success else '未成功'}"]
-    if result.tokens_removed >= 0:
-        lines.append(f"移除：{result.messages_removed}条消息 / {result.tokens_removed} tokens")
-    else:
-        lines.append(
-            f"移除：{result.messages_removed}条消息（tokens净增{-result.tokens_removed}，摘要比原文更长）"
+    不论是否达到自动触发阈值，立即把当前会话的早期历史压缩为一条摘要
+    """
+    session_id = extract_session_info_sync(event).session_id
+    try:
+        result = await chat_manager.compact_session(session_id)
+    except Exception as e:
+        logger.opt(exception=e).warning(f"手动压缩会话{session_id}时发生错误")
+        await chat_compact.finish(f"会话压缩失败：{e}")
+    if result is None:
+        await chat_compact.finish("会话不存在（还未开始过对话），或尚无历史记录")
+
+    if not result["compacted"]:
+        await chat_compact.finish(
+            f"无可压缩内容：历史 {result['before']} 条均在保留尾部内，无更早消息可摘要"
         )
-    if cw := result.context_window:
-        before_tokens = cw.current_tokens + result.tokens_removed
-        before_msgs = cw.messages_length + result.messages_removed
-        usage = cw.current_tokens / cw.token_limit if cw.token_limit else 0
-        lines.append(f"消息数：{before_msgs} → {cw.messages_length}")
-        lines.append(
-            f"上下文tokens：{before_tokens} → {cw.current_tokens}（上限{cw.token_limit}，当前{usage:.0%}）"
-        )
-        detail = []
-        if cw.conversation_tokens is not None:
-            detail.append(f"对话{cw.conversation_tokens}")
-        if cw.system_tokens is not None:
-            detail.append(f"系统{cw.system_tokens}")
-        if cw.tool_definitions_tokens is not None:
-            detail.append(f"工具定义{cw.tool_definitions_tokens}")
-        if detail:
-            lines.append(f"压缩后构成：{'、'.join(detail)}")
-    if summary := (result.summary_content or "").strip():
-        if len(summary) > 300:
-            summary = summary[:300] + "…"
-        lines.append(f"摘要预览：\n{summary}")
+
+    lines = [
+        "✅ 会话压缩完成（LLM 摘要）",
+        f"发送历史：{result['before']} 条 → {result['after']} 条",
+        f"上下文估算：{result['tokens_before']} → {result['tokens_after']} tokens",
+    ]
+    if summary := result.get("summary"):
+        preview = summary if len(summary) <= 300 else summary[:300] + "…"
+        lines.append(f"摘要预览：\n{preview}")
+    lines.append(f"数据库全量保留 {result['total']} 条，不做物理删除")
     await chat_compact.finish("\n".join(lines))
+
+
+@chat_stats.handle()
+async def handle_chat_stats(event: Event):
+    """查看会话统计：上下文token估算/模型窗口上限、消息条数、工作区文件列表"""
+    session_id = extract_session_info_sync(event).session_id
+    try:
+        result = await chat_manager.session_stats(session_id)
+    except Exception as e:
+        logger.opt(exception=e).warning(f"查询会话{session_id}统计时发生错误")
+        await chat_stats.finish(f"查询会话统计失败（会话可能正在处理中）：{e}")
+    if result is None:
+        await chat_stats.finish("会话不存在（还未开始过对话），或尚无历史记录")
+
+    window = result["context_window"]
+    tokens = result["context_tokens"]
+    window_line = f"{window} tokens" if window else "未知"
+    usage_line = f"{tokens} tokens"
+    if window:
+        usage_line += f"（{tokens / window:.1%}）"
+
+    lines = [
+        "📊 会话统计",
+        f"模型：{result['model']} | 窗口上限：{window_line}",
+        f"上下文估算：{usage_line}",
+        f"消息：数据库全量 {result['total_messages']} 条，压缩后发送 {result['sent_messages']} 条",
+    ]
+
+    if files := result.get("workspace_files"):
+        lines.append(f"工作区文件（{len(files)}）：")
+        lines.extend(f"- {entry}" for entry in files)
+    else:
+        lines.append("工作区：未启用沙箱或工作区为空")
+
+    await chat_stats.finish("\n".join(lines))
 
 
 @chat_monitor.handle()
@@ -140,7 +179,38 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     message_str, _ = await parse_message_for_ai(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info}：{message_str}"
-    await copilot.add_message(session_id, message_str)
+    await chat_manager.add_message(session_id, message_str)
+
+
+@chat_task_list.handle()
+async def handle_chat_task_list(event: Event):
+    """列出当前会话的Agent定时任务"""
+    session_id = extract_session_info_sync(event).session_id
+    tasks = scheduled_task_manager.list_by_session(session_id)
+    if not tasks:
+        await chat_task_list.finish("当前会话没有定时任务")
+
+    lines = [f"📋 当前会话的定时任务（{len(tasks)}）："]
+    for task in tasks:
+        description = (
+            task.description if len(task.description) <= 40 else task.description[:40] + "…"
+        )
+        creator = f"（by {task.creator_name}）" if task.creator_name else ""
+        lines.append(f"- [{task.task_id}] {task.run_at_dt:%m-%d %H:%M} {description}{creator}")
+    await chat_task_list.finish("\n".join(lines))
+
+
+@chat_task_cancel.handle()
+async def handle_chat_task_cancel(event: Event, arg_msg: Message = CommandArg()):
+    """按ID取消当前会话创建的定时任务"""
+    task_id = arg_msg.extract_plain_text().strip()
+    if not task_id:
+        await chat_task_cancel.finish("请提供要取消的任务ID，可用「任务列表」查询")
+
+    session_id = extract_session_info_sync(event).session_id
+    if await scheduled_task_manager.cancel(task_id, session_id=session_id):
+        await chat_task_cancel.finish(f"已取消定时任务 {task_id}")
+    await chat_task_cancel.finish(f"当前会话不存在任务 {task_id}（可用「任务列表」查询）")
 
 
 @chat_ban.handle()
@@ -217,6 +287,6 @@ async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Messa
         # 添加系统通知
         session_info = await extract_session_info(event, bot)
         session_id = session_info.session_id
-        await copilot.add_system_notification(session_id, "表情包已更新")
+        await chat_manager.add_system_notification(session_id, "表情包已更新")
 
     await add_meme.finish(f"已添加表情包 {name}")
