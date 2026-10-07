@@ -1,8 +1,11 @@
 import asyncio
 import base64
 import json
+import mimetypes
 import os
+import uuid
 from collections import deque
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +43,7 @@ from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryStore
 from .prompt import ChatPrompt, current_time_line
-from .sandbox import SandboxManager, SandboxWorkspaceCapability
+from .sandbox import SandboxManager, SandboxSession, SandboxWorkspaceCapability
 from .session_store import SessionStore
 from .tool import build_tools
 
@@ -386,14 +389,22 @@ class ChatSessionManager:
                 system_notification=notice,
             )
 
-            user_content = await self._build_user_content(send_prompt, images)
-
             # 沙箱启用时获取会话常驻沙箱（首次使用时创建，跨轮保留）
             sandbox_session = None
             sandbox_root = None
+            staged_images: list[str] = []
             if self._sandbox_manager is not None:
                 sandbox_session = await self._sandbox_manager.create(session_id)
                 sandbox_root = self._sandbox_manager.workspace_root(session_id)
+                # 用户图片写入沙箱工作区
+                staged_images = await self._stage_images_to_sandbox(sandbox_session, images)
+            if staged_images:
+                send_prompt += (
+                    "\n\n$ 本轮用户发送的图片已保存到沙箱工作区"
+                    "（工具可用这些相对路径访问）：\n" + "\n".join(f"- {p}" for p in staged_images)
+                )
+
+            user_content = await self._build_user_content(send_prompt, images)
 
             deps = ChatDeps(
                 session_info=session_info,
@@ -522,6 +533,37 @@ class ChatSessionManager:
             logger.debug(
                 f"会话{session_id}记录压缩事件：策略={mark.strategy}，可重放={mark.result is None}"
             )
+
+    @staticmethod
+    async def _stage_images_to_sandbox(
+        sandbox: SandboxSession, images: list[ImageInput] | None
+    ) -> list[str]:
+        """把本轮用户图片写入沙箱工作区 images/ 目录，返回相对路径列表"""
+        staged: list[str] = []
+        for image in images or []:
+            if not image.data:
+                continue
+            data = base64.b64decode(image.data)
+            name = Path(image.name).name or "image"
+            if not Path(name).suffix and image.mime_type:
+                name += mimetypes.guess_extension(image.mime_type) or ".jpg"
+            target = Path("images") / name
+            try:
+                existing = (await sandbox.read(target)).read()
+            except FileNotFoundError:
+                existing = None
+            if existing == data:
+                staged.append(str(target))  # 同一张图重发，直接复用
+                continue
+            if existing is not None:
+                target = Path("images") / f"{uuid.uuid4().hex[:8]}_{name}"
+            try:
+                await sandbox.write(target, BytesIO(data))
+            except Exception as e:
+                logger.warning(f"暂存图片到沙箱工作区失败: {image.name}: {e}")
+                continue
+            staged.append(str(target))
+        return staged
 
     async def _build_user_content(
         self, send_prompt: str, images: list[ImageInput] | None

@@ -42,12 +42,17 @@ async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> s
     if not isinstance(bot, Bot):
         return "当前类型的Bot不支持发送此类消息。"
 
-    if group_id := info.group_id:
-        await bot.send_msg(message=message, group_id=int(group_id), message_type="group")
-    elif user_id := info.user_id:
-        await bot.send_msg(message=message, user_id=int(user_id), message_type="private")
-    else:
-        return "当前会话没有可用的用户ID或群组ID，无法发送消息。"
+    try:
+        if group_id := info.group_id:
+            await bot.send_msg(message=message, group_id=int(group_id), message_type="group")
+        elif user_id := info.user_id:
+            await bot.send_msg(message=message, user_id=int(user_id), message_type="private")
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送消息。"
+    except Exception as e:
+        # 网络断连、ActionFailed等：转为错误文本返回给模型，不中断整个运行
+        logger.exception("发送OneBot消息失败: {}", e)
+        return f"发送消息失败: {e}"
     return None
 
 
@@ -66,7 +71,11 @@ async def view_image(ctx: RunContext[ChatDeps], url: str) -> str | list[str | Bi
     scheme = urlparse(url).scheme
 
     if scheme in ("http", "https"):
-        r = await HTTPX_CLIENT.get(url)
+        try:
+            r = await HTTPX_CLIENT.get(url)
+        except HTTPError as e:
+            logger.exception("下载图片失败: {}", e)
+            return f"无法查看图片，下载失败: {e}"
         if r.status_code != 200:
             return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
         data = base64.b64encode(r.content).decode()
@@ -386,12 +395,17 @@ async def send_file(ctx: RunContext[ChatDeps], path: str) -> str:
     if not isinstance(bot, Bot):
         return "当前类型的Bot不支持发送文件消息。"
 
-    if group_id := info.group_id:
-        await upload_group_file(bot, group_id=int(group_id), file_path=local_path)
-    elif user_id := info.user_id:
-        await upload_private_file(bot, user_id=int(user_id), file_path=local_path)
-    else:
-        return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
+    try:
+        if group_id := info.group_id:
+            await upload_group_file(bot, group_id=int(group_id), file_path=local_path)
+        elif user_id := info.user_id:
+            await upload_private_file(bot, user_id=int(user_id), file_path=local_path)
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法发送文件消息。"
+    except Exception as e:
+        # 上传接口断连/风控拒绝等：转为错误文本返回给模型，不中断整个运行
+        logger.exception("发送文件失败: {}", e)
+        return f"发送文件失败: {e}"
 
     return f"文件 {file_name} 已发送给会话 {ctx.deps.session_info.session_id}。"
 

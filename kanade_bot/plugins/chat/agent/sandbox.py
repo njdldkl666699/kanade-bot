@@ -24,6 +24,37 @@ from ..config import cfg
 VENV_DIR = ".venv"
 """每个沙箱工作区根下的虚拟环境目录名"""
 
+SANDBOX_HOME_DIR = ".home"
+"""每个沙箱工作区根下的伪HOME目录名
+
+受限进程以 `--clean-env` 启动，环境里只有运行时配置给的变量。不指一个可写 HOME 的话，
+fontconfig 等的字体缓存没有落点，`expanduser("~") 也解析不到任何可用路径。
+"""
+
+FONT_DIR_CANDIDATES = (
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
+    "/etc/fonts",
+    "/var/cache/fontconfig",
+)
+"""候选系统字体/字体配置目录"""
+
+
+def _resolve_font_dirs() -> list[str]:
+    """收集宿主上实际存在的字体目录，供沙箱只读授权"""
+    candidates = [
+        *FONT_DIR_CANDIDATES,
+        str(Path.home() / ".local" / "share" / "fonts"),
+        str(Path.home() / ".fonts"),
+    ]
+    dirs = [d for d in candidates if Path(d).is_dir()]
+    if dirs:
+        logger.info(f"沙箱已授权只读字体目录: {', '.join(dirs)}")
+    else:
+        logger.warning("宿主上未找到系统字体目录，沙箱内Python将无法使用系统字体")
+    return dirs
+
+
 ENV_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 """沙箱环境变量名的合法形态（防 shell 注入）"""
 
@@ -234,6 +265,36 @@ class KanadeWorkspace(MirageWorkspaceBackend):
         return await super().realpath(self._bind(path))
 
 
+def sandbox_runtime_config(
+    workspace_dir: Path,
+    uv_python_dir: Path | None,
+    font_dirs: tuple[str, ...] = (),
+) -> dict:
+    """sandlock 受限子进程的统一授权与环境配置
+
+    只授予工作区、uv 解释器目录与字体目录：之外的宿主路径 sandlock 一律拒绝。
+    """
+    readable = [str(workspace_dir)]
+    if uv_python_dir is not None:
+        # venv 内的解释器是指向 uv 托管解释器的符号链接，需要只读授权
+        readable.append(str(uv_python_dir))
+    readable.extend(font_dirs)
+    sandbox_home = workspace_dir / SANDBOX_HOME_DIR
+    return {
+        "fs_readable": tuple(readable),
+        "fs_writable": (str(workspace_dir),),
+        "max_memory": cfg.sandbox.memory_limit,
+        "env": {
+            # 受限子进程的 PATH 只含 venv bin，不提供系统 python3；
+            "PATH": str(workspace_dir / VENV_DIR / "bin"),
+            # HOME/XDG 指向工作区内可写目录，字体缓存才有落点
+            "HOME": str(sandbox_home),
+            "XDG_CACHE_HOME": str(sandbox_home / ".cache"),
+            "XDG_CONFIG_HOME": str(sandbox_home / ".config"),
+        },
+    }
+
+
 class SandboxWorkspaceCapability(AbstractCapability[AgentDepsT]):
     """按运行时分发沙箱工作区的 capability"""
 
@@ -265,6 +326,9 @@ class SandboxSession:
 
     host_python: str | None = None
     """宿主系统 python3 路径"""
+
+    font_dirs: tuple[str, ...] = ()
+    """额外只读授权的宿主字体目录"""
 
     _closed: bool = field(default=False, init=False, repr=False)
     _venv_seq: int = field(default=0, init=False, repr=False)
@@ -373,15 +437,9 @@ class SandboxSession:
         self.workspace.add_runtime(
             runtime_cls(
                 captures=to_register,
-                config={
-                    "fs_readable": (
-                        str(self.workspace_dir),
-                        *(() if self.uv_python_dir is None else (str(self.uv_python_dir),)),
-                    ),
-                    "fs_writable": (str(self.workspace_dir),),
-                    "max_memory": cfg.sandbox.memory_limit,
-                    "env": {"PATH": str(self.venv_bin_dir)},
-                },
+                config=sandbox_runtime_config(
+                    self.workspace_dir, self.uv_python_dir, self.font_dirs
+                ),
             )
         )
         self._venv_cmds.update(to_register)
@@ -535,6 +593,9 @@ class SandboxManager:
         self._host_python: str | None = None
         """宿主系统 python3 路径"""
 
+        self._font_dirs: tuple[str, ...] = tuple(_resolve_font_dirs())
+        """授权沙箱只读的宿主字体目录"""
+
         driver = get_driver()
         driver.on_startup(self._startup)
 
@@ -598,18 +659,7 @@ class SandboxManager:
 
     def _runtime_config(self, workspace_dir: Path) -> dict:
         """sandlock 运行时的统一授权配置"""
-        readable = [str(workspace_dir)]
-        if self._uv_python_dir is not None:
-            # venv 内的解释器是指向 uv 托管解释器的符号链接，需要只读授权
-            readable.append(str(self._uv_python_dir))
-        return {
-            # 只授予工作区与 uv 解释器目录：之外的宿主路径 sandlock 一律拒绝
-            "fs_readable": tuple(readable),
-            "fs_writable": (str(workspace_dir),),
-            "max_memory": cfg.sandbox.memory_limit,
-            # 受限子进程的 PATH 只含 venv bin，不提供系统 python3
-            "env": {"PATH": str(workspace_dir / VENV_DIR / "bin")},
-        }
+        return sandbox_runtime_config(workspace_dir, self._uv_python_dir, self._font_dirs)
 
     def _build_runtime(self, workspace_dir: Path) -> SandlockRuntime:
         """构造 sandlock 运行时"""
@@ -659,6 +709,10 @@ class SandboxManager:
         workspace_dir = self._workspace_dir(session_id)
         workspace_dir.mkdir(parents=True, exist_ok=True)
 
+        sandbox_home = workspace_dir / SANDBOX_HOME_DIR
+        for sub in (sandbox_home, sandbox_home / ".cache", sandbox_home / ".config"):
+            sub.mkdir(parents=True, exist_ok=True)
+
         workspace = Workspace(
             {
                 str(workspace_dir): (
@@ -697,6 +751,7 @@ class SandboxManager:
             uv_bin=self._uv_bin,
             uv_python_dir=self._uv_python_dir,
             host_python=self._host_python,
+            font_dirs=self._font_dirs,
         )
 
     # ===== 生命周期 =====

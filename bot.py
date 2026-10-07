@@ -16,12 +16,11 @@ from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 from kanade_bot.utils.schema import KanadeConfig
 from scripts.util import get_config, load_configs
 
-# 配置 NoneBot 的日志记录器，记录全量日志到文件
 log_file_path = Path("cache/kanade.log")
 log_file_path.parent.mkdir(parents=True, exist_ok=True)
 logger.add(
     log_file_path,
-    level="DEBUG",
+    level="WARNING",
     format=default_format,
 )
 
