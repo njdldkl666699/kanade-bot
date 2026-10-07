@@ -9,8 +9,6 @@ APScheduler 回调主动唤醒会话：以显式 system_notification 注入 + �
 已为负则不唤醒agent，直接发文本告知用户。
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import os
@@ -29,7 +27,9 @@ from pydantic_ai.usage import RunUsage
 from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
 from kanade_bot.utils.session import SessionInfo
 
+from ..ban import is_banned
 from ..config import cfg
+from ..deliver import send_onebot_proactive, send_text_onebot_proactive
 
 require("nonebot_plugin_apscheduler")
 from nonebot_plugin_apscheduler import scheduler
@@ -313,8 +313,6 @@ class ScheduledTaskManager:
         任何异常向上抛出，由 `_fire` 决定重试；正常返回视为任务完成。
         """
         # 延迟导入避免循环依赖（manager → tool → schedule → manager）
-        from ..ban import is_banned
-        from ..deliver import send_onebot_proactive, send_text_onebot_proactive
         from .manager import chat_manager
 
         info = task.session_info

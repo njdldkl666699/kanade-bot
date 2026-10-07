@@ -1,7 +1,6 @@
 """OneBot 消息投递：助手回复解析与分批发送
 
-被动回复（依赖 matcher/event）与主动发送（定时任务等系统触发，仅有会话目标）
-共用同一套内容解析与批量发送逻辑。
+被动回复与主动发送共用同一套内容解析与批量发送逻辑。
 """
 
 import random
@@ -23,9 +22,7 @@ require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import md_to_pic
 
 type SendFunc = Callable[[OneBotMessage | MessageSegment | str], Awaitable[None]]
-"""单条消息发送函数：接收完整消息，负责投递到目标
-
-接受裸字符串（长文本合并分支的产物）与单个消息段，由实现自行归一化。"""
+"""单条消息发送函数：接收完整消息，负责投递到目标"""
 
 
 def extract_segments_preserving_code(content: str) -> list[MessageSegment]:
@@ -89,7 +86,8 @@ async def send_segments(
 ):
     """按消息段数量分级批量发送
 
-    send: 单条消息发送函数；reply 非 None 时仅拼在第一条消息前（引用回复）
+    send: 单条消息发送函数；
+    reply: 引用回复，非 None 时仅拼在第一条消息前
     """
     # 根据消息段的数量决定发送方式
     if not segments:
@@ -156,13 +154,19 @@ async def send_segments(
 
 
 async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content: str):
-    """把一段助手回复主动发送到会话（无需事件与matcher）
+    """把一段助手回复主动发送到会话
 
     定时任务触发等系统场景使用；发送失败抛出异常由调用方处理。
     """
-    if group_id := session_info.group_id:
+    group_id = session_info.group_id
+    user_id = session_info.user_id
+    reply = None
+
+    if group_id:
         target = {"message_type": "group", "group_id": int(group_id)}
-    elif user_id := session_info.user_id:
+        if user_id:
+            reply = MessageSegment.at(user_id)
+    elif user_id:
         target = {"message_type": "private", "user_id": int(user_id)}
     else:
         raise ValueError(
@@ -170,7 +174,6 @@ async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content:
         )
 
     async def _send(message: OneBotMessage | MessageSegment | str) -> None:
-        # send_msg 只接受 str | Message：消息段归一化为Message，字符串直接发
         if not isinstance(message, OneBotMessage | str):
             message = OneBotMessage(message)
         await bot.send_msg(message=message, **target)
@@ -179,16 +182,14 @@ async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content:
         _send,
         bot,
         extract_segments_preserving_code(content),
+        reply=reply,
         content_long=len(content) > 600 or len(content.splitlines()) > 20,
         content_format=guess_format(content),
     )
 
 
 async def send_text_onebot_proactive(bot: OneBot, session_info: SessionInfo, text: str):
-    """把一段纯文本主动发送到会话（不经过表情包/代码块解析）
-
-    用于系统提示类消息（如余额不足告知）。
-    """
+    """把一段纯文本主动发送到会话，用于系统提示类消息。"""
     if group_id := session_info.group_id:
         await bot.send_msg(message_type="group", group_id=int(group_id), message=text)
     elif user_id := session_info.user_id:

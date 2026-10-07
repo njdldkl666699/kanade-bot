@@ -184,7 +184,7 @@ async def handle_chat_monitor(bot: Bot, event: Event):
 
 @chat_task_list.handle()
 async def handle_chat_task_list(event: Event):
-    """列出当前会话的Agent定时任务（到点触发的那种）"""
+    """列出当前会话的Agent定时任务"""
     session_id = extract_session_info_sync(event).session_id
     tasks = scheduled_task_manager.list_by_session(session_id)
     if not tasks:

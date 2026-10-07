@@ -11,7 +11,7 @@ from pathlib import Path
 
 from mirage import MountMode, Workspace
 from mirage.agents.pydantic_ai import MirageWorkspaceBackend
-from mirage.runtime.sandbox.sandlock import SandlockRuntime
+from mirage.runtime.sandbox.sandlock import SandlockConfig, SandlockRuntime
 from mirage.vfs.disk import DiskVFS
 from nonebot import get_driver, logger
 from pydantic_ai import RunContext
@@ -269,10 +269,10 @@ def sandbox_runtime_config(
     workspace_dir: Path,
     uv_python_dir: Path | None,
     font_dirs: tuple[str, ...] = (),
-) -> dict:
+) -> SandlockConfig:
     """sandlock 受限子进程的统一授权与环境配置
 
-    只授予工作区、uv 解释器目录与字体目录：之外的宿主路径 sandlock 一律拒绝。
+    只授予工作区、uv 解释器目录与字体目录，之外的宿主路径 sandlock 一律拒绝。
     """
     readable = [str(workspace_dir)]
     if uv_python_dir is not None:
@@ -280,11 +280,11 @@ def sandbox_runtime_config(
         readable.append(str(uv_python_dir))
     readable.extend(font_dirs)
     sandbox_home = workspace_dir / SANDBOX_HOME_DIR
-    return {
-        "fs_readable": tuple(readable),
-        "fs_writable": (str(workspace_dir),),
-        "max_memory": cfg.sandbox.memory_limit,
-        "env": {
+    return SandlockConfig(
+        fs_readable=tuple(readable),
+        fs_writable=(str(workspace_dir),),
+        max_memory=cfg.sandbox.memory_limit,
+        env={
             # 受限子进程的 PATH 只含 venv bin，不提供系统 python3；
             "PATH": str(workspace_dir / VENV_DIR / "bin"),
             # HOME/XDG 指向工作区内可写目录，字体缓存才有落点
@@ -292,7 +292,7 @@ def sandbox_runtime_config(
             "XDG_CACHE_HOME": str(sandbox_home / ".cache"),
             "XDG_CONFIG_HOME": str(sandbox_home / ".config"),
         },
-    }
+    )
 
 
 class SandboxWorkspaceCapability(AbstractCapability[AgentDepsT]):
@@ -657,7 +657,7 @@ class SandboxManager:
         self._uv_bin = resolved
         self._uv_python_dir = python_dir
 
-    def _runtime_config(self, workspace_dir: Path) -> dict:
+    def _runtime_config(self, workspace_dir: Path) -> SandlockConfig:
         """sandlock 运行时的统一授权配置"""
         return sandbox_runtime_config(workspace_dir, self._uv_python_dir, self._font_dirs)
 

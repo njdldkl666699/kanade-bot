@@ -14,5 +14,5 @@
 - [x] /usr/bin/python改为uv -> review代码，写changelog git commit
 - [x] 会话重置不删工作区，添加独立命令
 - [x] 定时任务（system_notification实现：schedule_task工具主动唤醒）
-- [ ] 移除`openai-proxy`
+- [x] 移除`openai-proxy`
 - [ ] 记忆系统重新设计

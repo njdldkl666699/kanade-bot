@@ -1,6 +1,11 @@
 <div align="center">
   <img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em;"/>
   <h1>宵崎奏Bot (Kanade Bot)</h1>
+  <p><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://pydantic.dev/docs/ai/img/pydantic-ai-light.svg">
+    <img style="width: 15em;" alt="Pydantic AI" src="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg">
+  </picture></p>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/njdldkl666699/kanade-bot.svg" alt="license"></a>
   <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="python">
   <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/njdldkl666699/kanade-bot">
@@ -8,7 +13,7 @@
 
 ## 简介
 
-宵崎奏Bot是一个基于[NoneBot2](https://nonebot.dev/)框架的机器人，使用[OpenAI Agents SDK](https://openai.github.io/openai-agents-python/zh/)开发聊天Agent，并提供一些有趣的功能命令。同时支持Console和OneBot v11适配器，方便在不同环境中使用。
+宵崎奏Bot是一个基于[NoneBot2](https://nonebot.dev/)框架的机器人，使用[Pydantic AI](https://pydantic.dev/docs/ai/overview/)开发聊天Agent，并提供一些有趣的功能命令。同时支持Console和OneBot v11适配器，方便在不同环境中使用。
 
 ## 部署
 

@@ -197,14 +197,14 @@ class RuntimeConfigTest(unittest.TestCase):
             uv_python_dir=None,
             font_dirs=("/usr/share/fonts", "/usr/local/share/fonts"),
         )
-        self.assertIn("/usr/share/fonts", config["fs_readable"])
-        self.assertIn("/usr/local/share/fonts", config["fs_readable"])
-        self.assertIn("/tmp/ws", config["fs_readable"])
+        self.assertIn("/usr/share/fonts", config.fs_readable)
+        self.assertIn("/usr/local/share/fonts", config.fs_readable)
+        self.assertIn("/tmp/ws", config.fs_readable)
 
     def test_home_and_xdg_env_injected(self):
         """clean-env 下受限进程需要 HOME/XDG 指向工作区内可写目录"""
         config = self.module.sandbox_runtime_config(Path("/tmp/ws"), None)
-        env = config["env"]
+        env = config.env
         self.assertEqual(env["HOME"], "/tmp/ws/.home")
         self.assertEqual(env["XDG_CACHE_HOME"], "/tmp/ws/.home/.cache")
         self.assertEqual(env["XDG_CONFIG_HOME"], "/tmp/ws/.home/.config")
@@ -212,7 +212,7 @@ class RuntimeConfigTest(unittest.TestCase):
 
     def test_uv_python_dir_authorized(self):
         config = self.module.sandbox_runtime_config(Path("/tmp/ws"), uv_python_dir=Path("/opt/py"))
-        self.assertIn("/opt/py", config["fs_readable"])
+        self.assertIn("/opt/py", config.fs_readable)
 
     def test_resolve_font_dirs_only_existing(self):
         """字体目录解析只保留宿主上真实存在的路径"""
