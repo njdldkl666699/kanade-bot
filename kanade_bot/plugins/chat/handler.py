@@ -30,6 +30,7 @@ from .matcher import (
     chat_reset,
     chat_stats,
     chat_unban,
+    chat_workspace_clear,
     list_memes,
 )
 
@@ -55,7 +56,23 @@ async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent)
 async def handle_chat_reset(event: Event):
     session_info = extract_session_info_sync(event)
     await chat_manager.reset_session(session_info.session_id)
-    await chat_reset.finish("会话已重置")
+    await chat_reset.finish("会话已重置（工作区文件保留，可用 /清理工作区 删除）")
+
+
+@chat_workspace_clear.handle()
+async def handle_chat_workspace_clear(event: Event):
+    """删除当前会话的沙箱工作区文件，不影响会话历史"""
+    session_id = extract_session_info_sync(event).session_id
+    try:
+        result = await chat_manager.clear_workspace(session_id)
+    except Exception as e:
+        logger.opt(exception=e).warning(f"清理会话{session_id}工作区时发生错误")
+        await chat_workspace_clear.finish(f"清理工作区失败：{e}")
+    if result is None:
+        await chat_workspace_clear.finish("沙箱未启用，无工作区")
+    if not result:
+        await chat_workspace_clear.finish("工作区不存在（尚未创建或已清理）")
+    await chat_workspace_clear.finish("工作区已清理")
 
 
 @chat_interrupt.handle()

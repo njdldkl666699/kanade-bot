@@ -12,7 +12,7 @@
 - [x] 新增查看token消耗等统计数据
 - [x] 是否可以不用沙箱池？开销如何？（实测每轮新建仅~5ms，已去池化）
 - [x] /usr/bin/python改为uv -> review代码，写changelog git commit
-- [ ] 会话重置不删工作区，添加独立命令
+- [x] 会话重置不删工作区，添加独立命令
 - [ ] 定时任务（system_notification实现）
 - [ ] 移除`openai-proxy`
 - [ ] 记忆系统重新设计

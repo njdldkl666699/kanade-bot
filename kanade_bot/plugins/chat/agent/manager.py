@@ -599,7 +599,7 @@ class ChatSessionManager:
     # ===== 管理操作 =====
 
     async def reset_session(self, session_id: str):
-        """清空会话历史、缓冲区、记忆上下文与沙箱（含常驻沙箱）。**此操作不可逆**"""
+        """清空会话历史、缓冲区、记忆上下文并关闭沙箱。**此操作不可逆**"""
         session_lock = await self._ensure_session_lock(session_id)
         async with session_lock:
             async with self._global_lock:
@@ -613,7 +613,22 @@ class ChatSessionManager:
 
             if self._sandbox_manager is not None:
                 await self._sandbox_manager.close(session_id)
-                self._sandbox_manager.delete_workspace(session_id)
+
+    async def clear_workspace(self, session_id: str) -> bool | None:
+        """关闭会话沙箱并删除工作区文件。**此操作不可逆**
+
+        沙箱未启用时返回 None；工作区目录不存在（无内容可删）返回 False；
+        删除成功返回 True。会话历史不受影响。
+        """
+        if self._sandbox_manager is None:
+            return None
+        workspace_root = Path(self._sandbox_manager.workspace_root(session_id))
+        existed = workspace_root.is_dir()
+        session_lock = await self._ensure_session_lock(session_id)
+        async with session_lock:
+            await self._sandbox_manager.close(session_id)
+            self._sandbox_manager.delete_workspace(session_id)
+        return existed
 
     async def interrupt_session_turn(self, session_id: str) -> bool | None:
         """手动中断会话当前正在运行的回复，不影响后续消息

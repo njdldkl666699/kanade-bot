@@ -60,6 +60,15 @@ chat_compact = on_command(
 )
 register_matcher(chat_compact, "压缩会话")
 
+chat_workspace_clear = on_command(
+    "清理工作区",
+    aliases={"清除工作区", "workspace_clear", "workspaceclear"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(chat_workspace_clear, "清理工作区")
+
 chat_stats = on_command(
     "会话统计",
     aliases={"chat_stats", "chatstats"},

@@ -630,3 +630,55 @@
   解析正常）
 - 新增 `tests/chat/test_prompt_sections.py`：Python 环境提示词段随
   `python_env_available` 变量隐藏/显示
+
+---
+
+# v6.0.0-rc.1 更新日志
+
+> 本版本为发布候选版：修复沙箱投入实际使用后暴露的四处问题（中文字体
+> 缺失、`read_file` 编码、用户图片不可达、工具异常外抛），并将「删除
+> 沙箱工作区」从 `/重置会话` 中拆出为独立命令——重置只清对话，工作区
+> （含 `.venv/`）跨重置保留。
+
+## 破坏性变更
+
+- **`/重置会话` 不再删除沙箱工作区**：仅清空会话历史、消息缓冲区与
+  记忆上下文并关闭沙箱进程；工作区文件跨重置保留，重置回复中注明
+  可用 `/清理工作区` 删除
+- **新增 SUPERUSER 命令 `/清理工作区`**（别名 `/清除工作区` /
+  `workspace_clear` / `workspaceclear`）：关闭会话沙箱并删除工作区
+  目录，**不可逆**且不影响会话历史；沙箱未启用或目录不存在（尚未
+  创建、已清理）时分别给出提示，清理出错以错误文本回报
+
+## 修复
+
+- **沙箱缺中文字体**：授权宿主字体目录只读（`/usr/share/fonts`、
+  `/usr/local/share/fonts`、`~/.local/share/fonts` 等），并给受限
+  进程注入 `HOME`/`XDG_*` 指向工作区 `.home/`——fontconfig 与
+  matplotlib 缓存有落点，绘图不再缺 CJK 字体、模型不再联网下载字体；
+  沙箱提示词同步注明系统字体目录只读可用
+- **`read_file` 非 UTF-8 文本读不出**：编码检测依赖 chardet
+  （`pydantic-ai-backends` 可选依赖）此前未安装；补入依赖后实测
+  GBK / UTF-16 / UTF-8 均可正确解码
+- **用户发送/引用的图片在沙箱内不可达**：图片从宿主
+  `cache/auto_clear/` 暂存进沙箱工作区 `images/`（同名不同图自动
+  换名，不覆盖旧文件），提示词附带相对路径，`view_image` /
+  `image_search` / `send_image` 等工具均可取用
+- **工具异常外抛炸穿 agent 运行**：`send_file` 上传、OneBot 发送
+  消息、`view_image` 下载补异常兜底，失败以错误文本返回模型，
+  不再终止整轮回复
+
+## 改进
+
+- 日志文件（`cache/kanade.log`）级别 DEBUG → WARNING，磁盘不再被
+  全量调试日志快速填充
+- 帮助文档同步：`/清理工作区` 命令说明与命令总览（`config/help/`）；
+  `chat_configs.json` 默认路径说明修正为 `config/chat/chat_configs.json`
+- 版本号 v6.0.0-beta.7 → v6.0.0-rc.1
+
+## 测试
+
+- 新增 `tests/chat/test_sandbox_fonts.py`：字体目录授权与
+  `HOME`/`XDG_*` 注入的运行时配置单元测试、图片暂存换名逻辑测试，
+  及真实 sandlock 受限进程内字体可读、缓存可写、宿主家目录仍被拒
+  的端到端验证
