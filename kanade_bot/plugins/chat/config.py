@@ -45,6 +45,7 @@ class PromptSectionConfig(AttrDocModel):
 
 DEFAULT_PROMPT_SECTIONS = [
     PromptSectionConfig(file="sandbox.md", when="sandbox_enabled"),
+    PromptSectionConfig(file="sandbox_python.md", when="python_env_available"),
     PromptSectionConfig(file="group_chat.md", when="is_group"),
 ]
 
@@ -186,6 +187,25 @@ class SandboxConfig(AttrDocModel):
 
     默认：生成 wrapper 时用 `shutil.which("sandlock")` 动态求值，
     适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH 时才需显式指定。"""
+
+    uv_bin: str = "uv"
+    """uv 可执行文件，PATH 上的名字或绝对路径
+
+    不可用时自动回退到宿主 `python3 -m venv` 原生方式"""
+
+    uv_python_dir: str | None = None
+    """uv 托管解释器目录
+
+    默认启动时执行 `uv python dir` 动态求值。"""
+
+    venv_python: str = "3.13"
+    """沙箱虚拟环境默认使用的 Python 版本
+
+    uv 方式下可为 uv 托管解释器任意版本；原生回退方式下按 `python{版本}`
+    在宿主查找（如 python3.13），找不到时用宿主默认 python3"""
+
+    venv_timeout: int = 300
+    """宿主侧执行 uv 命令的超时秒数"""
 
     @property
     def workspace_dir_path(self) -> Path:

@@ -10,18 +10,32 @@ from io import BytesIO
 from pathlib import Path
 
 from mirage import MountMode, Workspace
-from mirage.agents.pydantic_ai import PydanticAIWorkspace
+from mirage.agents.pydantic_ai import MirageWorkspaceBackend
 from mirage.runtime.sandbox.sandlock import SandlockRuntime
 from mirage.vfs.disk import DiskVFS
 from nonebot import get_driver, logger
+from pydantic_ai import RunContext
+from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.tools import AgentDepsT
+from pydantic_ai.workspaces import WorkspaceBackend, WorkspaceRef
 
 from ..config import cfg
 
-SANDLOCK_ENV_PATH = "/usr/local/bin:/usr/bin:/bin"
-"""sandlock 受限子进程的 PATH：只给常见系统目录，避免把宿主环境整体透传进去。"""
+VENV_DIR = ".venv"
+"""每个沙箱工作区根下的虚拟环境目录名"""
 
 ENV_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 """沙箱环境变量名的合法形态（防 shell 注入）"""
+
+PACKAGE_SPEC_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._-]*"
+    r"(?:\[[A-Za-z0-9._,-]+\])?"
+    r"(?:(?:==|!=|<=|>=|~=)[A-Za-z0-9.+*!]+)?"
+)
+"""合法的包声明形态：`name` / `name[extras]` / `name==version`
+
+包安装声明在**宿主侧**执行，必须从严：只接受纯文本包名（可带 extras 与
+版本限定），拒绝 URL、git、本地路径等一切可注入额外参数的形态。"""
 
 LANDLOCK_REQUIRED_ABI = 6
 """sandlock 要求的最低 Landlock ABI（Linux 6.12+）"""
@@ -58,6 +72,10 @@ class SandlockUnavailableError(RuntimeError):
 
 class LandlockUnavailableError(RuntimeError):
     """Landlock 不可用或 ABI 过低，无法保证文件系统隔离"""
+
+
+class UvUnavailableError(RuntimeError):
+    """uv CLI 缺失或不可用，沙箱无法提供 Python 环境"""
 
 
 def _parse_abi(text: str) -> int | None:
@@ -162,25 +180,23 @@ def ensure_landlock(bin_dir: Path) -> int | None:
     return abi
 
 
-class KanadeWorkspace(PydanticAIWorkspace):
-    """mirage 官方 `PydanticAIWorkspace` 的工作区根绑定版
+class KanadeWorkspace(MirageWorkspaceBackend):
+    """mirage 官方 `MirageWorkspaceBackend` 的工作区根绑定版
 
     官方实现见 `mirage.agents.pydantic_ai.backend`：文件操作（read/write/
-    edit/ls）直通 VFS Ops 层、按**虚拟绝对路径**寻址，shell 操作（execute/
-    grep/glob）走 `Workspace.shell()`。
+    ls 等）直通会话 VFS Ops 层、按**虚拟绝对路径**寻址，命令执行走
+    `Session.shell()`（克隆语义，`cd`/`export` 不跨命令持久，超时已内建）。
 
     本项目采用 mirage「免 FUSE」布局：挂载前缀 = 宿主真实路径，虚拟路径与
     真实路径一致，sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。
     该布局下官方 backend 收到**相对路径**会落到 VFS 根 `/`（宿主系统视图的
     overlay）——读则 FileNotFoundError，写则**静默落空**（宿主工作区无文件）。
-    这里把相对路径统一绑定到工作区根，与 `execute` 的 session cwd（初始化为
-    工作区根）语义对齐。
-
-    另补上官方实现缺失的 `execute` 超时（官方接受 `timeout` 参数但不生效）。
+    这里把相对路径统一绑定到工作区根，与 `run` 的会话 cwd（初始化为工作区根）
+    语义对齐。
     """
 
     def __init__(self, workspace: Workspace, root: str, session_id: str | None = None) -> None:
-        super().__init__(workspace, sandbox_id="mirage", session_id=session_id)
+        super().__init__(workspace, session_id)
         self._root = root
 
     def _bind(self, path: str) -> str:
@@ -193,53 +209,44 @@ class KanadeWorkspace(PydanticAIWorkspace):
             path = posixpath.join(self._root, path)
         return posixpath.normpath(path)
 
-    async def aexecute(self, command: str, timeout: int | None = None):
-        """执行命令；官方实现忽略 timeout，这里补上（超时取消整个 shell 协程）"""
-        if timeout is None or timeout <= 0:
-            return await super().aexecute(command)
-        async with asyncio.timeout(timeout):
-            return await super().aexecute(command)
+    async def read_bytes(self, path: str) -> bytes:
+        return await super().read_bytes(self._bind(path))
 
-    async def aread_bytes(self, path: str) -> bytes:
-        return await super().aread_bytes(self._bind(path))
+    async def write_bytes(self, path: str, data: bytes) -> None:
+        await super().write_bytes(self._bind(path), data)
 
-    async def aexists(self, path: str) -> bool:
-        return await super().aexists(self._bind(path))
+    async def stat(self, path: str):
+        return await super().stat(self._bind(path))
 
-    async def aread(self, path: str, offset: int = 0, limit: int = 2000) -> str:
-        return await super().aread(self._bind(path), offset, limit)
+    async def list_dir(self, path: str):
+        return await super().list_dir(self._bind(path))
 
-    async def awrite(self, path: str, content: str | bytes):
-        return await super().awrite(self._bind(path), content)
+    async def make_dir(self, path: str) -> None:
+        await super().make_dir(self._bind(path))
 
-    async def aedit(
-        self,
-        path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ):
-        return await super().aedit(self._bind(path), old_string, new_string, replace_all)
+    async def exists(self, path: str) -> bool:
+        return await super().exists(self._bind(path))
 
-    async def als_info(self, path: str):
-        return await super().als_info(self._bind(path))
+    async def remove(self, path: str) -> None:
+        await super().remove(self._bind(path))
 
-    async def agrep_raw(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-        ignore_hidden: bool = True,
-    ):
-        # 官方默认搜 VFS 根 '/'，这里改默认搜工作区根
-        return await super().agrep_raw(
-            pattern, self._bind(path) if path else self._root, glob, ignore_hidden
-        )
+    async def realpath(self, path: str) -> str:
+        return await super().realpath(self._bind(path))
 
-    async def aglob_info(self, pattern: str, path: str = "/"):
-        # 官方默认从 VFS 根 '/' 找，这里改默认从工作区根找
-        target = self._bind(path) if path and path != "/" else self._root
-        return await super().aglob_info(pattern, target)
+
+class SandboxWorkspaceCapability(AbstractCapability[AgentDepsT]):
+    """按运行时分发沙箱工作区的 capability"""
+
+    def get_workspace(
+        self, ctx: RunContext[AgentDepsT], *, ref: WorkspaceRef | None
+    ) -> WorkspaceBackend | None:
+        # mirage 官方 `MirageWorkspace` capability 持有单个固定 workspace，而本项目
+        # 每个聊天会话一个沙箱。这里在 `get_workspace` 时从`ctx.deps.sandbox`
+        # 解析当前会话的沙箱，返回其根绑定 backend。
+        sandbox: SandboxSession | None = getattr(ctx.deps, "sandbox", None)
+        if sandbox is None or sandbox.closed:
+            return None
+        return sandbox.backend
 
 
 @dataclass
@@ -250,7 +257,21 @@ class SandboxSession:
     workspace: Workspace
     backend: KanadeWorkspace
     session_id: str
+    uv_bin: str | None = None
+    """宿主侧 uv 可执行文件路径"""
+
+    uv_python_dir: Path | None = None
+    """uv 托管解释器目录"""
+
+    host_python: str | None = None
+    """宿主系统 python3 路径"""
+
     _closed: bool = field(default=False, init=False, repr=False)
+    _venv_seq: int = field(default=0, init=False, repr=False)
+    """已注册的 venv-bin 运行时计数"""
+
+    _venv_cmds: set[str] = field(default_factory=set, init=False, repr=False)
+    """已注册进沙箱路由的 venv bin 命令名"""
 
     @property
     def root(self) -> str:
@@ -294,6 +315,204 @@ class SandboxSession:
                 continue
         await self.workspace.vfs.write(target, content, session_id=self.session_id)
 
+    # ===== python虚拟环境
+
+    @property
+    def venv_dir(self) -> Path:
+        """工作区虚拟环境目录"""
+        return self.workspace_dir / VENV_DIR
+
+    @property
+    def venv_bin_dir(self) -> Path:
+        """虚拟环境 bin 目录"""
+        return self.venv_dir / "bin"
+
+    def _venv_commands(self) -> set[str]:
+        """虚拟环境 bin 下的现有命令名"""
+        try:
+            return {p.name for p in self.venv_bin_dir.iterdir()}
+        except OSError:
+            return set()
+
+    async def _run_host(self, argv: list[str]) -> tuple[int, str]:
+        """宿主侧执行命令，返回 (exit_code, 合并输出尾部)"""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=self.workspace_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as e:
+            return 1, f"无法启动 {argv[0]}: {e}"
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=cfg.sandbox.venv_timeout
+            )
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return (
+                1,
+                f"命令超时（>{cfg.sandbox.venv_timeout}s）: {' '.join(argv[:3])} …",
+            )
+        text = (stdout + b"\n" + stderr).decode("utf-8", "replace").strip()
+        return proc.returncode if proc.returncode is not None else 1, text[-2000:]
+
+    def _register_venv_commands(self):
+        """把 venv bin 中尚未注册的命令动态挂进沙箱路由"""
+        to_register = tuple(sorted(self._venv_commands() - self._venv_cmds))
+        if not to_register:
+            return []
+        self._venv_seq += 1
+        runtime_cls = type(
+            f"_VenvBinRuntime{self._venv_seq}",
+            (SandlockRuntime,),
+            {"name": f"venv-bin-{self._venv_seq}"},
+        )
+        self.workspace.add_runtime(
+            runtime_cls(
+                captures=to_register,
+                config={
+                    "fs_readable": (
+                        str(self.workspace_dir),
+                        *(() if self.uv_python_dir is None else (str(self.uv_python_dir),)),
+                    ),
+                    "fs_writable": (str(self.workspace_dir),),
+                    "max_memory": cfg.sandbox.memory_limit,
+                    "env": {"PATH": str(self.venv_bin_dir)},
+                },
+            )
+        )
+        self._venv_cmds.update(to_register)
+        return to_register
+
+    async def setup_venv(
+        self, python_version: str | None = None, packages: list[str] | None = None
+    ) -> str:
+        """宿主侧创建/更新工作区虚拟环境并安装包
+
+        1. 优先用 uv
+        2. 无 uv 时回退原生方式：宿主 `python3 -m venv` + venv 内 pip。
+
+        返回给模型的结果文本。
+        """
+        uv_bin = self.uv_bin
+        host_python = self.host_python
+        if uv_bin is None and host_python is None:
+            return "uv 与宿主 python3 均不可用，无法创建 Python 环境。"
+        use_uv = uv_bin is not None
+
+        if packages:
+            invalid = [p for p in packages if not PACKAGE_SPEC_RE.fullmatch(p)]
+            if invalid:
+                return (
+                    f"不合法的包声明: {invalid}。仅接受 `name`、`name[extras]`、"
+                    "`name==version` 等纯文本形态，不支持 URL/git/本地路径"
+                )
+
+        report: list[str] = []
+        if not self.venv_dir.exists():
+            if use_uv:
+                version = python_version or cfg.sandbox.venv_python
+                code, output = await self._run_host(
+                    [uv_bin, "venv", "--python", version, str(self.venv_dir)]
+                )
+                if code != 0:
+                    return f"创建虚拟环境失败:\n{output}"
+                report.append(f"已创建虚拟环境 {VENV_DIR}/（uv，Python {version}）")
+            else:
+                # 原生回退：保持默认 symlink 形态
+                # 不能用 --copies，真文件解释器在沙箱内会踩 sandlock 的 readlink bug 启动崩溃
+                if host_python is None:
+                    return "宿主 python3 不可用，无法创建 Python 环境。"
+                interpreter = host_python
+                if python_version:
+                    candidate = shutil.which(f"python{python_version}")
+                    if candidate is not None:
+                        interpreter = candidate
+                    else:
+                        report.append(f"未找到宿主 python{python_version}，已用默认回退解释器")
+                code, output = await self._run_host([interpreter, "-m", "venv", str(self.venv_dir)])
+                if code != 0:
+                    # Debian/Ubuntu 拆包后系统 python 无 ensurepip，需 python3-venv：
+                    # 降级建无 pip 的裸环境，至少标准库可用
+                    shutil.rmtree(self.venv_dir, ignore_errors=True)
+                    code, output = await self._run_host(
+                        [interpreter, "-m", "venv", "--without-pip", str(self.venv_dir)]
+                    )
+                    if code != 0:
+                        return f"创建虚拟环境失败:\n{output}"
+                    report.append(f"已创建虚拟环境 {VENV_DIR}/（python -m venv --without-pip）")
+                else:
+                    report.append(f"已创建虚拟环境 {VENV_DIR}/（python -m venv）")
+        elif python_version:
+            report.append("虚拟环境已存在，忽略 python_version 参数")
+
+        if packages:
+            before = self._venv_commands()
+            venv_python = str(self.venv_bin_dir / "python")
+            if use_uv:
+                code, output = await self._run_host(
+                    [
+                        uv_bin,
+                        "pip",
+                        "install",
+                        # "--no-build",  # 只装 wheel，避免 sdist 构建钩子在宿主执行任意代码
+                        "--python",
+                        venv_python,
+                        *packages,
+                    ]
+                )
+            else:
+                # 原生回退：`python3 -m venv` 默认自带 pip（ensurepip）；
+                # --without-pip 降级创建的环境需先补装
+                if "pip" not in before:
+                    code, output = await self._run_host(
+                        [venv_python, "-m", "ensurepip", "--upgrade"]
+                    )
+                    if code != 0:
+                        return (
+                            "安装包失败：venv 内无 pip 且 ensurepip 不可用。"
+                            "请要求宿主安装 uv（推荐）或 python3-venv 后重试"
+                        )
+                code, output = await self._run_host(
+                    [
+                        venv_python,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--disable-pip-version-check",
+                        "--no-input",
+                        # "--only-binary", ":all:",  # 等价 uv --no-build
+                        *packages,
+                    ]
+                )
+            if code != 0:
+                return f"安装包失败:\n{output}"
+            new_cmds = self._venv_commands() - before
+            report.append(f"已安装 {len(packages)} 个包: {' '.join(packages)}")
+            if new_cmds:
+                report.append(f"新增可执行命令: {' '.join(sorted(new_cmds))}")
+
+        # 全量补注册
+        registered = self._register_venv_commands()
+        if registered:
+            report.append(f"已注册沙箱命令: {' '.join(registered)}")
+
+        # 更新会话 PATH：venv 优先，附带系统工具目录。
+        # 系统目录到这里才引入：venv 已存在，python3 必然解析到 venv 解释器。
+        io = await self.workspace.shell(
+            f"export PATH={shlex.quote(str(self.venv_bin_dir))}:/usr/bin:/bin",
+            session_id=self.session_id,
+        )
+        if io.exit_code != 0:
+            stderr = (await io.materialize_stderr()).decode("utf-8", "replace")
+            report.append(f"警告：更新会话 PATH 失败: {stderr.strip()}")
+
+        report.append("python3 现在可用。需要更多包时再次调用本工具。")
+        return "\n".join(report)
+
 
 class SandboxManager:
     """沙箱管理器：为每个会话维护一个常驻沙箱，工作区目录按会话管理"""
@@ -306,6 +525,15 @@ class SandboxManager:
 
         self._sessions: dict[str, SandboxSession] = {}
         """各会话的常驻沙箱，键为会话ID"""
+
+        self._uv_bin: str | None = None
+        """宿主侧 uv 可执行文件路径"""
+
+        self._uv_python_dir: Path | None = None
+        """额外只读授权的解释器目录"""
+
+        self._host_python: str | None = None
+        """宿主系统 python3 路径"""
 
         driver = get_driver()
         driver.on_startup(self._startup)
@@ -334,17 +562,60 @@ class SandboxManager:
 
     # ===== mirage 运行时 =====
 
+    def _check_uv(self) -> None:
+        """校验 uv 可用并解析托管解释器目录"""
+        resolved = shutil.which(cfg.sandbox.uv_bin)
+        if resolved is None:
+            raise UvUnavailableError(
+                f"uv CLI 不可用（{cfg.sandbox.uv_bin}）"
+                "（https://docs.astral.sh/uv/）。"
+                "可将 chat.sandbox.uv_bin 指向 uv 绝对路径，"
+                "否则 Python 环境回退到 python -m venv"
+            )
+
+        if cfg.sandbox.uv_python_dir:
+            python_dir = Path(cfg.sandbox.uv_python_dir)
+        else:
+            try:
+                proc = subprocess.run(
+                    [resolved, "python", "dir"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as e:
+                raise UvUnavailableError(f"执行 `uv python dir` 失败: {e}") from e
+            if proc.returncode != 0:
+                raise UvUnavailableError(
+                    f"解析 uv 托管解释器目录失败:\n{(proc.stdout + proc.stderr).strip()}"
+                )
+            python_dir = Path(proc.stdout.strip())
+        if not python_dir.is_dir():
+            raise UvUnavailableError(f"uv 托管解释器目录不存在: {python_dir}")
+        self._uv_bin = resolved
+        self._uv_python_dir = python_dir
+
+    def _runtime_config(self, workspace_dir: Path) -> dict:
+        """sandlock 运行时的统一授权配置"""
+        readable = [str(workspace_dir)]
+        if self._uv_python_dir is not None:
+            # venv 内的解释器是指向 uv 托管解释器的符号链接，需要只读授权
+            readable.append(str(self._uv_python_dir))
+        return {
+            # 只授予工作区与 uv 解释器目录：之外的宿主路径 sandlock 一律拒绝
+            "fs_readable": tuple(readable),
+            "fs_writable": (str(workspace_dir),),
+            "max_memory": cfg.sandbox.memory_limit,
+            # 受限子进程的 PATH 只含 venv bin，不提供系统 python3
+            "env": {"PATH": str(workspace_dir / VENV_DIR / "bin")},
+        }
+
     def _build_runtime(self, workspace_dir: Path) -> SandlockRuntime:
-        """构造 sandlock 运行时：只委派 python3，其余命令走 mirage 内置实现"""
+        """构造 sandlock 运行时"""
         return SandlockRuntime(
-            captures=("python3",),
-            config={
-                # 只授予工作区本身：工作区之外的宿主路径 sandlock 一律拒绝
-                "fs_readable": (str(workspace_dir),),
-                "fs_writable": (str(workspace_dir),),
-                "max_memory": cfg.sandbox.memory_limit,
-                "env": {"PATH": SANDLOCK_ENV_PATH},
-            },
+            captures=("python3", "python"),
+            config=self._runtime_config(workspace_dir),
         )
 
     # ===== 创建 =====
@@ -423,6 +694,9 @@ class SandboxManager:
                 session_id=mirage_session,
             ),
             session_id=mirage_session,
+            uv_bin=self._uv_bin,
+            uv_python_dir=self._uv_python_dir,
+            host_python=self._host_python,
         )
 
     # ===== 生命周期 =====
@@ -430,4 +704,31 @@ class SandboxManager:
     async def _startup(self):
         self._bin_dir = self._root_dir / ".bin"
         ensure_landlock(self._bin_dir)
-        logger.info(f"mirage沙箱已就绪，工作区根目录: {self._root_dir}")
+        try:
+            self._check_uv()
+        except UvUnavailableError as e:
+            logger.warning(f"{e}")
+        self._host_python = self._resolve_host_python()
+        if self._uv_bin is None and self._host_python is None:
+            logger.warning("宿主侧既无 uv 也无 python3，沙箱内将无法创建 Python 环境")
+        logger.info(
+            f"mirage沙箱已就绪，工作区根目录: {self._root_dir}，"
+            f"uv: {self._uv_bin}，解释器目录: {self._uv_python_dir}，"
+            f"回退python: {self._host_python}"
+        )
+
+    def _resolve_host_python(self) -> str | None:
+        """解析无 uv 时的原生回退解释器
+
+        优先 `python{venv_python}`（若在 PATH 上，常为带完整 ensurepip/pip
+        的 uv 托管或自装解释器），否则退回系统 python3。若选中解释器位于
+        系统目录之外（沙箱未授权），把其安装根补进只读授权，保证 venv 符号链接在沙箱内可执行。
+        """
+        interpreter = shutil.which(f"python{cfg.sandbox.venv_python}") or shutil.which("python3")
+        if interpreter is None:
+            return None
+        if self._uv_python_dir is None:
+            install_root = Path(interpreter).resolve().parent.parent
+            if str(install_root) not in ("/", "/usr", "/usr/local"):
+                self._uv_python_dir = install_root
+        return interpreter

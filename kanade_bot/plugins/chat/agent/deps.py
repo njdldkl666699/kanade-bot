@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 
-from mirage.agents.pydantic_ai import PydanticAIWorkspace
-
 from kanade_bot.utils.session import SessionInfo
 
 from .memory import MemoryContext
@@ -26,9 +24,6 @@ class ChatDeps:
 
     sandbox_root: str | None = None
     """沙箱工作区根的绝对路径"""
-
-    backend: PydanticAIWorkspace | None = None
-    """沙箱 backend"""
 
     extra: dict = field(default_factory=dict)
     """扩展数据槽"""

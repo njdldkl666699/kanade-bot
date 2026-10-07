@@ -40,7 +40,7 @@ from .deps import ChatDeps
 from .image_caption import get_image_caption
 from .memory import MemoryContext, MemoryStore
 from .prompt import ChatPrompt, current_time_line
-from .sandbox import SandboxManager
+from .sandbox import SandboxManager, SandboxWorkspaceCapability
 from .session_store import SessionStore
 from .tool import build_tools
 
@@ -143,13 +143,15 @@ class ChatSessionManager:
         capabilities: list[AbstractCapability] = [self._compaction]
         if cfg.sandbox.enabled:
             self._sandbox_manager = SandboxManager()
-            capabilities.append(
-                ConsoleCapability(
-                    permissions=PERMISSIVE_RULESET,
-                    include_background=False,
-                    image_support=cfg.agent.vision,
-                    profile="agent",
-                )
+            capabilities.extend(
+                [
+                    SandboxWorkspaceCapability(),
+                    ConsoleCapability(
+                        permissions=PERMISSIVE_RULESET,
+                        image_support=cfg.agent.vision,
+                        profile="agent",
+                    ),
+                ]
             )
 
         self._agent: Agent[ChatDeps] = Agent(
@@ -399,7 +401,6 @@ class ChatSessionManager:
                 memory_context=memory_context,
                 sandbox=sandbox_session,
                 sandbox_root=sandbox_root,
-                backend=sandbox_session.backend if sandbox_session is not None else None,
             )
 
             # 恢复历史：全量原始消息 + 按 marks 重放压缩

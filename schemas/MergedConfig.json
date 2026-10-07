@@ -112,6 +112,10 @@
                 "when": "sandbox_enabled"
               },
               {
+                "file": "sandbox_python.md",
+                "when": "python_env_available"
+              },
+              {
                 "file": "group_chat.md",
                 "when": "is_group"
               }
@@ -158,6 +162,10 @@
             {
               "file": "sandbox.md",
               "when": "sandbox_enabled"
+            },
+            {
+              "file": "sandbox_python.md",
+              "when": "python_env_available"
             },
             {
               "file": "group_chat.md",
@@ -813,6 +821,37 @@
           "default": null,
           "description": "真实 sandlock 可执行文件的绝对路径\n\n默认：生成 wrapper 时用 `shutil.which(\"sandlock\")` 动态求值，\n适配各部署环境不同的安装路径。仅当 sandlock 不在 PATH 时才需显式指定。",
           "title": "Landlock Real Binary"
+        },
+        "uv_bin": {
+          "default": "uv",
+          "description": "uv 可执行文件（宿主侧创建沙箱虚拟环境的首选方式），PATH 上的名字或绝对路径\n\n不可用时自动回退到宿主 `python3 -m venv` 原生方式（uv 非沙箱必选项）",
+          "title": "Uv Bin",
+          "type": "string"
+        },
+        "uv_python_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "uv 托管解释器目录（授予沙箱只读，供 venv 符号链接解析）\n\n默认启动时执行 `uv python dir` 动态求值。",
+          "title": "Uv Python Dir"
+        },
+        "venv_python": {
+          "default": "3.13",
+          "description": "沙箱虚拟环境默认使用的 Python 版本\n\nuv 方式下可为 uv 托管解释器任意版本；原生回退方式下按 `python{版本}`\n在宿主查找（如 python3.13），找不到时用宿主默认 python3",
+          "title": "Venv Python",
+          "type": "string"
+        },
+        "venv_timeout": {
+          "default": 300,
+          "description": "宿主侧执行 uv 命令的超时秒数",
+          "title": "Venv Timeout",
+          "type": "integer"
         }
       },
       "title": "SandboxConfig",
@@ -1044,6 +1083,10 @@
                   "when": "sandbox_enabled"
                 },
                 {
+                  "file": "sandbox_python.md",
+                  "when": "python_env_available"
+                },
+                {
                   "file": "group_chat.md",
                   "when": "is_group"
                 }
@@ -1087,7 +1130,11 @@
             "memory_limit": "512M",
             "workspace_dir": "sandboxes/",
             "landlock_degrade": "auto",
-            "landlock_real_binary": null
+            "landlock_real_binary": null,
+            "uv_bin": "uv",
+            "uv_python_dir": null,
+            "venv_python": "3.13",
+            "venv_timeout": 300
           }
         },
         "image_caption": {
@@ -1931,6 +1978,10 @@
                 "when": "sandbox_enabled"
               },
               {
+                "file": "sandbox_python.md",
+                "when": "python_env_available"
+              },
+              {
                 "file": "group_chat.md",
                 "when": "is_group"
               }
@@ -1965,6 +2016,10 @@
           "landlock_degrade": "auto",
           "landlock_real_binary": null,
           "memory_limit": "512M",
+          "uv_bin": "uv",
+          "uv_python_dir": null,
+          "venv_python": "3.13",
+          "venv_timeout": 300,
           "workspace_dir": "sandboxes/"
         },
         "image_caption": null,

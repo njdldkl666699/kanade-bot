@@ -540,3 +540,93 @@
   填充与快照回填不被显式 None 阻断）；`test_pai_agent.py` 新增
   ManualCompactionTest（手动压缩 mark 落库 → 重启恢复与产物一致、
   DB 全量保留、保留尾部内无操作）
+
+---
+
+# v6.0.0-beta.7 更新日志
+
+> 本版本将沙箱的 Python 环境从「透传宿主系统 `python3`」改为**宿主侧
+> uv 预配工作区虚拟环境**：沙箱内不再存在系统 python3，模型按需经新
+> 工具 `setup_python_env` 创建 `.venv/` 并安装第三方包（装包在宿主侧
+> 执行，绕开沙箱无网络的限制）；同时适配 mirage / pydantic-ai 上游
+> API 更名与 per-session workspace 分发。
+
+## 破坏性变更
+
+- **沙箱内系统 python3 移除**（`chat/agent/sandbox.py`）：
+  - sandlock 受限子进程的 PATH 从系统目录
+    （`/usr/local/bin:/usr/bin:/bin`）改为仅工作区 `.venv/bin`，
+    运行时捕获命令从 `python3` 扩为 `python3` + `python`——venv
+    创建前两者均不可用（显式 `/usr/bin/python3` 同样被拒，只读授权
+    不再覆盖系统目录）
+  - 模型须先调用 `setup_python_env` 创建虚拟环境，之后 `python3`
+    才可用；venv 随工作区跨会话保留
+- **`KanadeWorkspace` 基类随上游更名**（mirage main 前移
+  f33a820 → 7c2da21）：官方 `PydanticAIWorkspace` 改名
+  `MirageWorkspaceBackend`，方法族从 `aread/awrite/aedit/aexecute`
+  重命名为 `read_bytes/write_bytes/stat/list_dir/make_dir/exists/
+  remove/realpath/run`（shell 结果字段 `output` → `stdout`）；
+  自写的 execute 超时补丁删除（官方 `run` 已内建超时，
+  `WorkspaceTimeoutError`）；`ConsoleCapability` 不再传
+  `include_background`（上游 API 变化）
+- **`ChatDeps` 移除 `backend` 字段**：官方 `MirageWorkspace`
+  capability 持有单个固定 workspace，不满足本项目每会话一沙箱；
+  新增 `SandboxWorkspaceCapability`，在 `get_workspace` 时从
+  `ctx.deps.sandbox` 解析当前会话的根绑定 backend
+
+## 新增
+
+- **`setup_python_env` 工具**（`chat/agent/tool.py`）：在沙箱工作区
+  创建/更新 Python 虚拟环境并安装包
+  - 宿主侧优先用 uv（`uv venv` + `uv pip install --python`），无
+    uv 自动回退宿主 `python3 -m venv` + venv 内 pip；Debian 系缺
+    `python3-venv`（ensurepip）时降级 `--without-pip` 裸环境，
+    标准库可用，装包时再 `ensurepip` 补 pip，仍失败则提示安装 uv
+    或 python3-venv
+  - 装包在**宿主侧**执行：沙箱经 sandlock（seccomp）无网络，模型
+    在沙箱内 `pip install` 本就不可行，需要任何第三方包都必须走
+    本工具
+  - 包声明白名单校验：仅接受 `name` / `name[extras]` /
+    `name==version` 纯文本形态，URL / git / 本地路径一律拒绝——
+    声明会拼进宿主侧命令行，从严防参数注入
+  - **entry point 命令动态注册**：装包后扫描 `.venv/bin` 新增的
+    可执行名，为其挂独立 SandlockRuntime 路由（captures 命令名、
+    同样的内存限额与只读边界），安装自带 CLI 的包后可直接调用
+    （如 `pytest --version`），也可 `python3 -m 模块名`
+- **`chat.sandbox` 新增配置**：`uv_bin`（默认 `uv`，PATH 名或绝对
+  路径）、`uv_python_dir`（默认启动时 `uv python dir` 动态求值）、
+  `venv_python`（默认 `3.13`；uv 方式为托管解释器任意版本，原生
+  回退按 `python{版本}` 在宿主查找，找不到用宿主默认 python3）、
+  `venv_timeout`（默认 300s，宿主侧命令超时）
+- **提示词段 `sandbox_python.md`**（`when=python_env_available`）：
+  引导「先建 venv 再用 python3、装包必须走工具、装完的 CLI 命令
+  直接可调」；uv 与宿主 python3 全缺失时不注入该段（不给无意义
+  的引导）
+
+## 改进
+
+- **uv 托管解释器目录授权沙箱只读**：venv 内解释器是指向 uv 托管
+  解释器的 symlink，其目录需只读授权才能在沙箱内启动；原生回退
+  方式下若解释器位于系统目录之外，安装根同样补进只读授权。原生
+  方式必须保持 symlink 形态——`--copies` 的真文件解释器在沙箱内
+  会踩 sandlock 的 readlink bug 启动崩溃
+- **uv 不可用不再阻断启动**：`_check_uv` 失败降级为 warning 并
+  回退宿主 python3（`python{venv_python}` 优先于系统 python3）；
+  两者全无时仅提示无法创建 Python 环境，沙箱本身照常可用
+- venv 内解释器仍受 `memory_limit` 约束（256M 配置下 1G 分配
+  失败，测试覆盖），动态注册的 venv-bin 命令同享该限额
+- 依赖升级：`pydantic-ai-backend` 0.2.30 → 0.2.33，mirage main
+  commit 前移（`uv.lock`）
+
+## 测试
+
+- `tests/chat/test_mirage_backend.py` 适配新 backend API，新增三组：
+  `VenvSetupTest`（venv 前裸 python3 与 `/usr/bin/python3` 均不可用、
+  创建后 `sys.executable` 指向 `.venv`、装包后 import / entry point
+  CLI / `python3 -m` 三态可用、URL 形态包声明被拒且 venv 未创建、
+  内存限额仍生效）、`NativeVenvFallbackTest`（uv 缺失回退
+  `python -m venv` 创建与装包、未知版本号回退默认解释器并注明）、
+  `UvOptionalStartupTest`（uv 缺失不阻断沙箱启动，回退解释器
+  解析正常）
+- 新增 `tests/chat/test_prompt_sections.py`：Python 环境提示词段随
+  `python_env_available` 变量隐藏/显示

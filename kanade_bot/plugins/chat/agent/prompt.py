@@ -218,6 +218,11 @@ class ChatPrompt:
             # 沙箱
             "sandbox_enabled": _bool_str(deps.sandbox is not None),
             "workspace_root": deps.sandbox_root or "",
+            # Python 环境可用性：uv 与宿主 python3 全部缺失时禁用相关提示
+            "python_env_available": _bool_str(
+                deps.sandbox is not None
+                and (deps.sandbox.uv_bin is not None or deps.sandbox.host_python is not None)
+            ),
             # 功能开关：与 `prepare_tools` 的过滤口径保持一致
             "mcp_enabled": _bool_str(self._mcp_available),
             "vision_enabled": _bool_str(self._agent_cfg.vision),
