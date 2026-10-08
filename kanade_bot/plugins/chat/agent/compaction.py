@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from nonebot import logger
 from pydantic_ai.capabilities.abstract import AbstractCapability
@@ -23,7 +25,10 @@ from pydantic_ai_harness.compaction import (
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import CompactionConfig
-from .session_store import SessionStore
+
+if TYPE_CHECKING:
+    # 仅类型标注使用；运行时导入会造成 compaction ⇄ session_store 循环导入
+    from .session_store import SessionStore
 
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
 
@@ -197,13 +202,15 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
         request_context: ModelRequestContext,
     ) -> ModelRequestContext:
         session_id = _session_id_of(ctx)
-        before = ctx.messages
+        # 必须拷贝快照：压缩策略（TieredCompaction）以 ctx.messages[:] = ... 原地
+        # 替换列表，直接引用同一对象会让前后指纹永远相等，压缩事件丢失
+        before = list(ctx.messages)
         result = await self.strategy.before_model_request(ctx, request_context)
         if session_id is not None and _messages_fingerprint(before) != _messages_fingerprint(
-            ctx.messages
+            list(ctx.messages)
         ):
             self.events.setdefault(session_id, []).append(
-                CompactionEvent(pre=before, post=ctx.messages)
+                CompactionEvent(pre=before, post=list(ctx.messages))
             )
         return result
 
