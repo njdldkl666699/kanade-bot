@@ -18,6 +18,8 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -77,6 +79,8 @@ from pydantic_ai_harness.compaction import compact_now
 from kanade_bot.plugins.chat.agent import compaction as compaction_mod
 from kanade_bot.plugins.chat.agent import session_store as store_mod
 from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
+from kanade_bot.utils import pai_runtime
+from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig
 
 SessionStore = store_mod.SessionStore
 
@@ -247,6 +251,10 @@ def build_agent(
     return agent, scripted
 
 
+DEPS_C1 = SimpleNamespace(session_info=SimpleNamespace(session_id="c1"))
+"""模拟 ChatDeps：让 RecordingCompaction 能识别会话"""
+
+
 # ===== 压缩的确定性（落库方案的前提） =====
 
 
@@ -332,7 +340,9 @@ class SessionStoreTest(unittest.IsolatedAsyncioTestCase):
         """核心要求：DB 里被压缩掉的消息仍然完整保留"""
         history = make_history(4)
         await self.store.append("c1", history)
-        await self.store.add_compaction_mark("c1", compaction_mod.build_clear_mark(TEST_PARAMS))
+        mark = compaction_mod.build_clear_mark(TEST_PARAMS)
+        mark.up_to_seq = len(history) - 1
+        await self.store.add_compaction_mark("c1", mark)
 
         restored = await self.store.restore("c1", params=TEST_PARAMS)
         self.assertEqual(len(restored), len(history), "消息条数应保持不变")
@@ -340,12 +350,36 @@ class SessionStoreTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.store.count("c1"), len(history), "DB 保留全量")
         self.assertEqual(fp(await self.store.load("c1")), fp(history))
 
-    async def test_truncate_removes_tail_and_marks(self):
-        await self.store.append("c1", make_history(4))
-        await self.store.add_compaction_mark("c1", compaction_mod.build_clear_mark(TEST_PARAMS))
-        await self.store.truncate("c1", 6)
-        self.assertEqual(await self.store.count("c1"), 6)
-        self.assertEqual(len(await self.store.load_compaction_marks("c1")), 0)
+    async def test_rollback_removes_tail_keeps_earlier_marks(self):
+        await self.store.append("c1", make_history(4))  # 12 行，seq 0..11
+        mark = compaction_mod.build_clear_mark(TEST_PARAMS)
+        mark.up_to_seq = 11
+        await self.store.add_compaction_mark("c1", mark)
+        await self.store.append("c1", make_history(2, "new"))  # seq 12..17
+
+        await self.store.rollback("c1", 12)
+        self.assertEqual(await self.store.count("c1"), 12, "只回退 seq>=12 的尾部")
+        marks = await self.store.load_compaction_marks("c1")
+        self.assertEqual(len(marks), 1, "up_to_seq<12 的 mark 应保留")
+
+    async def test_rollback_removes_marks_created_this_turn(self):
+        """本轮产生的 mark（up_to_seq 越过回退点）应连同补写的消息一并删除
+
+        真实编排中 mark 记录前总会先补写本轮尚未落库的消息（至少含
+        user 消息），故本轮 mark 的 up_to_seq 必然 >= 本轮起始行数。
+        """
+        await self.store.append("c1", make_history(4))  # 上轮已存在 seq 0..11
+        db_floor = await self.store.count("c1")  # = 12
+
+        # 本轮：压缩前补写 user 消息（seq 12），再记 mark
+        await self.store.append("c1", [ModelRequest(parts=[UserPromptPart(content="q")])])
+        mark = compaction_mod.build_clear_mark(TEST_PARAMS)
+        mark.up_to_seq = await self.store.count("c1") - 1  # = 12
+        await self.store.add_compaction_mark("c1", mark)
+
+        await self.store.rollback("c1", db_floor)
+        self.assertEqual(await self.store.count("c1"), 12, "回退到本轮起始行数")
+        self.assertEqual(len(await self.store.load_compaction_marks("c1")), 0, "本轮 mark 应删除")
 
     async def test_clear_removes_everything(self):
         await self.store.append("c1", make_history(2))
@@ -377,14 +411,18 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         recorder = compaction_mod.build_compaction_capability(TEST_PARAMS)
         agent, scripted = build_agent([resp_tool("t", {"i": 1}, "n1"), resp_text("done")], recorder)
 
-        result = await agent.run("问题A", message_history=history)
-        await store.append("c1", result.new_messages())
+        result = await agent.run("问题A", message_history=history, deps=DEPS_C1)
+        # 与 manager 一致的持久化编排：补写压缩前消息 + 记 mark + 尾部消息
+        await compaction_mod.persist_run(
+            store,
+            "c1",
+            recorder,
+            base=history,
+            all_messages=result.all_messages(),
+            new_messages=result.new_messages(),
+        )
 
         final_history = repair_messages(result.all_messages())
-        mark = await recorder.take_mark(final_history)
-        self.assertIsNotNone(mark, "本轮应发生压缩")
-        await store.add_compaction_mark("c1", mark)
-
         online_final = fp(final_history)
         last_request = scripted.sent_messages[-1]
 
@@ -405,9 +443,7 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
 
         # 断言 3：重启后首次请求 = 恢复的历史 + 新提问，历史部分逐字节一致
         # （这是保护 provider 侧 KV Cache 的关键）
-        _, next_scripted = build_agent([resp_text("下一轮")])
         next_agent, _ = build_agent([resp_text("下一轮")])
-        del next_scripted
         await next_agent.run("问题B", message_history=restored)
         next_request = next_agent._model.function.sent_messages[0]
         self.assertEqual(fp(next_request[:-1]), online_final, "重启后首次请求的历史应与关闭前一致")
@@ -422,9 +458,9 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         store = SessionStore(self.db)
         history = make_history(4)
         await store.append("c1", history)
-        await store.add_compaction_mark(
-            "c1", compaction_mod.build_clear_mark(CompactionParams(keep_pairs=1))
-        )
+        mark = compaction_mod.build_clear_mark(CompactionParams(keep_pairs=1))
+        mark.up_to_seq = len(history) - 1
+        await store.add_compaction_mark("c1", mark)
 
         new_params = CompactionParams(keep_pairs=3)
         reborn = SessionStore(self.db)
@@ -434,9 +470,10 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
             history, compaction_mod.build_clear_mark(new_params)
         )
         self.assertEqual(fp(restored), fp(expected))
-        self.assertEqual(
-            len(await reborn.load_compaction_marks("c1")), 0, "漂移后旧 marks 应被丢弃"
-        )
+        marks = await reborn.load_compaction_marks("c1")
+        self.assertEqual(len(marks), 1, "漂移重放有实际效果时应落一条覆盖全量的新 mark")
+        self.assertEqual(marks[0].strategy, "clear_tool_results")
+        self.assertEqual(marks[0].up_to_seq, len(history) - 1)
 
     async def test_summarizing_mark_uses_stored_result(self):
         """摘要档非确定性：恢复时直接用存下的产物，不重新生成"""
@@ -460,6 +497,139 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         reborn = SessionStore(self.db)
         restored = await reborn.restore("c1", params=TEST_PARAMS)
         self.assertEqual(fp(restored), fp(snapshot))
+
+    async def test_messages_after_summarizing_mark_survive_restore(self):
+        """生产事故回归：summarizing mark 之后追加的消息不能在恢复时被丢弃
+
+        旧版 restore 对摘要 mark 做整体替换，mark 之后每轮新追加的消息全部
+        丢失——模型对压缩后发生的对话逐轮失忆（表现为重复搜索已查过的内容）。
+        """
+        store = SessionStore(self.db)
+        history = make_history(3)
+        await store.append("c1", history)
+
+        # 摘要压缩：快照落 mark，up_to_seq = 压缩时的全量行数-1
+        params = CompactionParams(summary_keep_messages=3)
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        compacted = await compact_now(
+            compaction_mod.build_summary(params), history, model=summary_model
+        )
+        self.assertIsNot(compacted, history)
+        mark = compaction_mod.build_summary_mark(params, compacted)
+        mark.up_to_seq = len(history) - 1
+        await store.add_compaction_mark("c1", mark)
+
+        # mark 之后又聊了一轮（9 条新消息）
+        later = make_history(3, "later")
+        await store.append("c1", later)
+
+        restored = await SessionStore(self.db).restore("c1", params=params)
+        self.assertEqual(
+            fp(restored),
+            fp([*compacted, *later]),
+            "恢复结果应为摘要快照 + mark 之后追加的消息",
+        )
+
+    async def test_multi_turn_with_repeated_compaction(self):
+        """多轮对话 + 中途多次压缩 + 重启：恢复历史与在线一致
+
+        生产事故的完整形态：压缩后继续聊多轮，期间再次压缩，
+        重启后恢复的历史必须等于最后一次请求发送的内容。
+        """
+        store = SessionStore(self.db)
+        recorder = compaction_mod.build_compaction_capability(TEST_PARAMS)
+        history: list[ModelMessage] = []
+        await store.append("c1", history)
+
+        # 5 轮对话，每轮带工具调用；窗口 200 token ⇒ 每轮都触发压缩
+        for turn in range(5):
+            agent, _ = build_agent(
+                [resp_tool("t", {"i": turn}, f"n{turn}"), resp_text(f"第{turn}轮回答")],
+                recorder,
+            )
+            result = await agent.run(f"第{turn}轮问题", message_history=history, deps=DEPS_C1)
+            all_msgs = result.all_messages()
+            await compaction_mod.persist_run(
+                store,
+                "c1",
+                recorder,
+                base=history,
+                all_messages=all_msgs,
+                new_messages=result.new_messages(),
+            )
+            history = all_msgs
+
+        marks = await store.load_compaction_marks("c1")
+        self.assertGreaterEqual(len(marks), 1, "应至少记录一次压缩")
+
+        # 重启恢复：与最后一轮在线历史（repaired 形态）逐字节一致
+        restored = await SessionStore(self.db).restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(repair_messages(history)), "恢复历史与在线一致")
+
+        # 再来一轮：恢复后的历史继续可用，且包含最后一轮的回答
+        self.assertTrue(
+            any(
+                isinstance(p, TextPart) and p.content == "第4轮回答"
+                for m in restored
+                for p in getattr(m, "parts", [])
+            ),
+            "恢复的历史应包含最后一轮的回答",
+        )
+
+
+# ===== 主模型窗口解析（压缩阈值固化） =====
+
+
+class ResolveModelContextWindowTest(unittest.TestCase):
+    """`CompactionConfig.context_window` 未显式时从 pai_runtime 解析主模型窗口
+
+    生产事故教训：窗口解析失败会静默回退 200k，压缩阈值从 0.9×1M 变成
+    0.9×200k。解析链：显式配置 > /models 元数据缓存 > genai-prices。
+    """
+
+    def test_explicit_config_wins(self):
+        """显式配置的 context_window 优先，不触发元数据获取"""
+        cfg = BaseAgentConfig(
+            model="m",
+            provider=ProviderConfig(base_url="http://x"),
+            context_window=1234,
+        )
+        self.assertEqual(pai_runtime.resolve_model_context_window(cfg), 1234)
+
+    def test_metadata_cache_hit(self):
+        """无显式配置时复用 /models 元数据缓存（如 deepseek-flash 的 1M）"""
+        provider = ProviderConfig(base_url="http://x")
+        cfg = BaseAgentConfig(model="m", provider=provider)
+        key = (pai_runtime._client_key(provider), "m")
+        saved = pai_runtime._models_metadata_cache.get(key)
+        try:
+            pai_runtime._models_metadata_cache[key] = (1048576, 393216)
+            self.assertEqual(pai_runtime.resolve_model_context_window(cfg), 1048576)
+        finally:
+            if saved is None:
+                pai_runtime._models_metadata_cache.pop(key, None)
+            else:
+                pai_runtime._models_metadata_cache[key] = saved
+
+    def test_unresolvable_returns_none(self):
+        """解析全部失败时返回 None（调用方保持未固化状态）"""
+        provider = ProviderConfig(base_url="http://unreachable.invalid")
+        cfg = BaseAgentConfig(model="m", provider=provider)
+        key = (pai_runtime._client_key(provider), "m")
+        saved = pai_runtime._models_metadata_cache.get(key)
+        try:
+            pai_runtime._models_metadata_cache.pop(key, None)  # 强制重新 fetch → 失败
+            fake_model = mock.MagicMock()
+            fake_model.context_window = None
+            fake_model.model_id = "m"
+            with mock.patch.object(pai_runtime, "get_model", return_value=fake_model):
+                # registry 无该模型 → resolve_context_window 返回 None
+                self.assertIsNone(pai_runtime.resolve_model_context_window(cfg))
+        finally:
+            if saved is None:
+                pai_runtime._models_metadata_cache.pop(key, None)
+            else:
+                pai_runtime._models_metadata_cache[key] = saved
 
 
 # ===== 手动总结级压缩 =====
@@ -492,6 +662,7 @@ class ManualCompactionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(compaction_mod.extract_summary(compacted), "这是摘要")
 
         mark = compaction_mod.build_summary_mark(params, compacted)
+        mark.up_to_seq = len(history) - 1
         self.assertEqual(mark.strategy, "summarizing")
         self.assertIsNotNone(mark.result)
         await store.add_compaction_mark("c1", mark)

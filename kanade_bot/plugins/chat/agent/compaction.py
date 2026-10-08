@@ -2,6 +2,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from nonebot import logger
 from pydantic_ai.capabilities.abstract import AbstractCapability
 from pydantic_ai.messages import (
     ModelMessage,
@@ -19,7 +20,10 @@ from pydantic_ai_harness.compaction import (
     compact_now,
 )
 
+from kanade_bot.utils.session import SessionInfo
+
 from ..config import CompactionConfig
+from .session_store import SessionStore
 
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
 
@@ -44,6 +48,13 @@ class CompactionMark:
 
     applied_at: float = 0.0
     """记录时间戳"""
+
+    up_to_seq: int = -1
+    """本条 mark 覆盖到 DB 的消息 seq（含）
+
+    恢复时只把 mark 应用到该 seq 为止的前缀上，再拼回其后追加的消息；
+    `-1` 表示覆盖全部（旧数据兼容，等价于整体替换）。
+    """
 
 
 def build_clear(params: CompactionConfig, *, online: bool) -> ClearToolResults:
@@ -92,6 +103,7 @@ def build_summary_mark(params: CompactionConfig, result: list[ModelMessage]) -> 
 
     摘要由 LLM 生成、非确定性，无法重放，必须把完整产物存进
     `result`，恢复时直接使用（见 `apply_strategy`）。
+    `up_to_seq` 由调用方（`persist_run` / 手动压缩）按落库边界填写。
     """
     return CompactionMark(
         strategy="summarizing",
@@ -144,9 +156,31 @@ def _messages_fingerprint(messages: list[ModelMessage]) -> bytes:
     return ModelMessagesTypeAdapter.dump_json(messages)
 
 
+def _session_id_of(ctx: RunContext[Any]) -> str | None:
+    """从 RunContext.deps 尽力取会话 ID（无法识别时返回 None）"""
+    session_info: SessionInfo | None = getattr(ctx.deps, "session_info", None)
+    return session_info.session_id if session_info else None
+
+
+@dataclass
+class CompactionEvent:
+    """run 内一次在线压缩的前后快照"""
+
+    pre: list[ModelMessage]
+    """压缩发生前的完整历史（含本轮已产生的消息）"""
+
+    post: list[ModelMessage]
+    """压缩后的完整历史"""
+
+
 @dataclass
 class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
-    """包住分层压缩策略，并记录本轮历史是否被压缩过"""
+    """包住分层压缩策略，按会话记录 run 内发生的每次压缩
+
+    压缩只改写 run 内部的消息列表，调用方（`persist_run`）必须在 run
+    结束后取出事件，把压缩前尚未落库的消息补写入库、按落库边界记录
+    mark，再持久化压缩后新产生的消息。
+    """
 
     strategy: AbstractCapability[AgentDepsT]
     """在线压缩策略"""
@@ -154,47 +188,112 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
     params: CompactionConfig
     """当前压缩参数"""
 
-    compacted: bool = False
-    """本轮是否发生过压缩"""
-
-    pre_compaction: list[ModelMessage] | None = None
-    """本轮首次压缩前的历史快照"""
+    events: dict[str, list[CompactionEvent]] = field(default_factory=dict)
+    """会话 → 本 run 内的压缩事件"""
 
     async def before_model_request(
         self,
         ctx: RunContext[AgentDepsT],
         request_context: ModelRequestContext,
     ) -> ModelRequestContext:
-        before = list(ctx.messages)
+        session_id = _session_id_of(ctx)
+        before = ctx.messages
         result = await self.strategy.before_model_request(ctx, request_context)
-        if _messages_fingerprint(before) != _messages_fingerprint(list(ctx.messages)):
-            self.compacted = True
-            if self.pre_compaction is None:
-                self.pre_compaction = before
+        if session_id is not None and _messages_fingerprint(before) != _messages_fingerprint(
+            ctx.messages
+        ):
+            self.events.setdefault(session_id, []).append(
+                CompactionEvent(pre=before, post=ctx.messages)
+            )
         return result
 
-    async def take_mark(self, final_history: list[ModelMessage]) -> CompactionMark | None:
-        """本轮结束后取出一条 mark（无压缩则返回 None），并重置状态"""
-        compacted, self.compacted = self.compacted, False
-        pre, self.pre_compaction = self.pre_compaction, None
-        if not compacted or pre is None:
-            return None
+    def take_events(self, session_id: str) -> list[CompactionEvent]:
+        """取出并清空该会话本 run 内的压缩事件"""
+        return self.events.pop(session_id, [])
 
-        target = _messages_fingerprint(final_history)
-        dumped = self.params.model_dump()
-        candidate = CompactionMark(
-            strategy="clear_tool_results",
-            params=dumped,
-            result=None,
-            fingerprint=self.params.fingerprint(),
-            applied_at=time.time(),
-        )
 
-        # 自验证：先试零成本档重放，能复现就只存参数（零额外存储）
-        if _messages_fingerprint(await apply_strategy(pre, candidate)) == target:
-            return candidate
-        # 否则说明触发了摘要档，必须存完整快照
-        return build_summary_mark(self.params, final_history)
+def _common_prefix_len(a: list[ModelMessage], b: list[ModelMessage]) -> int:
+    """两个消息列表的逐字节公共前缀长度"""
+    n = min(len(a), len(b))
+    for i in range(n):
+        if _messages_fingerprint([a[i]]) != _messages_fingerprint([b[i]]):
+            return i
+    return n
+
+
+async def persist_run(
+    store: SessionStore,
+    session_id: str,
+    capability: RecordingCompaction[Any],
+    base: list[ModelMessage],
+    all_messages: list[ModelMessage],
+    new_messages: list[ModelMessage],
+) -> None:
+    """把一次 run 的新增消息与压缩事件落库
+
+    base: 本 run 开始时的历史（与传给 `message_history` 的一致）；
+    all_messages: run 结束时的完整历史（`stream.all_messages()`，run 内
+    发生过压缩时其前缀与 base 不同——这正是不能用「base + new_messages()」
+    重建历史的原因）；
+    new_messages: `stream.new_messages()`（pydantic-ai 以 run_id 多层回退
+    维护的增量边界，仅在未发生压缩时可靠，此时是官方正确机制）。
+
+    无压缩：等价于把 `new_messages` 追加入库。
+
+    有压缩：对每个事件——补写压缩前未落库的消息（使 DB 行覆盖 `pre`）
+    → 记 mark（`up_to_seq` = 补写后的行数-1）→ 把压缩后新产生的消息
+    追加为 mark 之后的尾部行。恢复时 `restore` 按 `up_to_seq` 分段
+    重放/替换并拼回尾部，重建结果与发送内容一致。
+
+    对齐一律用**内容级公共前缀**而非位置：pydantic-ai 每次请求前跑
+    `repair_messages()`（合并相邻请求），可能缩短/改写历史（例如旧库
+    分离形态、输入与历史尾部合并），位置切片会错位丢消息。公共前缀
+    变短即检测到「改写」——改写后 DB 行无法重放在线输入，mark 强制
+    走完整快照（恢复正确性优先，放弃该次的重放优化）。
+    """
+    events = capability.take_events(session_id)
+
+    if not events:
+        if new_messages:
+            await store.append(session_id, new_messages)
+        return
+
+    # 1. 补写各事件压缩前尚未落库的消息，使 DB 行覆盖到最后一个 pre
+    boundary: list[ModelMessage] = base
+    rewritten = False
+    for event in events:
+        c = _common_prefix_len(boundary, event.pre)
+        rewritten = rewritten or c < len(boundary)
+        if pre_delta := event.pre[c:]:
+            await store.append(session_id, pre_delta)
+        boundary = event.pre
+
+    # 2. mark 区间的实际内容 = post 及其后至 run 结束；若后续 repair
+    #    改写了 post 尾部（公共前缀变短），以改写后形态为准
+    last_post = events[-1].post
+    c_tail = _common_prefix_len(last_post, all_messages)
+    rewritten = rewritten or c_tail < len(last_post)
+    snapshot = all_messages[:c_tail]
+
+    mark = build_summary_mark(capability.params, snapshot)
+    if not rewritten and len(events) == 1:
+        # 自验证：零成本档是确定性纯函数，对 pre 重放能复现快照就只存
+        # 参数（零额外存储）
+        candidate = build_clear_mark(capability.params)
+        if _messages_fingerprint(await apply_strategy(events[0].pre, candidate)) == (
+            _messages_fingerprint(snapshot)
+        ):
+            mark = candidate
+    mark.up_to_seq = await store.count(session_id) - 1
+    await store.add_compaction_mark(session_id, mark)
+    logger.debug(
+        f"会话{session_id}记录压缩事件：策略={mark.strategy}，"
+        f"up_to_seq={mark.up_to_seq}，可重放={mark.result is None}"
+    )
+
+    # 3. 压缩后新产生的消息 → mark 之后的尾部行
+    if tail := all_messages[c_tail:]:
+        await store.append(session_id, tail)
 
 
 def build_compaction_capability(params: CompactionConfig = CompactionConfig()):

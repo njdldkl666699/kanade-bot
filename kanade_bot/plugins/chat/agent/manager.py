@@ -27,17 +27,22 @@ from pydantic_ai_harness.compaction import (
 )
 
 from kanade_bot.utils.billing import UsageCallback
-from kanade_bot.utils.pai_runtime import CONTINUE_PROMPT, build_model_settings, get_model
+from kanade_bot.utils.pai_runtime import (
+    CONTINUE_PROMPT,
+    build_model_settings,
+    get_model,
+    resolve_model_context_window,
+)
 from kanade_bot.utils.parse import ImageInput, build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
-from ..config import CompactionConfig, cfg
+from ..config import cfg
 from .compaction import (
-    RecordingCompaction,
     build_compaction_capability,
     build_summary,
     build_summary_mark,
     extract_summary,
+    persist_run,
 )
 from .deps import ChatDeps
 from .image_caption import get_image_caption
@@ -120,8 +125,19 @@ class ChatSessionManager:
         """记忆存储"""
         self._memory_contexts: dict[str, MemoryContext] = {}
 
-        self._compaction_params: CompactionConfig = cfg.compaction
-        self._compaction: RecordingCompaction = build_compaction_capability(self._compaction_params)
+        self._compaction_params = cfg.compaction
+        # 主模型窗口固化进压缩参数：配置未显式指定时从 pai_runtime 解析
+        # （显式配置 > /models 元数据缓存 > genai-prices）。固化后
+        # TieredCompaction 不再依赖每请求的 registry 解析（窗口漂移会静默
+        # 改变压缩阈值），且该值进入 mark 指纹，跨进程漂移可被检测
+        if self._compaction_params.context_window is None and (
+            window := resolve_model_context_window(cfg.agent)
+        ):
+            self._compaction_params = self._compaction_params.model_copy(
+                update={"context_window": window}
+            )
+            logger.info(f"压缩阈值窗口已固化为主模型解析值：{window} tokens")
+        self._compaction = build_compaction_capability(self._compaction_params)
 
         self._prompt = ChatPrompt(cfg)
         """模块化系统提示词渲染器"""
@@ -425,8 +441,10 @@ class ChatSessionManager:
             try:
                 total_usage = RunUsage()
                 for attempt in range(1 + EMPTY_RESPONSE_MAX_RETRIES):
-                    # 记录本轮写入前的消息数，用于空响应回退
+                    # 记录本轮写入前的基准：消息空间（历史回退点）与行空间（DB 回退点）。
+                    # 存在压缩时两者不相等，不能混用（见 SessionStore.rollback）
                     baseline = len(history)
+                    db_floor = await self._store.count(session_id)
                     produced = False
                     tool_called = False
                     continuations = 0
@@ -470,16 +488,25 @@ class ChatSessionManager:
                             finally:
                                 self._streams.pop(session_id, None)
 
-                            run = stream.new_messages()
+                            run = list(stream.all_messages())
+                            run_new = stream.new_messages()
 
-                        if run:
-                            history = [*history, *run]
-                            await self._store.append(session_id, run)
+                        # 持久化本轮新增消息与压缩事件。必须用 all_messages（含压缩后真实历史）
+                        # run 内发生过压缩时 new_messages() 的切片基准已失效，
+                        # 「restore 结果 + new_messages」会丢掉压缩效果
+                        await persist_run(
+                            self._store,
+                            session_id,
+                            self._compaction,
+                            base=history,
+                            all_messages=run,
+                            new_messages=run_new,
+                        )
+                        history = run
                         # 累计本次运行的usage（含空响应重发与续写）
                         total_usage.incr(stream.usage)
 
-                        # 输出因 max_output_tokens 截断：续写
-                        # 历史已入库，续写输入只需一句提示
+                        # 输出因 max_output_tokens 截断：续写历史已入库，续写输入只需一句提示
                         if (
                             run
                             and isinstance(run[-1], ModelResponse)
@@ -499,9 +526,6 @@ class ChatSessionManager:
                             continue
                         break
 
-                    # 记录本轮发生过的压缩
-                    await self._record_compaction(session_id, history)
-
                     if produced or tool_called:
                         if on_usage is not None:
                             on_usage(total_usage, produced)
@@ -509,7 +533,7 @@ class ChatSessionManager:
 
                     # 整轮空响应：回退本轮写入的消息后重发
                     history = history[:baseline]
-                    await self._store.truncate(session_id, baseline)
+                    await self._store.rollback(session_id, db_floor)
                     if attempt < EMPTY_RESPONSE_MAX_RETRIES:
                         logger.warning(
                             f"会话{session_id}本轮回复为空"
@@ -525,19 +549,12 @@ class ChatSessionManager:
             finally:
                 # 常驻沙箱不在此处关闭：跨轮保留 shell 会话状态，
                 # 仅在会话重置或进程退出时关闭
+                # 丢弃未消费的压缩事件（超时/取消路径残留），避免污染下一轮
+                self._compaction.take_events(session_id)
                 async with self._global_lock:
                     # 清空消息缓冲区
                     if session_id in self._sessions_messages:
                         self._sessions_messages[session_id].clear()
-
-    async def _record_compaction(self, session_id: str, history: list[ModelMessage]) -> None:
-        """本轮结束后把发生的压缩记成一条 mark"""
-        mark = await self._compaction.take_mark(history)
-        if mark is not None:
-            await self._store.add_compaction_mark(session_id, mark)
-            logger.debug(
-                f"会话{session_id}记录压缩事件：策略={mark.strategy}，可重放={mark.result is None}"
-            )
 
     @staticmethod
     async def _stage_images_to_sandbox(
@@ -679,9 +696,9 @@ class ChatSessionManager:
                 logger.info(f"会话{session_id}手动压缩跳过：{before}条均在保留尾部内")
                 return {"compacted": False, "total": total, "before": before, "after": before}
 
-            await self._store.add_compaction_mark(
-                session_id, build_summary_mark(self._compaction_params, compacted)
-            )
+            mark = build_summary_mark(self._compaction_params, compacted)
+            mark.up_to_seq = total - 1
+            await self._store.add_compaction_mark(session_id, mark)
             logger.info(f"会话{session_id}手动压缩完成：{before}条 → {len(compacted)}条")
             return {
                 "compacted": True,

@@ -148,6 +148,27 @@ def _fetch_model_metadata(provider: ProviderConfig, model: str) -> tuple[int | N
     return metadata
 
 
+def resolve_model_context_window(config: BaseAgentConfig) -> int | None:
+    """解析模型实际生效的上下文窗口：显式配置 > /models 元数据 > genai-prices
+
+    与压缩能力的每请求解析同源（优先 profile、再 registry），但**只解析一次**
+    供调用方固化使用——避免 registry/网络状态随进程变化导致压缩阈值漂移。
+    `_fetch_model_metadata` 失败不缓存，这里调用会多一次重试机会；
+    仍拿不到时返回 None（调用方保持未固化状态，压缩能力自行回退）。
+    """
+
+    if config.context_window:
+        return config.context_window
+
+    provider = config.provider
+    if provider is not None and (window := _fetch_model_metadata(provider, config.model)[0]):
+        return window
+
+    from pydantic_ai_harness.compaction import resolve_context_window
+
+    return resolve_context_window(get_model(config))
+
+
 def build_model_settings(config: BaseAgentConfig) -> ModelSettings:
     """将配置映射为 `ModelSettings`"""
     extra_body: dict[str, object] = {}

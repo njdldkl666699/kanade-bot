@@ -65,14 +65,16 @@ PACKAGE_SPEC_RE = re.compile(
 )
 """合法的包声明形态：`name` / `name[extras]` / `name==version`
 
-包安装声明在**宿主侧**执行，必须从严：只接受纯文本包名（可带 extras 与
-版本限定），拒绝 URL、git、本地路径等一切可注入额外参数的形态。"""
+包安装声明在**宿主侧**执行，必须从严，拒绝 URL、git、本地路径等一切可注入额外参数的形态。"""
 
 LANDLOCK_REQUIRED_ABI = 6
 """sandlock 要求的最低 Landlock ABI（Linux 6.12+）"""
 
 LANDLOCK_MIN_ABI = 4
 """低于此 ABI 连文件系统规则都保不住，必须报错而非降级"""
+
+SYSTEM_READABLE_DIRS = ("/usr", "/lib", "/lib64", "/bin", "/etc", "/proc", "/dev")
+"""降级自检探针随解释器根一并只读授权的系统目录"""
 
 DEGRADED_PROTECTIONS = (
     "signal-scope",
@@ -181,9 +183,22 @@ def ensure_landlock(bin_dir: Path) -> int | None:
     python3 = shutil.which("python3")
     if python3 is None:
         raise SandlockUnavailableError("自检探针需要 PATH 上有 python3")
-    probe_root = f"/{Path(python3).resolve().parts[1]}"
+    # 授权「解释器所在根 + 系统根」。只授权解释器根不够：解释器是动态链接
+    # ELF，内核还要以读权限打开 ld-linux/libc（merged-usr 下在 /usr 内）、
+    # CPython 启动还要读 /dev/urandom，landlock 拒绝任何一个 execve 都直接
+    # 返回 EACCES。uv run 会把 .venv/bin 前置到 PATH，which("python3") 拿到
+    # 的是指向 uv 托管解释器的软链，resolve 后解释器根是 /home，极易漏掉
+    # 系统根（交互 shell 直接 nb run 时 probe_root 恰为 /usr 才没暴露）。
+    roots: list[str] = []
+    for root in (f"/{Path(python3).resolve().parts[1]}", *SYSTEM_READABLE_DIRS):
+        if root not in roots and Path(root).is_dir():
+            roots.append(root)
+    probe_argv = [str(wrapper), "run"]
+    for root in roots:
+        probe_argv += ["-r", root]
+    probe_argv += ["--", python3, "-c", "print(1)"]
     probe = subprocess.run(
-        [str(wrapper), "run", "-r", probe_root, "--", python3, "-c", "print(1)"],
+        probe_argv,
         capture_output=True,
         text=True,
         timeout=30,

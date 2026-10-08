@@ -18,6 +18,7 @@ mirage 提供 `PydanticAIWorkspace`（`pydantic-ai-backend` 的 `SandboxProtocol
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -293,6 +294,75 @@ class LandlockDegradeTest(unittest.TestCase):
         # 用 rindex：注释里也出现过 "$@"，要看 exec 那一行真正的位置
         self.assertLess(wrapper.rindex("--allow-degraded"), wrapper.rindex('"$@"'))
         self.assertIn("--", wrapper, "wrapper 必须保留 sandlock 的 -- 分隔符")
+
+    def test_probe_authorizes_system_roots(self):
+        """自检探针必须随解释器根一并授权系统根（mirage SYSTEM_READABLE 对齐）
+
+        uv run 把 .venv/bin 前置到 PATH 后，which("python3") 是指向 uv 托管
+        解释器的软链，解释器根落在 /home 而非 /usr。只授权解释器根时，
+        ld-linux/libc 与 /dev/urandom 被 landlock 拒绝，execvp 以
+        EACCES(127) 失败（生产 6.8 内核实测的启动报错）。
+        """
+        module = self.module
+        tmp = Path(self.tmp.name)
+        fake_cfg = module.cfg.sandbox
+        saved = (
+            fake_cfg.landlock_degrade,
+            fake_cfg.landlock_real_binary,
+            shutil.which,
+            subprocess.run,
+            os.environ.get("PATH", ""),
+        )
+        fake_cfg.landlock_degrade = "auto"
+        fake_cfg.landlock_real_binary = str(tmp / "real-sandlock")
+
+        # 伪 venv：python3 -> python -> 解释器根不在 /usr 下的真实文件
+        fake_bin = tmp / "venv" / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        real_dir = tmp / "uvdir" / "cpython"
+        real_dir.mkdir(parents=True, exist_ok=True)
+        (real_dir / "python3.13").write_text("")
+        (fake_bin / "python").symlink_to(real_dir / "python3.13")
+        (fake_bin / "python3").symlink_to("python")
+        expected_root = f"/{(real_dir / 'python3.13').resolve().parts[1]}"
+
+        captured: dict[str, list[str]] = {}
+
+        def fake_which(name):
+            return str(fake_bin / name) if name == "python3" else saved[2](name)
+
+        def fake_run(argv, *args, **kwargs):
+            argv = list(argv)
+            if len(argv) > 1 and argv[1] == "check":
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout="Landlock: ABI v4\nMinimum required: ABI v6", stderr=""
+                )
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, 0, stdout="1\n", stderr="")
+
+        shutil.which = fake_which  # type: ignore[assignment]
+        subprocess.run = fake_run  # type: ignore[assignment]
+        try:
+            abi = module.ensure_landlock(tmp / ".bin")
+            self.assertEqual(abi, 4)
+        finally:
+            fake_cfg.landlock_degrade, fake_cfg.landlock_real_binary = saved[:2]
+            shutil.which, subprocess.run = saved[2], saved[3]  # type: ignore[assignment]
+            os.environ["PATH"] = saved[4]
+
+        self.assertTrue((tmp / ".bin" / "sandlock").is_file())
+        argv = captured["argv"]
+        self.assertEqual(argv[0], str(tmp / ".bin" / "sandlock"))
+        self.assertEqual(argv[1], "run")
+        dash = argv.index("--")
+        flags = argv[2:dash]
+        r_roots = [flags[i + 1] for i, t in enumerate(flags) if t == "-r"]
+        self.assertIn(expected_root, r_roots)
+        for d in module.SYSTEM_READABLE_DIRS:
+            if Path(d).is_dir():
+                self.assertIn(d, r_roots)
+        self.assertEqual(len(r_roots), len(set(r_roots)), "授权根不应重复")
+        self.assertEqual(argv[dash + 1 :], [str(fake_bin / "python3"), "-c", "print(1)"])
 
     def test_missing_cli_raises(self):
         original_which = shutil.which
