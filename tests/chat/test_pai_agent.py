@@ -94,6 +94,10 @@ TEST_PARAMS = CompactionParams(
     keep_pairs=1,
     # 清理收益至少 1 个 token 才动手，相当于「不设阈值」
     min_clear_tokens=1,
+    # 应急阀同样压低，让 run 内压缩在测试中必然触发。
+    # 注意 FunctionModel 会合成 usage 锚点，锚定估算远小于纯启发式，
+    # 阈值不压低的话在线压缩在测试里永远不会触发（生产默认 0.98）
+    online_valve_fraction=0.5,
 )
 """测试用压缩参数：窗口小 ⇒ 必然触发；keep_pairs=1 便于断言"""
 
@@ -682,6 +686,197 @@ class ManualCompactionTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(result, history)
         self.assertIsNone(compaction_mod.extract_summary(result))
+
+
+# ===== 摘要档用户消息保留（2026-10-09 生产事故修复） =====
+
+
+class SummaryKeepUserMessagesTest(unittest.IsolatedAsyncioTestCase):
+    """`build_summary`：保留最近用户消息、不复活会话首条用户消息
+
+    生产事故（2026-10-09，群 875082051）：upstream `SummarizingCompaction`
+    默认 `preserve_first_user_message=True`，keep_messages=0 压缩后历史只剩
+    「摘要 + 会话第一条用户消息」，模型复读两天前的首条消息并按其内嵌
+    时间戳错判时间（半夜回复「…喵喵。」「现在已经快到中午了呢」）。
+    """
+
+    async def _compact(self, history, params):
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        return await compact_now(compaction_mod.build_summary(params), history, model=summary_model)
+
+    async def test_no_first_user_message_resurrection(self):
+        """事故回归：keep_messages=0 时产物仅剩摘要，任何用户消息不得复活"""
+        compacted = await self._compact(
+            make_history(3),
+            CompactionParams(summary_keep_messages=0, summary_keep_user_messages=False),
+        )
+        self.assertEqual(len(compacted), 1, "keep_messages=0 应只保留摘要一条")
+        self.assertEqual(compaction_mod.extract_summary(compacted), "这是摘要")
+        self.assertFalse(
+            any(isinstance(p, UserPromptPart) for m in compacted for p in getattr(m, "parts", [])),
+            "不应复活任何用户消息（事故中首条『喵喵』消息被原样保留）",
+        )
+
+    async def test_coupled_budget_zero_keeps_no_user_messages(self):
+        """耦合语义：keep_messages=0 时保留用户消息的名额同样为 0"""
+        compacted = await self._compact(
+            make_history(3),
+            CompactionParams(summary_keep_messages=0, summary_keep_user_messages=True),
+        )
+        self.assertEqual(len(compacted), 1)
+
+    async def test_keeps_recent_user_messages_within_budget(self):
+        """保留用户消息：被摘要范围内最近 N 条用户消息原样保留"""
+        history = make_history(6)  # 18 条：u0..u5 共 6 条用户消息
+        compacted = await self._compact(
+            history,
+            CompactionParams(summary_keep_messages=4, summary_keep_user_messages=True),
+        )
+        user_texts = [
+            p.content
+            for m in compacted
+            for p in getattr(m, "parts", [])
+            if isinstance(p, UserPromptPart)
+        ]
+        # 被摘要范围内的用户消息优先占满全部 4 个名额 → 原始尾部被挤空，
+        # 产物 = 摘要 + 最近的 q1..q4（upstream 耦合预算语义）
+        self.assertEqual(user_texts, ["oldq1", "oldq2", "oldq3", "oldq4"])
+
+
+# ===== 轮末自动压缩 =====
+
+
+class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
+    """`compact_between_turns`：轮末单闸（clear→summary 升级）+ mark 落库"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db = Path(self.tmp.name) / "sessions.sqlite3"
+
+    async def test_below_gate_noop(self):
+        """估算低于闸门时不压缩、不落 mark"""
+        store = SessionStore(self.db)
+        history = make_history(2)
+        await store.append("c1", history)
+        params = CompactionParams(
+            trigger_fraction=0.8,
+            context_window=10**9,
+            summary_target_fraction=0.9,
+        )
+        model, _ = _make_model([resp_text("这是摘要")])
+        self.assertIsNone(
+            await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
+        )
+        self.assertEqual(await store.load_compaction_marks("c1"), [])
+
+    async def test_unfixed_window_skips(self):
+        """窗口未固化（context_window=None）时保守跳过"""
+        store = SessionStore(self.db)
+        params = CompactionParams(trigger_fraction=0.8, summary_target_fraction=0.9)
+        model, _ = _make_model([resp_text("这是摘要")])
+        self.assertIsNone(
+            await compaction_mod.compact_between_turns(
+                store, "c1", params, make_history(2), model=model
+            )
+        )
+
+    async def test_clear_tier_records_replayable_mark(self):
+        """仅零成本档生效：落可重放 clear mark，restore 重放结果一致"""
+        store = SessionStore(self.db)
+        history = make_history(3)  # 约 614 tokens（纯启发式，无 usage 锚点）
+        await store.append("c1", history)
+        # 摘要档未启用：闸门 = trigger_fraction（0.8×700=560 < 614 → 触发清理）
+        params = CompactionParams(
+            trigger_fraction=0.8,
+            context_window=700,
+            keep_pairs=1,
+            min_clear_tokens=1,
+        )
+        model, _ = _make_model([resp_text("这是摘要")])
+        info = await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
+        self.assertIsNotNone(info)
+        self.assertEqual(info["strategy"], "clear_tool_results")
+        marks = await store.load_compaction_marks("c1")
+        self.assertEqual(len(marks), 1)
+        self.assertEqual(marks[0].strategy, "clear_tool_results")
+        self.assertIsNone(marks[0].result, "零成本档 mark 只存参数，可重放")
+        self.assertEqual(marks[0].up_to_seq, len(history) - 1)
+        restored = await SessionStore(self.db).restore("c1", params=params)
+        expected = await compaction_mod.apply_strategy(
+            history, compaction_mod.build_clear_mark(params)
+        )
+        self.assertEqual(fp(restored), fp(expected), "恢复重放应重现轮末压缩结果")
+
+    async def test_summary_tier_records_snapshot_mark(self):
+        """零成本档无事可做时升摘要档：落快照 mark，恢复直接用快照"""
+        store = SessionStore(self.db)
+        history = make_history(3)
+        await store.append("c1", history)
+        # keep_pairs=3 → 3 对全在保护内，clear 无事可做 → 直接升摘要
+        params = CompactionParams(
+            trigger_fraction=0.8,
+            context_window=600,  # 0.9×600=540 < 614 → 过闸
+            keep_pairs=3,
+            min_clear_tokens=1,
+            summary_target_fraction=0.9,
+            summary_keep_messages=2,
+        )
+        model, _ = _make_model([resp_text("这是摘要")])
+        info = await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
+        self.assertIsNotNone(info)
+        self.assertEqual(info["strategy"], "summarizing")
+        marks = await store.load_compaction_marks("c1")
+        self.assertEqual(marks[0].strategy, "summarizing")
+        self.assertIsNotNone(marks[0].result)
+        restored = await SessionStore(self.db).restore("c1", params=params)
+        compacted = ModelMessagesTypeAdapter.validate_json(marks[0].result)
+        self.assertEqual(fp(restored), fp(compacted))
+
+
+# ===== 在线应急阀 =====
+
+
+class OnlineValveTest(unittest.IsolatedAsyncioTestCase):
+    """在线压缩仅作应急阀：超过高阈值触发 / None 关闭"""
+
+    async def test_valve_disabled_never_compacts(self):
+        """online_valve_fraction=None：run 内完全不压缩"""
+        params = CompactionParams(
+            trigger_fraction=0.5,
+            context_window=200,
+            keep_pairs=1,
+            min_clear_tokens=1,
+            online_valve_fraction=None,
+        )
+        recorder = compaction_mod.build_compaction_capability(params)
+        agent, _ = build_agent([resp_text("ok")], recorder, params=params)
+        history = make_history(3)  # 远超 trigger_fraction，但在线压缩已关闭
+        result = await agent.run("问题", message_history=history, deps=DEPS_C1)
+        self.assertEqual(recorder.take_events("c1"), [])
+        self.assertFalse(
+            any(
+                p.content == CLEARED
+                for m in result.all_messages()
+                for p in getattr(m, "parts", [])
+                if isinstance(p, ToolReturnPart)
+            ),
+            "在线压缩关闭时工具结果应原样保留",
+        )
+
+    async def test_valve_fires_over_threshold(self):
+        """估算超过应急阈值时 run 内压缩并记录事件"""
+        params = CompactionParams(
+            trigger_fraction=0.5,
+            context_window=200,
+            keep_pairs=1,
+            min_clear_tokens=1,
+            online_valve_fraction=0.5,
+        )
+        recorder = compaction_mod.build_compaction_capability(params)
+        agent, _ = build_agent([resp_text("ok")], recorder, params=params)
+        await agent.run("问题", message_history=make_history(3), deps=DEPS_C1)
+        self.assertTrue(recorder.take_events("c1"), "超过应急阈值应记录压缩事件")
 
 
 # ===== 流式 =====

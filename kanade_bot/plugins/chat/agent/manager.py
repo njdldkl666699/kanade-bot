@@ -41,6 +41,7 @@ from .compaction import (
     build_compaction_capability,
     build_summary,
     build_summary_mark,
+    compact_between_turns,
     extract_summary,
     persist_run,
 )
@@ -547,10 +548,23 @@ class ChatSessionManager:
                         f"（无文本输出且无工具调用），已停止重试"
                     )
             finally:
-                # 常驻沙箱不在此处关闭：跨轮保留 shell 会话状态，
-                # 仅在会话重置或进程退出时关闭
+                # 常驻沙箱不在此处关闭：跨轮保留 shell 会话状态，仅在会话重置或进程退出时关闭
                 # 丢弃未消费的压缩事件（超时/取消路径残留），避免污染下一轮
                 self._compaction.take_events(session_id)
+                # 轮末自动压缩：最终回复已落库、下一轮开始前执行，不会打断任何进行中的任务
+                try:
+                    model = self._agent.model
+                    assert isinstance(model, Model), "Agent 构造时传入的必为 Model 实例"
+                    if info := await compact_between_turns(
+                        self._store,
+                        session_id,
+                        self._compaction_params,
+                        history,
+                        model=model,
+                    ):
+                        logger.info(f"会话{session_id}轮末压缩完成：{info}")
+                except Exception as e:
+                    logger.warning(f"会话{session_id}轮末压缩失败（不影响会话状态）：{e}")
                 async with self._global_lock:
                     # 清空消息缓冲区
                     if session_id in self._sessions_messages:

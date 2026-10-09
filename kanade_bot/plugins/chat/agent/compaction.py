@@ -20,6 +20,7 @@ from pydantic_ai_harness.compaction import (
     SummarizingCompaction,
     TieredCompaction,
     compact_now,
+    estimate_context_tokens,
 )
 
 from kanade_bot.utils.session import SessionInfo
@@ -27,7 +28,7 @@ from kanade_bot.utils.session import SessionInfo
 from ..config import CompactionConfig
 
 if TYPE_CHECKING:
-    # 仅类型标注使用；运行时导入会造成 compaction ⇄ session_store 循环导入
+    # 仅类型标注使用；运行时导入会造成 compaction 和 session_store 循环导入
     from .session_store import SessionStore
 
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
@@ -90,16 +91,21 @@ def build_clear_mark(params: CompactionConfig) -> CompactionMark:
 
 
 def build_summary(params: CompactionConfig) -> SummarizingCompaction:
-    """构造摘要档策略（在线分层压缩与手动压缩共用同一构造）
+    """构造摘要档策略
+
+    轮末自动压缩、在线应急阀与手动压缩共用同一构造
 
     手动压缩经 `compact_now` 直接调用 `compact`，不经过触发判断，
-    `max_fraction` 仅为满足构造校验；摘要档未启用
-    （`summary_target_fraction` 为 None）时以 1.0 占位。
+    `max_fraction` 仅为满足构造校验；摘要档未启用时以 1.0 占位。
+
+    `preserve_first_user_message=False`：长期群聊里第一条用户消息无意义。
     """
     return SummarizingCompaction(
         model=params.summary_model,
         max_fraction=params.summary_target_fraction or 1.0,
         keep_messages=params.summary_keep_messages,
+        keep_user_messages=params.summary_keep_user_messages,
+        preserve_first_user_message=False,
     )
 
 
@@ -303,15 +309,107 @@ async def persist_run(
         await store.append(session_id, tail)
 
 
+async def compact_between_turns(
+    store: SessionStore,
+    session_id: str,
+    params: CompactionConfig,
+    messages: list[ModelMessage],
+    *,
+    model: Model | str,
+) -> dict[str, Any] | None:
+    """轮末自动压缩：最终回复落库后、下一轮开始前执行
+
+    常规压缩的唯一路径。与在线应急阀`build_compaction_capability`共用同一套分层策略，
+    但闸门用常规阈值：摘要档启用时为 `summary_target_fraction`
+    （clear→summary依次升级），未启用时退化为 `trigger_fraction` 上的零成本档。
+
+    `messages` 传调用方 run 结束时的完整历史，避免重复 restore；
+    在稳定存储状态上判定与压缩，落 mark 后下一轮 `restore` 重放即得同样结果。
+    未触发 / 窗口未固化返回 None。
+    """
+    if params.context_window is None or not messages:
+        # 窗口未固化时比例闸门无从计算；应急阀仍会自行回退解析，此处保守跳过
+        return None
+
+    if params.summary_target_fraction:
+        gate = params.summary_target_fraction
+        strategy: AbstractCapability[Any] = TieredCompaction(
+            tiers=[build_clear(params, online=True), build_summary(params)],
+            target_fraction=gate,
+            context_window=params.context_window,
+        )
+    else:
+        gate = params.trigger_fraction
+        strategy = build_clear(params, online=True)
+
+    est = estimate_context_tokens(messages)
+    if est <= gate * params.context_window:
+        return None
+
+    compacted = await compact_now(strategy, messages, model=model, conversation_id=session_id)
+    if compacted is messages or _messages_fingerprint(compacted) == _messages_fingerprint(messages):
+        return None
+
+    # mark 类型自验证（与 persist_run 同一判定）：零成本档对输入重放能
+    # 复现产物 → 只存参数（可重放）；否则视为摘要产物落快照
+    mark: CompactionMark = build_summary_mark(params, compacted)
+    if _messages_fingerprint(await apply_strategy(messages, build_clear_mark(params))) == (
+        _messages_fingerprint(compacted)
+    ):
+        mark = build_clear_mark(params)
+    total = await store.count(session_id)
+    mark.up_to_seq = total - 1
+    await store.add_compaction_mark(session_id, mark)
+    logger.debug(
+        f"会话{session_id}轮末压缩：策略={mark.strategy}，"
+        f"{len(messages)}条→{len(compacted)}条，估算{est}→{estimate_context_tokens(compacted)}tokens"
+    )
+    return {
+        "strategy": mark.strategy,
+        "before": len(messages),
+        "after": len(compacted),
+        "tokens_before": est,
+        "tokens_after": estimate_context_tokens(compacted),
+    }
+
+
+class _NoopCapability(AbstractCapability[Any]):
+    """永不改写请求上下文的占位 capability
+
+    `online_valve_fraction=None`（完全关闭在线压缩）时充当应急阀的空策略，
+    使 `RecordingCompaction` / `persist_run` 的记录路径保持统一。
+    """
+
+    async def before_model_request(
+        self,
+        ctx: RunContext[Any],
+        request_context: ModelRequestContext,
+    ) -> ModelRequestContext:
+        return request_context
+
+
 def build_compaction_capability(params: CompactionConfig = CompactionConfig()):
-    """构造压缩 capability"""
+    """构造 run 内应急压缩 capability（非常规压缩路径）
+
+    常规压缩在轮末进行（`compact_between_turns`）；
+    本 capability 仅在估算超过 `online_valve_fraction` 时才在 run 内压缩，
+    防止单轮内上下文暴涨击穿窗口导致 provider 报错。
+    """
+    if params.online_valve_fraction is None:
+        strategy: AbstractCapability[Any] = _NoopCapability()
+        return RecordingCompaction(strategy=strategy, params=params)
+
     clear = build_clear(params, online=True)
     if not params.summary_target_fraction:
-        strategy = clear
+        strategy = TieredCompaction(
+            tiers=[clear],
+            target_fraction=params.online_valve_fraction,
+            context_window=params.context_window,
+        )
     else:
         strategy = TieredCompaction(
             tiers=[clear, build_summary(params)],
-            target_fraction=params.summary_target_fraction,
+            target_fraction=params.online_valve_fraction,
             context_window=params.context_window,
         )
     return RecordingCompaction(strategy=strategy, params=params)

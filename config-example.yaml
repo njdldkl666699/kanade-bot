@@ -51,7 +51,9 @@ chat:
     min_clear_tokens: 2000
     summary_target_fraction: 0.9
     summary_model: null
-    summary_keep_messages: 0
+    summary_keep_messages: 20
+    summary_keep_user_messages: true
+    online_valve_fraction: 0.98
   session:
     buffer_max_size: 256
   memory:

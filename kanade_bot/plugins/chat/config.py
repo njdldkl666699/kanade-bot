@@ -113,7 +113,11 @@ class CompactionConfig(AttrDocModel):
     """会话压缩配置"""
 
     trigger_fraction: float = 0.8
-    """触发清理的上下文占用比例"""
+    """零成本档（清理工具结果）的触发比例
+
+    摘要档启用时，轮末压缩由`summary_target_fraction`驱动，本值不参与；
+    仅摘要档未启用时，轮末零成本档清理以本值为闸门。
+    """
 
     keep_pairs: NonNegativeInt = 3
     """`ClearToolResults` 保留的最近工具调用对数"""
@@ -134,7 +138,25 @@ class CompactionConfig(AttrDocModel):
     """摘要使用的模型 ID；`None` 表示继承主模型"""
 
     summary_keep_messages: NonNegativeInt = 40
-    """生成摘要时保留的最近消息条数"""
+    """生成摘要时保留的最近消息条数
+
+    启用 `summary_keep_user_messages` 时，本值是「被摘要范围内保留的用户消息条数」与
+    「原样保留的最近原始消息条数」共享的名额。用户消息优先占名额，剩余名额才留给最近的原始消息。
+    """
+
+    summary_keep_user_messages: bool = True
+    """摘要压缩时保留被摘要范围内最近的用户消息
+    
+    每条有截断上限，由`SummarizingCompaction.keep_user_messages_max_chars`设置，
+    默认20000字符，够用故暂不提供配置。
+    """
+
+    online_valve_fraction: float | None = 0.98
+    """run 内应急压缩阈值；None 表示完全关闭在线压缩
+
+    常规压缩在轮次结束后进行；run 内仅在估算超过该阈值时才应急压缩，
+    防止单轮内上下文暴涨击穿窗口。
+    """
 
     def fingerprint(self) -> str:
         """参数指纹：用于检测配置漂移"""
