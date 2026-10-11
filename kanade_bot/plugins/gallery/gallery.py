@@ -197,9 +197,7 @@ class GalleryImageIndex:
             data = json.loads(self._index_path().read_text(encoding="utf-8"))
             if data.get("version") == 1 and isinstance(data.get("entries"), dict):
                 self._entries = data["entries"]
-                self._picture_ids = {
-                    Path(relative).stem: relative for relative in self._entries
-                }
+                self._picture_ids = {Path(relative).stem: relative for relative in self._entries}
         except FileNotFoundError:
             pass
         except (OSError, ValueError, TypeError) as e:

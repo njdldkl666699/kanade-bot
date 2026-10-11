@@ -305,13 +305,9 @@ class RecipeBook:
         query = query.strip()
         if not query:
             return []
-        searchable = {
-            alias: self.guess_name(recipe) for alias, recipe in self.aliases.items()
-        }
+        searchable = {alias: self.guess_name(recipe) for alias, recipe in self.aliases.items()}
         searchable.update({name: name for name in self.by_name})
-        containing = {
-            name for candidate, name in searchable.items() if query in candidate
-        }
+        containing = {name for candidate, name in searchable.items() if query in candidate}
         if containing:
             return sorted(containing, key=lambda name: (len(name), name))[:limit]
         ranked = sorted(
@@ -394,18 +390,14 @@ class Mindle:
         self.last_recipe = recipe
         answer_group = self.book.group_id(self.answer)
         same_result = recipe.result_id == self.answer.result_id
-        same_group = answer_group is not None and answer_group == self.book.group_id(
-            recipe
-        )
+        same_group = answer_group is not None and answer_group == self.book.group_id(recipe)
         if same_result or same_group:
             # A result can have alternate recipes, and grouped recipes can have
             # different result items. Either kind of correct guess is rendered
             # as an entirely correct recipe.
             self.last_states = (GuessState.CORRECT,) * len(recipe.ingredients)
             return GuessResult.WIN
-        self.last_states = compare_ingredients(
-            recipe.ingredients, self.answer.ingredients
-        )
+        self.last_states = compare_ingredients(recipe.ingredients, self.answer.ingredients)
         if len(self.guessed_item_ids) >= self.max_attempts:
             return GuessResult.LOSS
         return None
@@ -423,9 +415,7 @@ class Mindle:
         )
         if not item_ids:
             return None
-        unrevealed = [
-            item_id for item_id in item_ids if item_id not in self.hinted_item_ids
-        ]
+        unrevealed = [item_id for item_id in item_ids if item_id not in self.hinted_item_ids]
         item_id = random.choice(unrevealed or item_ids)
         image_path = self.book.texture_path(item_id)
         if image_path is None:
@@ -471,9 +461,7 @@ class Mindle:
             y = (self.SLOT_ORIGIN[1] + row * self.SLOT_STEP) * self.SCALE
             size = self.SLOT_SIZE * self.SCALE
             if states:
-                draw.rectangle(
-                    (x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]]
-                )
+                draw.rectangle((x, y, x + size - 1, y + size - 1), fill=self.COLORS[states[index]])
             if not ingredient.is_air:
                 self._paste_item(canvas, ingredient.options[0], (x, y, size))
 

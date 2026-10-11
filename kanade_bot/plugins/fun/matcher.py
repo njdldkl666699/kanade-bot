@@ -6,7 +6,6 @@ from nonebot.typing import T_State
 from .duel import get_session_users
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 ciallo = on_fullmatch(

@@ -1,7 +1,6 @@
 from nonebot import on_command, require
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 mirror = on_command(

@@ -7,7 +7,6 @@ from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.schema import BaseAgentConfig, ConfigRegistry
 
 require("nonebot_plugin_localstore")
-
 from nonebot_plugin_localstore import get_plugin_cache_file, get_plugin_config_file
 
 

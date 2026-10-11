@@ -8,7 +8,6 @@ from .common import PlatformType, asia_shanghai_now
 from .persistence import DeferredWriter, atomic_write_text
 
 require("nonebot_plugin_apscheduler")
-
 from nonebot_plugin_apscheduler import scheduler
 
 

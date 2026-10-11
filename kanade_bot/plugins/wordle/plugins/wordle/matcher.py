@@ -5,7 +5,6 @@ from kanade_bot.plugins.wordle.util import SessionId
 from .wordle import Wordle
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 games: dict[str, Wordle] = {}

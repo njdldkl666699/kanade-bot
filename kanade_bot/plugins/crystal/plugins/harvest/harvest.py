@@ -13,7 +13,6 @@ from .cache import harvest_power_cache
 from .config import cfg, harvest_config
 
 require("nonebot_plugin_htmlrender")
-
 from nonebot_plugin_htmlrender import template_to_pic
 
 

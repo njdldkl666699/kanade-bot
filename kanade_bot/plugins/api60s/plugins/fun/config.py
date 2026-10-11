@@ -5,7 +5,6 @@ from nonebot import require
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry
 
 require("nonebot_plugin_localstore")
-
 from nonebot_plugin_localstore import get_plugin_cache_file
 
 

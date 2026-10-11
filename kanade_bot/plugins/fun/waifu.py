@@ -133,8 +133,9 @@ LOLI_API_URL = "https://www.loliapi.com/bg/?type=url"
 
 
 async def random_loli_waifu() -> str:
-    url_resp = await HTTPX_CLIENT.get(LOLI_API_URL)
-    return url_resp.text
+    resp = await HTTPX_CLIENT.get(LOLI_API_URL)
+    resp.raise_for_status()
+    return resp.text
 
 
 async def get_compressed_image(
@@ -144,6 +145,7 @@ async def get_compressed_image(
     lossless: bool = False,
 ) -> bytes:
     resp = await HTTPX_CLIENT.get(url)
+    resp.raise_for_status()
     raw = resp.content
     if len(raw) < 2 * 1024 * 1024:
         return raw

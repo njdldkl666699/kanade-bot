@@ -72,5 +72,8 @@ nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
 nonebot-plugin-picstatus = ["nonebot_plugin_picstatus"]
 nonebot-plugin-githubcard = ["nonebot_plugin_githubcard"]
 
+[tool.ruff]
+line-length = 100
+
 [tool.ruff.lint]
 ignore = ["B008", "RUF012", "BLE001"]

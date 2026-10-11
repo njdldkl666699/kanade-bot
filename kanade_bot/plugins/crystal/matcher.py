@@ -4,7 +4,6 @@ from nonebot.matcher import Matcher
 from .enum import DaypartEnum
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 check_in = on_command(

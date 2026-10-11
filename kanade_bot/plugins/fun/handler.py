@@ -48,7 +48,6 @@ from .matcher import (
 from .waifu import get_compressed_image, query_lolicon_waifus, random_loli_waifu
 
 require("crystal")
-
 from kanade_bot.plugins.crystal import (
     HandlerKeyEnum,
     check_user_crystal,

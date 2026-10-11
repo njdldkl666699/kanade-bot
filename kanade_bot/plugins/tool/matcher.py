@@ -4,7 +4,6 @@ from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 thunder_link_parse = on_command(

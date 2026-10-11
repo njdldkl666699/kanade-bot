@@ -6,7 +6,6 @@ from nonebot.exception import ActionFailed
 from .config import ScheduleConfig, schedules
 
 require("nonebot_plugin_apscheduler")
-
 from nonebot_plugin_apscheduler import scheduler
 
 TOOL_SCHEDULE_JOB_PREFIX = "tool_schedule"

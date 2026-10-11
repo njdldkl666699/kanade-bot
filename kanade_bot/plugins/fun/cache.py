@@ -10,7 +10,6 @@ from kanade_bot.utils.common import PlatformType
 from .config import Config
 
 require("nonebot_plugin_localstore")
-
 from nonebot_plugin_localstore import get_plugin_cache_file
 
 cfg = get_plugin_config(Config).fun

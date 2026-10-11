@@ -12,7 +12,6 @@ from .config import cfg
 from .enum import DaypartEnum
 
 require("nonebot_plugin_apscheduler")
-
 from nonebot_plugin_apscheduler import scheduler
 
 check_in_cache = UserDailyCache(set[DaypartEnum], cfg.cache_file_path)

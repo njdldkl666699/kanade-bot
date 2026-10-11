@@ -13,7 +13,6 @@ from kanade_bot.utils.persistence import atomic_write_text
 from .config import Config
 
 require("nonebot_plugin_localstore")
-
 from nonebot_plugin_localstore import get_plugin_config_dir
 
 __plugin_meta__ = PluginMetadata(

@@ -9,7 +9,6 @@ from nonebot import require
 from .config import cfg
 
 require("nonebot_plugin_htmlrender")
-
 from nonebot_plugin_htmlrender import template_to_pic
 
 

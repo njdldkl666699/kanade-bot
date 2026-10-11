@@ -7,7 +7,6 @@ from kanade_bot.utils.common import get_project_version
 from .config import Config
 
 require("nonebot_plugin_htmlrender")
-
 from nonebot_plugin_htmlrender import md_to_pic
 
 cfg = get_plugin_config(Config).help

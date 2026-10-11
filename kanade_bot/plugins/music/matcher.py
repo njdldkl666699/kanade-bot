@@ -2,7 +2,6 @@ from nonebot import on_command, require
 from nonebot.permission import SUPERUSER
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 music_recommend = on_command(

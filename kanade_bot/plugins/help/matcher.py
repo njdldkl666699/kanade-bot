@@ -9,7 +9,6 @@ from nonebot.permission import SUPERUSER
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
 
 require("command_counter")
-
 from kanade_bot.plugins.command_counter import register_matcher
 
 help_command = on_command(

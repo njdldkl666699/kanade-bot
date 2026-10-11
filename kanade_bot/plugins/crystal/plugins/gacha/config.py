@@ -8,14 +8,13 @@ from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schem
 from .enum import RarityEnum
 
 require("nonebot_plugin_localstore")
-require("model_updater")
-
 from nonebot_plugin_localstore import (
     get_plugin_cache_dir,
     get_plugin_config_file,
     get_plugin_data_file,
 )
 
+require("model_updater")
 from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 
