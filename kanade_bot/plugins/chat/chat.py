@@ -116,7 +116,7 @@ async def send_message_in_chunks(
             chat_manager.get_session(session_info.session_id).send_and_wait(
                 session_info,
                 prompt,
-                bot_id=onebot.self_id if onebot else None,
+                bot_id=bot.self_id,
                 rag_docs=rag_docs,
                 reply_text=reply_text,
                 images=attachments,

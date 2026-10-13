@@ -83,14 +83,14 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 
 chat 主 agent 之外还有两个独立 `Agent` 实例共用 `pai_runtime` 模型层：`image_caption`（图片转述，无工具）与 summary 插件的会话总结器（压缩摘要也复用同一套构建函数）。
 
-`schedule.py` 是"被动应答"之外唯一的主动出口。agent 经 `schedule_task` 工具创建一次性任务（`run_at` ISO 8601 时刻或 `delay_minutes` 延迟分钟，二选一，上海时区；非法输入的报错文本直接反馈给模型纠正）。任务定义持久化为 JSON（含会话快照与 `bot_id`，原子写），重启后恢复、已过期任务跳过并清理。到点由 APScheduler 回调唤醒会话：以显式 `system_notification` 注入 + 空用户消息运行一轮（显式注入不消费排队的系统通知槽位），流式回复经 `deliver` 主动发回原会话。触发链路上有两个放弃点：目标会话已拉黑则静默放弃（视为完成，不重试）；创建者水晶余额为负则不唤醒 agent，直接发文本告知。触发失败按配置有限重试（尝试计数与下次触发时间写回文件，重启可恢复重试），耗尽后丢弃；主动唤醒的运行按实际 usage 向创建者计费，峰谷按触发时刻判定。用户命令「任务列表 / 取消任务」（取消仅限本会话创建的任务）；主动发送仅支持 OneBot 平台。
+`schedule.py` 是"被动应答"之外唯一的主动出口。agent 经 `schedule_task` 工具创建一次性定时任务，任务持久化为 JSON，重启恢复、过期跳过。到点由 APScheduler 回调以系统通知唤醒会话运行一轮，回复经 `deliver` 主动发回原会话。目标会话已拉黑或创建者水晶余额为负则不唤醒直接放弃；触发失败有限重试，耗尽丢弃；唤醒的运行按实际 usage 向创建者计费。用户命令「任务列表 / 取消任务」可查询与取消。
 
 ## 7. 代码地图
 
 ```
 bot.py                          # 入口：配置加载、NoneBot 初始化、适配器与插件注册
 kanade_bot/plugins/chat/
-├── matcher.py / handler.py     # 事件入口与命令（重置/中断/压缩/统计/任务/ban）
+├── matcher.py / handler.py     # 事件入口与命令
 ├── chat.py / deliver.py        # 回复判定与分段投递
 ├── rag.py / ban.py / config.py
 └── agent/                      # 见 §2 职责表

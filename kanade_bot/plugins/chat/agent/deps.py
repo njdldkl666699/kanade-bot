@@ -16,8 +16,8 @@ class ChatDeps:
     memory_context: MemoryContext
     """当前发送者对应的记忆作用域上下文"""
 
-    bot_id: str | None = None
-    """OneBot Bot实例ID"""
+    bot_id: str
+    """Bot实例ID"""
 
     sandbox: SandboxSession | None = None
     """当前聊天会话绑定的沙箱会话"""

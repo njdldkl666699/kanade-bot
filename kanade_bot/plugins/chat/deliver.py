@@ -1,6 +1,7 @@
-"""OneBot 消息投递：助手回复解析与分批发送
+"""消息投递：助手回复解析与分批发送
 
-被动回复与主动发送共用同一套内容解析与批量发送逻辑。
+被动回复与主动发送共用同一套内容解析与批量发送逻辑；
+主动发送按Bot类型分发到OneBot或Console适配器。
 """
 
 import random
@@ -8,6 +9,7 @@ import re
 from collections.abc import Awaitable, Callable
 
 from nonebot import require
+from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment
@@ -198,3 +200,35 @@ async def send_text_onebot_proactive(bot: OneBot, session_info: SessionInfo, tex
         raise ValueError(
             f"会话 {session_info.session_id} 没有可用的群组ID或用户ID，无法主动发送消息"
         )
+
+
+async def send_console_proactive(bot: ConsoleBot, session_info: SessionInfo, content: str):
+    """把一段文本主动发送到Console会话
+
+    与被动回复保持一致：整段作为纯文本发送，不做分段、表情包展开与合并转发；
+    发送失败抛出异常由调用方处理。
+    """
+    if group_id := session_info.group_id:
+        await bot.send_message(channel_id=group_id, message=content)
+    elif user_id := session_info.user_id:
+        await bot.send_private_message(user_id=user_id, message=content)
+    else:
+        raise ValueError(
+            f"会话 {session_info.session_id} 没有可用的频道ID或用户ID，无法主动发送消息"
+        )
+
+
+async def send_proactive(bot: OneBot | ConsoleBot, session_info: SessionInfo, content: str):
+    """把一段助手回复主动发送到会话，按Bot类型分发到对应适配器"""
+    if isinstance(bot, ConsoleBot):
+        await send_console_proactive(bot, session_info, content)
+    else:
+        await send_onebot_proactive(bot, session_info, content)
+
+
+async def send_text_proactive(bot: OneBot | ConsoleBot, session_info: SessionInfo, text: str):
+    """把一段纯文本主动发送到会话，按Bot类型分发到对应适配器"""
+    if isinstance(bot, ConsoleBot):
+        await send_console_proactive(bot, session_info, text)
+    else:
+        await send_text_onebot_proactive(bot, session_info, text)

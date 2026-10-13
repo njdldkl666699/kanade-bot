@@ -11,6 +11,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from nonebot import get_bot, get_driver, logger, require
+from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from pydantic import BaseModel
 from pydantic_ai import RunUsage
@@ -20,7 +21,7 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..ban import is_banned
 from ..config import cfg
-from ..deliver import send_onebot_proactive, send_text_onebot_proactive
+from ..deliver import send_proactive, send_text_proactive
 
 require("nonebot_plugin_apscheduler")
 from nonebot_plugin_apscheduler import scheduler
@@ -89,8 +90,8 @@ class ScheduledTask(BaseModel):
     session_info: SessionInfo
     """创建时的会话信息快照，触发时据此定位发送目标与计费作用域"""
 
-    bot_id: str | None = None
-    """创建时的OneBot Bot实例ID"""
+    bot_id: str
+    """创建时的Bot实例ID；缺失时触发即失败"""
 
     description: str
     """任务内容的自然语言描述，到点后原样作为系统通知"""
@@ -113,6 +114,17 @@ class ScheduledTask(BaseModel):
     @property
     def run_at_dt(self) -> datetime:
         return datetime.fromisoformat(self.run_at)
+
+
+def _resolve_task_bot(task: ScheduledTask) -> OneBot | ConsoleBot:
+    """按创建时记录的bot_id定位定时任务触发用的Bot实例"""
+    try:
+        bot = get_bot(task.bot_id)
+    except (KeyError, ValueError) as e:
+        raise RuntimeError(f"Bot {task.bot_id} 不在线") from e
+    if not isinstance(bot, OneBot | ConsoleBot):
+        raise TypeError(f"会话{task.session_id}所在平台的Bot类型不支持主动发送定时任务结果")
+    return bot
 
 
 class ScheduledTaskStore:
@@ -218,7 +230,7 @@ class ScheduledTaskManager:
         self,
         *,
         session_info: SessionInfo,
-        bot_id: str | None,
+        bot_id: str,
         description: str,
         run_at: datetime,
     ) -> ScheduledTask:
@@ -317,12 +329,7 @@ class ScheduledTaskManager:
                 logger.info(f"定时任务{task.task_id}的目标用户{info.user_id}已拉黑，放弃执行")
                 return
 
-        try:
-            bot = get_bot(task.bot_id)
-        except (KeyError, ValueError) as e:
-            raise RuntimeError(f"Bot {task.bot_id} 不在线") from e
-        if not isinstance(bot, OneBot):
-            raise TypeError(f"会话{task.session_id}所在平台的Bot类型不支持主动发送定时任务结果")
+        bot = _resolve_task_bot(task)
 
         # 计费预检：创建者余额已为负则不唤醒agent，直接文本告知
         platform = info.platform
@@ -330,7 +337,7 @@ class ScheduledTaskManager:
         if platform and creator:
             crystal = get_crystal(platform, creator)
             if crystal < 0:
-                await send_text_onebot_proactive(
+                await send_text_proactive(
                     bot,
                     info,
                     f"定时任务到点：{task.description}\n"
@@ -369,7 +376,7 @@ class ScheduledTaskManager:
         ) as contents:
             async for content in contents:
                 if content := content.strip():
-                    await send_onebot_proactive(bot, info, content)
+                    await send_proactive(bot, info, content)
 
 
 scheduled_task_manager = ScheduledTaskManager(
