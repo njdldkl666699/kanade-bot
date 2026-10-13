@@ -38,6 +38,7 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .compaction import (
+    RequestBudgetCapability,
     build_compaction_capability,
     build_summary,
     build_summary_mark,
@@ -116,7 +117,9 @@ class ChatSessionManager:
     """聊天会话管理器：会话存储、消息缓冲区、会话锁与Agent运行"""
 
     def __init__(self):
-        self._store = SessionStore(cfg.session.db_file_path)
+        self._store = SessionStore(
+            cfg.session.sessions_dir_path, legacy_db_path=cfg.session.db_file_path
+        )
         """会话存储"""
 
         self.memory_store = MemoryStore(
@@ -138,7 +141,17 @@ class ChatSessionManager:
                 update={"context_window": window}
             )
             logger.info(f"压缩阈值窗口已固化为主模型解析值：{window} tokens")
-        self._compaction = build_compaction_capability(self._compaction_params)
+        self._model_settings = build_model_settings(cfg.agent)
+        self._output_upper_tokens = self._model_settings.get("max_tokens")
+        self._compaction = build_compaction_capability(
+            self._compaction_params,
+            output_upper_tokens=self._output_upper_tokens,
+            model_settings=self._model_settings,
+        )
+        self._request_budget = RequestBudgetCapability(
+            context_window=self._compaction_params.context_window,
+            output_upper_tokens=self._output_upper_tokens,
+        )
 
         self._prompt = ChatPrompt(cfg)
         """模块化系统提示词渲染器"""
@@ -160,7 +173,7 @@ class ChatSessionManager:
         """MCP 工具集"""
         self._sandbox_manager: SandboxManager | None = None
 
-        capabilities: list[AbstractCapability] = [self._compaction]
+        capabilities: list[AbstractCapability] = [self._compaction, self._request_budget]
         if cfg.sandbox.enabled:
             self._sandbox_manager = SandboxManager()
             capabilities.extend(
@@ -182,13 +195,14 @@ class ChatSessionManager:
             ],
             deps_type=ChatDeps,
             model=get_model(cfg.agent),
-            model_settings=build_model_settings(cfg.agent),
+            model_settings=self._model_settings,
             tools=build_tools(),
             capabilities=capabilities,
         )
 
         driver = get_driver()
         driver.on_startup(self._start_mcp)
+        driver.on_startup(self._store.migrate_legacy)
         driver.on_startup(self._load_sessions_messages_cache)
         driver.on_shutdown(self._save_sessions_messages_cache)
         driver.on_shutdown(self._shutdown)
@@ -561,6 +575,8 @@ class ChatSessionManager:
                         self._compaction_params,
                         history,
                         model=model,
+                        model_settings=self._model_settings,
+                        output_upper_tokens=self._output_upper_tokens,
                     ):
                         logger.info(f"会话{session_id}轮末压缩完成：{info}")
                 except Exception as e:
@@ -700,7 +716,11 @@ class ChatSessionManager:
             assert isinstance(model, Model), "Agent 构造时传入的必为 Model 实例"
 
             compacted = await compact_now(
-                build_summary(self._compaction_params),
+                build_summary(
+                    self._compaction_params,
+                    model_settings=self._model_settings,
+                    output_upper_tokens=self._output_upper_tokens,
+                ),
                 messages,
                 model=model,
                 conversation_id=session_id,

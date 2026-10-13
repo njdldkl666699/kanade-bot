@@ -91,14 +91,21 @@ class AgentConfig(BaseAgentConfig):
 class SessionConfig(AttrDocModel):
     """会话历史存储配置"""
 
+    sessions_dir: str = "sessions"
+    """会话历史数据库目录，每个会话一个 SQLite 文件"""
+
     db_file: str = "agent_sessions.sqlite3"
-    """会话历史 SQLite 数据库文件名"""
+    """旧版单库文件名；仅用于启动时检测并迁移到分库目录"""
 
     buffer_max_size: PositiveInt = 100
     """消息缓冲区最大条数，超出后丢弃最早的消息"""
 
     buffer_cache_file: str = "session_messages_cache.json"
     """消息缓冲区缓存文件名"""
+
+    @property
+    def sessions_dir_path(self) -> Path:
+        return get_plugin_data_file(self.sessions_dir)
 
     @property
     def db_file_path(self) -> Path:
@@ -112,7 +119,7 @@ class SessionConfig(AttrDocModel):
 class CompactionConfig(AttrDocModel):
     """会话压缩配置"""
 
-    trigger_fraction: float = 0.8
+    trigger_fraction: float = 0.7
     """零成本档（清理工具结果）的触发比例
 
     摘要档启用时，轮末压缩由`summary_target_fraction`驱动，本值不参与；
@@ -151,11 +158,10 @@ class CompactionConfig(AttrDocModel):
     默认20000字符，够用故暂不提供配置。
     """
 
-    online_valve_fraction: float | None = 0.98
+    online_valve_fraction: float | None = 0.92
     """run 内应急压缩阈值；None 表示完全关闭在线压缩
 
-    常规压缩在轮次结束后进行；run 内仅在估算超过该阈值时才应急压缩，
-    防止单轮内上下文暴涨击穿窗口。
+    常规压缩在轮次结束后进行；run 内仅在估算超过该阈值时才应急压缩，防止单轮内上下文暴涨击穿窗口。
     """
 
     def fingerprint(self) -> str:
@@ -248,7 +254,7 @@ class SandboxConfig(AttrDocModel):
 
     @property
     def workspace_dir_path(self) -> Path:
-        return get_plugin_cache_file(self.workspace_dir)
+        return get_plugin_data_file(self.workspace_dir)
 
 
 class ImageCaptionConfig(BaseAgentConfig):

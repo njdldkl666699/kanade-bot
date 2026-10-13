@@ -137,3 +137,13 @@ class TestBuildModelSettings:
         monkeypatch.setattr(pai_runtime, "_fetch_model_metadata", lambda _p, _m: (None, None))
         settings = pai_runtime.build_model_settings(BaseAgentConfig(model="m", provider=PROVIDER))
         assert "max_tokens" not in settings
+
+    def test_resolve_output_tokens_prefers_explicit_config(self, monkeypatch):
+        monkeypatch.setattr(pai_runtime, "_fetch_model_metadata", lambda _p, _m: (None, 393216))
+        config = BaseAgentConfig(model="m", provider=PROVIDER, max_output_tokens=65536)
+        assert pai_runtime.resolve_model_output_tokens(config) == 65536
+
+    def test_resolve_output_tokens_uses_provider_metadata(self, monkeypatch):
+        monkeypatch.setattr(pai_runtime, "_fetch_model_metadata", lambda _p, _m: (None, 393216))
+        config = BaseAgentConfig(model="m", provider=PROVIDER)
+        assert pai_runtime.resolve_model_output_tokens(config) == 393216

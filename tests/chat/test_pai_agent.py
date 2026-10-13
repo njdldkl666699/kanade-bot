@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import types
@@ -62,6 +63,7 @@ _localstore._try_get_caller_plugin = lambda: nonebot.get_plugin("model_updater")
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import PrepareTools
 from pydantic_ai.messages import (
+    BinaryContent,
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
@@ -73,7 +75,7 @@ from pydantic_ai.messages import (
     repair_messages,
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RequestUsage, UsageLimits
 from pydantic_ai_harness.compaction import compact_now
 
 from kanade_bot.plugins.chat.agent import compaction as compaction_mod
@@ -83,6 +85,109 @@ from kanade_bot.utils import pai_runtime
 from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig
 
 SessionStore = store_mod.SessionStore
+
+
+class RequestBudgetTest(unittest.IsolatedAsyncioTestCase):
+    def test_image_estimate_uses_count_not_binary_size(self):
+        small = BinaryContent(data=b"x", media_type="image/jpeg")
+        large = BinaryContent(data=b"x" * 10_000_000, media_type="image/png")
+
+        small_messages = [ModelRequest(parts=[UserPromptPart(content=[small])])]
+        large_messages = [ModelRequest(parts=[UserPromptPart(content=[large])])]
+
+        self.assertEqual(
+            compaction_mod.estimate_request_tokens(small_messages),
+            compaction_mod.IMAGE_TOKEN_ESTIMATE,
+        )
+        self.assertEqual(
+            compaction_mod.estimate_request_tokens(large_messages),
+            compaction_mod.IMAGE_TOKEN_ESTIMATE,
+        )
+        self.assertEqual(
+            compaction_mod.estimate_request_tokens(small_messages, image_tokens_per_image=512),
+            512,
+        )
+
+    def test_only_images_after_usage_anchor_are_added(self):
+        image = BinaryContent(data=b"x", media_type="image/jpeg")
+        messages = [
+            ModelRequest(parts=[UserPromptPart(content=[image])]),
+            ModelResponse(
+                parts=[TextPart(content="done")],
+                usage=RequestUsage(input_tokens=500, output_tokens=10),
+            ),
+            ModelRequest(parts=[UserPromptPart(content=[image])]),
+        ]
+
+        self.assertEqual(
+            compaction_mod.estimate_request_tokens(messages),
+            510 + compaction_mod.IMAGE_TOKEN_ESTIMATE,
+        )
+
+    async def test_over_budget_request_is_rejected_before_model_call(self):
+        model, scripted = _make_model([resp_text("should not run")])
+        agent = Agent(
+            model,
+            capabilities=[
+                compaction_mod.RequestBudgetCapability(
+                    context_window=100_000,
+                    output_upper_tokens=65_536,
+                )
+            ],
+        )
+        with self.assertRaises(compaction_mod.ContextBudgetError):
+            await agent.run("x" * 400_000)
+        self.assertEqual(scripted.sent_messages, [])
+
+    async def test_incident_sized_request_reduces_completion_budget(self):
+        received: list[int | None] = []
+
+        def answer(_messages, info):
+            received.append(info.model_settings.get("max_tokens") if info.model_settings else None)
+            return resp_text("ok")
+
+        model = FunctionModel(answer)
+        agent = Agent(
+            model,
+            capabilities=[
+                compaction_mod.RequestBudgetCapability(
+                    context_window=1_048_576,
+                    output_upper_tokens=393_216,
+                )
+            ],
+        )
+        await agent.run("x" * (659_139 * 4))
+
+        # 1,048,576 - 659,139 - ceil(5%) = 337,008.
+        self.assertEqual(received, [337_008])
+
+    async def test_summary_agent_uses_inherited_dynamic_settings(self):
+        received: list[int | None] = []
+
+        def answer(_messages, info):
+            received.append(info.model_settings.get("max_tokens") if info.model_settings else None)
+            return resp_text("summary")
+
+        model = FunctionModel(answer)
+        params = CompactionParams(
+            context_window=30_000,
+            summary_keep_messages=1,
+            summary_keep_user_messages=False,
+        )
+        await compact_now(
+            compaction_mod.build_summary(
+                params,
+                model_settings={"max_tokens": 25_000},
+                output_upper_tokens=25_000,
+            ),
+            make_history(20),
+            model=model,
+        )
+
+        self.assertEqual(len(received), 1)
+        self.assertGreaterEqual(received[0], compaction_mod.MIN_OUTPUT_TOKENS)
+        self.assertLess(received[0], 25_000)
+
 
 CLEARED = "[tool result cleared]"
 
@@ -326,7 +431,7 @@ class SessionStoreTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.store = SessionStore(Path(self.tmp.name) / "sessions.sqlite3")
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
 
     async def test_append_and_load_roundtrip(self):
         history = make_history(3)
@@ -393,6 +498,184 @@ class SessionStoreTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.store.load("c1"), [])
 
 
+# ===== 图片外置与还原（blob 存储） =====
+
+
+_LEGACY_DDL = """
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conv_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    payload BLOB NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS compaction_marks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conv_id TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    params TEXT NOT NULL,
+    result BLOB,
+    fingerprint TEXT NOT NULL DEFAULT '',
+    applied_at REAL NOT NULL,
+    up_to_seq INTEGER NOT NULL DEFAULT -1
+);
+"""
+
+
+def make_image_history(tag: str = "img") -> list[ModelMessage]:
+    """带 BinaryContent 图片的用户消息 + 响应"""
+    image = BinaryContent(data=b"\x89PNG-fake-image-bytes" + tag.encode(), media_type="image/png")
+    return [
+        ModelRequest(parts=[UserPromptPart(content=[f"{tag}看这张图", image])]),
+        ModelResponse(parts=[TextPart(content=f"{tag}好的")], finish_reason="stop"),
+    ]
+
+
+class BlobExternalizationTest(unittest.IsolatedAsyncioTestCase):
+    """BinaryContent 外置为 blobs 表 + 占位符，读取边界无损还原"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "sessions"
+        self.store = SessionStore(self.root)
+
+    def _first_payload(self, conv_id: str = "c1") -> bytes:
+        with sqlite3.connect(self.root / f"{conv_id}.sqlite3") as conn:
+            return conn.execute("SELECT payload FROM messages ORDER BY seq LIMIT 1").fetchone()[0]
+
+    async def test_roundtrip_dedup_and_placeholder_payload(self):
+        history = make_image_history()
+        await self.store.append("c1", history)
+        await self.store.append("c1", history[:1])  # 同图重发
+
+        restored = await self.store.load("c1")
+        self.assertEqual(fp(restored[:2]), fp(history), "图片消息应无损还原")
+
+        payload = self._first_payload()
+        self.assertIn(b"$kanade-blob:", payload, "payload 内应为占位符")
+        self.assertNotIn(b"\x89PNG-fake-image-bytes", payload, "原始 bytes 不得入 JSON")
+        with sqlite3.connect(self.root / "c1.sqlite3") as conn:
+            blobs = conn.execute("SELECT COUNT(*) FROM blobs").fetchone()[0]
+        self.assertEqual(blobs, 1, "同图去重后只存一份")
+
+    async def test_summary_mark_result_externalized(self):
+        """摘要快照里的图片同样外置，恢复直接用快照且还原无损"""
+        history = make_image_history()
+        await self.store.append("c1", history)
+        mark = compaction_mod.build_summary_mark(TEST_PARAMS, history)
+        mark.up_to_seq = len(history) - 1
+        await self.store.add_compaction_mark("c1", mark)
+
+        marks = await self.store.load_compaction_marks("c1")
+        self.assertEqual(
+            fp(ModelMessagesTypeAdapter.validate_json(marks[0].result)),
+            fp(history),
+            "mark result 读取时应已还原为真实 BinaryContent",
+        )
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(history), "summarizing mark 整体替换后应等于快照")
+
+
+class RestoreCacheTest(unittest.IsolatedAsyncioTestCase):
+    """restore 结果缓存：命中免重放、写路径失效、参数指纹隔离"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    async def test_cache_hit_invalidate_on_write(self):
+        history = make_history(2)
+        await self.store.append("c1", history)
+
+        first = await self.store.restore("c1", params=TEST_PARAMS)
+        db = self.store._conv_db("c1")
+        self.assertIsNotNone(db._restore_cache, "restore 后应写入缓存")
+        second = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(first), fp(second))
+
+        await self.store.append("c1", make_history(1, "new"))
+        self.assertIsNone(db._restore_cache, "写路径应失效缓存")
+        third = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(len(third), len(history) + 3)
+
+    async def test_cache_keyed_by_params_fingerprint(self):
+        await self.store.append("c1", make_history(2))
+        other = CompactionParams(keep_pairs=TEST_PARAMS.keep_pairs + 7)
+
+        await self.store.restore("c1", params=TEST_PARAMS)
+        db = self.store._conv_db("c1")
+        cached = db._restore_cache
+        await self.store.restore("c1", params=other)
+        self.assertIsNot(db._restore_cache, cached, "参数不同不得命中旧缓存")
+
+
+class LegacyMigrationTest(unittest.IsolatedAsyncioTestCase):
+    """旧版单库（含 conv_id 列）自动迁移为分库"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.legacy = Path(self.tmp.name) / "agent_sessions.sqlite3"
+
+    def _build_legacy(self):
+        image_history = make_image_history("legacy")
+        text_history = make_history(2, "legacy")
+        with sqlite3.connect(self.legacy) as conn:
+            conn.executescript(_LEGACY_DDL)
+            for seq, msg in enumerate(image_history):
+                conn.execute(
+                    "INSERT INTO messages (conv_id, seq, payload, created_at) VALUES (?, ?, ?, ?)",
+                    ("c1", seq, ModelMessagesTypeAdapter.dump_json([msg]), 1.0),
+                )
+            for seq, msg in enumerate(text_history):
+                conn.execute(
+                    "INSERT INTO messages (conv_id, seq, payload, created_at) VALUES (?, ?, ?, ?)",
+                    ("c2", seq, ModelMessagesTypeAdapter.dump_json([msg]), 1.0),
+                )
+            mark = compaction_mod.build_summary_mark(TEST_PARAMS, image_history)
+            mark.up_to_seq = 1
+            conn.execute(
+                "INSERT INTO compaction_marks "
+                "(conv_id, strategy, params, result, fingerprint, applied_at, up_to_seq) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "c1",
+                    mark.strategy,
+                    json.dumps(mark.params),
+                    mark.result,
+                    mark.fingerprint,
+                    mark.applied_at,
+                    mark.up_to_seq,
+                ),
+            )
+            conn.commit()
+        return image_history, text_history
+
+    async def test_migrate_splits_and_archives(self):
+        image_history, text_history = self._build_legacy()
+        store = SessionStore(Path(self.tmp.name) / "sessions", legacy_db_path=self.legacy)
+        await store.migrate_legacy()
+
+        self.assertFalse(self.legacy.exists(), "旧库应被改名归档")
+        self.assertTrue(self.legacy.with_name(self.legacy.name + ".migrated.bak").exists())
+
+        self.assertEqual(await store.count("c1"), 2)
+        self.assertEqual(await store.count("c2"), 6)
+        self.assertEqual(fp(await store.load("c2")), fp(text_history))
+        restored = await store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(image_history), "迁移后图片与摘要快照均应无损还原")
+
+    async def test_migrate_idempotent_and_skip_partial(self):
+        self._build_legacy()
+        store = SessionStore(Path(self.tmp.name) / "sessions", legacy_db_path=self.legacy)
+        await store.migrate_legacy()
+        # 旧库已归档：再次迁移为空操作
+        await store.migrate_legacy()
+        self.assertEqual(await store.count("c2"), 6)
+
+
 # ===== 恢复一致性（压缩事件可重放的前提） =====
 
 
@@ -402,7 +685,7 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.db = Path(self.tmp.name) / "sessions.sqlite3"
+        self.db = Path(self.tmp.name) / "sessions"
 
     async def test_restored_matches_online_history(self):
         """记录「关闭前实际发送的消息指纹」→ 重启 → 重建 → 指纹必须相同"""
@@ -645,7 +928,7 @@ class ManualCompactionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.db = Path(self.tmp.name) / "sessions.sqlite3"
+        self.db = Path(self.tmp.name) / "sessions"
 
     async def test_manual_compact_record_and_restore(self):
         """手动压缩 → mark 落库 → 重启恢复与压缩产物一致，DB 全量保留"""
@@ -752,7 +1035,7 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.db = Path(self.tmp.name) / "sessions.sqlite3"
+        self.db = Path(self.tmp.name) / "sessions"
 
     async def test_below_gate_noop(self):
         """估算低于闸门时不压缩、不落 mark"""

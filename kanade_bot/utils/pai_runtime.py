@@ -16,6 +16,7 @@ from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
+from pydantic_ai_harness.compaction import resolve_context_window
 
 from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig
 
@@ -164,8 +165,6 @@ def resolve_model_context_window(config: BaseAgentConfig) -> int | None:
     if provider is not None and (window := _fetch_model_metadata(provider, config.model)[0]):
         return window
 
-    from pydantic_ai_harness.compaction import resolve_context_window
-
     return resolve_context_window(get_model(config))
 
 
@@ -175,9 +174,7 @@ def build_model_settings(config: BaseAgentConfig) -> ModelSettings:
     if config.reasoning_effort:
         extra_body["reasoning_effort"] = config.reasoning_effort
 
-    max_tokens = config.max_output_tokens
-    if max_tokens is None and config.provider is not None:
-        _, max_tokens = _fetch_model_metadata(config.provider, config.model)
+    max_tokens = resolve_model_output_tokens(config)
 
     settings: ModelSettings = {}
     if max_tokens:
@@ -185,6 +182,16 @@ def build_model_settings(config: BaseAgentConfig) -> ModelSettings:
     if extra_body:
         settings["extra_body"] = extra_body
     return settings
+
+
+def resolve_model_output_tokens(config: BaseAgentConfig) -> int | None:
+    """解析模型的基础输出上限。"""
+
+    if config.max_output_tokens is not None:
+        return config.max_output_tokens
+    if config.provider is not None:
+        return _fetch_model_metadata(config.provider, config.model)[1]
+    return None
 
 
 # ===== 拼接续写 =====

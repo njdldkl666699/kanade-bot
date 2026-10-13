@@ -1,19 +1,25 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
+from math import ceil
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from nonebot import logger
 from pydantic_ai.capabilities.abstract import AbstractCapability
 from pydantic_ai.messages import (
+    BinaryContent,
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
+    ModelResponse,
     SystemPromptPart,
+    UserPromptPart,
 )
 from pydantic_ai.models import Model, ModelRequestContext
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import RunContext
 from pydantic_ai_harness.compaction import (
     ClearToolResults,
@@ -26,12 +32,157 @@ from pydantic_ai_harness.compaction import (
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import CompactionConfig
+from .message_blobs import blob_marker_messages
 
 if TYPE_CHECKING:
     # 仅类型标注使用；运行时导入会造成 compaction 和 session_store 循环导入
     from .session_store import SessionStore
 
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
+
+MIN_OUTPUT_TOKENS = 4096
+"""保留给正常回答的最小输出预算。"""
+
+MIN_SAFETY_MARGIN_TOKENS = 8192
+"""输入估算之外的最小安全余量。"""
+
+IMAGE_TOKEN_ESTIMATE = 1024
+"""DeepSeek 视觉模型单张图片的保守 token 上限。"""
+
+
+class ContextBudgetError(RuntimeError):
+    """请求在本地预算检查阶段已无法安全发送。"""
+
+
+def context_safety_margin(context_window: int) -> int:
+    """为估算误差和工具 schema 预留至少 5% 或 8192 tokens。"""
+
+    return max(MIN_SAFETY_MARGIN_TOKENS, ceil(context_window * 0.05))
+
+
+def _image_content_count(messages: list[ModelMessage], start: int = 0) -> int:
+    """统计 usage anchor 之后的图片数量。
+
+    pydantic-ai的通用估算不把二进制 payload 当文本计数。这里不按文件字节数换算：
+    DeepSeek单张图片最多占用约 1024 tokens，原始JPEG/PNG大小与计费token数没有线性关系。
+    """
+    total = 0
+    for message in messages[start:]:
+        for part in getattr(message, "parts", ()):
+            if not isinstance(part, UserPromptPart):
+                continue
+            content = part.content if not isinstance(part.content, str) else [part.content]
+            total += sum(1 for item in content if isinstance(item, BinaryContent) and item.is_image)
+    return total
+
+
+def estimate_request_tokens(
+    messages: list[ModelMessage],
+    request_parameters: Any = None,
+    *,
+    image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE,
+) -> int:
+    """估算即将发送的输入 tokens，并补上启发式忽略的新增图片内容。
+
+    provider usage anchor 已覆盖其之前的图片；anchor 之后新增的图片按生产 DeepSeek
+    的单张上限计入，避免本轮图片绕过压缩阈值，也避免按文件大小严重高估。
+    """
+
+    estimated = estimate_context_tokens(messages, model_request_parameters=request_parameters)
+    anchor = -1
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if isinstance(message, ModelResponse) and message.usage.input_tokens > 0:
+            anchor = index
+            break
+    return estimated + _image_content_count(messages, anchor + 1) * image_tokens_per_image
+
+
+def summary_model_settings(
+    params: CompactionConfig,
+    base: ModelSettings | None,
+    output_upper_tokens: int | None,
+) -> ModelSettings | Callable[[RunContext[Any]], ModelSettings] | None:
+    """为摘要请求继承主模型设置，并为摘要输出保留上下文空间。"""
+
+    settings = dict(base or {})
+    window = params.context_window
+    if window is None or (base is None and output_upper_tokens is None):
+        return cast("ModelSettings | None", settings or None)
+
+    def resolve(ctx: RunContext[Any]) -> ModelSettings:
+        resolved = dict(settings)
+        estimated = estimate_request_tokens(list(ctx.messages))
+        available = window - estimated - context_safety_margin(window)
+        if available < MIN_OUTPUT_TOKENS:
+            raise ContextBudgetError(
+                f"摘要上下文预算不足：估算输入 {estimated} tokens，窗口 {window}，"
+                f"无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
+            )
+        resolved["max_tokens"] = min(output_upper_tokens or available, available)
+        return cast("ModelSettings", resolved)
+
+    return resolve
+
+
+@dataclass
+class RequestBudgetCapability(AbstractCapability[Any]):
+    """在压缩后的请求上重新计算输出预算，并阻止必然越界的请求。"""
+
+    context_window: int | None
+    output_upper_tokens: int | None
+    image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE
+
+    def get_model_settings(self):
+        def resolve(ctx: RunContext[Any]) -> ModelSettings:
+            settings = dict(ctx.model_settings or {})
+            configured = self.output_upper_tokens or settings.get("max_tokens")
+            if self.context_window is None:
+                return (
+                    cast("ModelSettings", {"max_tokens": configured})
+                    if configured
+                    else cast("ModelSettings", {})
+                )
+            estimated = estimate_request_tokens(
+                list(ctx.messages), image_tokens_per_image=self.image_tokens_per_image
+            )
+            available = self.context_window - estimated - context_safety_margin(self.context_window)
+            requested = configured if isinstance(configured, int) else available
+            return cast("ModelSettings", {"max_tokens": max(0, min(requested, available))})
+
+        return resolve
+
+    async def before_model_request(
+        self,
+        ctx: RunContext[Any],
+        request_context: ModelRequestContext,
+    ) -> ModelRequestContext:
+        window = self.context_window or getattr(request_context.model, "context_window", None)
+        if window is None:
+            return request_context
+
+        estimated = estimate_request_tokens(
+            request_context.messages,
+            request_context.model_request_parameters,
+            image_tokens_per_image=self.image_tokens_per_image,
+        )
+        available = window - estimated - context_safety_margin(window)
+        if available < MIN_OUTPUT_TOKENS:
+            raise ContextBudgetError(
+                f"上下文预算不足：估算输入 {estimated} tokens，窗口 {window}，"
+                f"安全余量 {context_safety_margin(window)}，无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
+            )
+
+        settings = dict(request_context.model_settings or {})
+        configured = self.output_upper_tokens or settings.get("max_tokens")
+        effective = min(configured or available, available)
+        if effective < MIN_OUTPUT_TOKENS:
+            raise ContextBudgetError(
+                f"上下文预算不足：可用输出 {effective} tokens，低于最小预算 {MIN_OUTPUT_TOKENS}"
+            )
+        settings["max_tokens"] = effective
+        # pyright 误报：ModelRequestContext 为 dataclass，上游文档明示此用法
+        return replace(request_context, model_settings=settings)  # type: ignore[reportArgumentType]
 
 
 @dataclass
@@ -90,7 +241,12 @@ def build_clear_mark(params: CompactionConfig) -> CompactionMark:
     )
 
 
-def build_summary(params: CompactionConfig) -> SummarizingCompaction:
+def build_summary(
+    params: CompactionConfig,
+    *,
+    model_settings: ModelSettings | None = None,
+    output_upper_tokens: int | None = None,
+) -> SummarizingCompaction:
     """构造摘要档策略
 
     轮末自动压缩、在线应急阀与手动压缩共用同一构造
@@ -106,6 +262,11 @@ def build_summary(params: CompactionConfig) -> SummarizingCompaction:
         keep_messages=params.summary_keep_messages,
         keep_user_messages=params.summary_keep_user_messages,
         preserve_first_user_message=False,
+        # 上游桩类型未声明 callable 形态，运行时经嵌套 Agent(model_settings=) 生效
+        model_settings=cast(
+            "ModelSettings | None",
+            summary_model_settings(params, model_settings, output_upper_tokens),
+        ),
     )
 
 
@@ -163,8 +324,12 @@ async def apply_strategy(
 
 
 def _messages_fingerprint(messages: list[ModelMessage]) -> bytes:
-    """消息列表指纹"""
-    return ModelMessagesTypeAdapter.dump_json(messages)
+    """消息列表指纹
+
+    在 blob 标记形态上序列化：图片等二进制内容替换为内容 hash 标记，
+    指纹对二进制内容仍敏感（hash 由内容决定），但不再序列化 base64 巨串。
+    """
+    return ModelMessagesTypeAdapter.dump_json(blob_marker_messages(messages))
 
 
 def _session_id_of(ctx: RunContext[Any]) -> str | None:
@@ -316,6 +481,8 @@ async def compact_between_turns(
     messages: list[ModelMessage],
     *,
     model: Model | str,
+    model_settings: ModelSettings | None = None,
+    output_upper_tokens: int | None = None,
 ) -> dict[str, Any] | None:
     """轮末自动压缩：最终回复落库后、下一轮开始前执行
 
@@ -334,7 +501,14 @@ async def compact_between_turns(
     if params.summary_target_fraction:
         gate = params.summary_target_fraction
         strategy: AbstractCapability[Any] = TieredCompaction(
-            tiers=[build_clear(params, online=True), build_summary(params)],
+            tiers=[
+                build_clear(params, online=True),
+                build_summary(
+                    params,
+                    model_settings=model_settings,
+                    output_upper_tokens=output_upper_tokens,
+                ),
+            ],
             target_fraction=gate,
             context_window=params.context_window,
         )
@@ -388,7 +562,12 @@ class _NoopCapability(AbstractCapability[Any]):
         return request_context
 
 
-def build_compaction_capability(params: CompactionConfig = CompactionConfig()):
+def build_compaction_capability(
+    params: CompactionConfig = CompactionConfig(),
+    *,
+    output_upper_tokens: int | None = None,
+    model_settings: ModelSettings | None = None,
+):
     """构造 run 内应急压缩 capability（非常规压缩路径）
 
     常规压缩在轮末进行（`compact_between_turns`）；
@@ -408,7 +587,14 @@ def build_compaction_capability(params: CompactionConfig = CompactionConfig()):
         )
     else:
         strategy = TieredCompaction(
-            tiers=[clear, build_summary(params)],
+            tiers=[
+                clear,
+                build_summary(
+                    params,
+                    model_settings=model_settings,
+                    output_upper_tokens=output_upper_tokens,
+                ),
+            ],
             target_fraction=params.online_valve_fraction,
             context_window=params.context_window,
         )

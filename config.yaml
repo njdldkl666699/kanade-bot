@@ -23,7 +23,7 @@ chat:
   session:
     buffer_max_size: 256
   compaction:
-    trigger_fraction: 0.8
+    trigger_fraction: 0.7
     keep_pairs: 3
     min_clear_tokens: 2000
   memory:
