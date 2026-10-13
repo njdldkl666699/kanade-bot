@@ -94,9 +94,6 @@ class SessionConfig(AttrDocModel):
     sessions_dir: str = "sessions"
     """会话历史数据库目录，每个会话一个 SQLite 文件"""
 
-    db_file: str = "agent_sessions.sqlite3"
-    """旧版单库文件名；仅用于启动时检测并迁移到分库目录"""
-
     buffer_max_size: PositiveInt = 100
     """消息缓冲区最大条数，超出后丢弃最早的消息"""
 
@@ -106,10 +103,6 @@ class SessionConfig(AttrDocModel):
     @property
     def sessions_dir_path(self) -> Path:
         return get_plugin_data_file(self.sessions_dir)
-
-    @property
-    def db_file_path(self) -> Path:
-        return get_plugin_data_file(self.db_file)
 
     @property
     def buffer_cache_file_path(self) -> Path:

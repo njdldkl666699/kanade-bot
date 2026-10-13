@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from copy import copy
+from dataclasses import dataclass, field
 from math import ceil
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -17,7 +18,7 @@ from pydantic_ai.messages import (
     SystemPromptPart,
     UserPromptPart,
 )
-from pydantic_ai.models import Model, ModelRequestContext
+from pydantic_ai.models import Model, ModelRequestContext, ModelRequestParameters
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import RunContext
@@ -41,27 +42,27 @@ if TYPE_CHECKING:
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
 
 MIN_OUTPUT_TOKENS = 4096
-"""保留给正常回答的最小输出预算。"""
+"""保留给正常回答的最小输出预算"""
 
 MIN_SAFETY_MARGIN_TOKENS = 8192
-"""输入估算之外的最小安全余量。"""
+"""输入估算之外的最小安全余量"""
 
 IMAGE_TOKEN_ESTIMATE = 1024
-"""DeepSeek 视觉模型单张图片的保守 token 上限。"""
+"""DeepSeek视觉模型单张图片的保守token上限"""
 
 
 class ContextBudgetError(RuntimeError):
-    """请求在本地预算检查阶段已无法安全发送。"""
+    """请求在本地预算检查阶段已无法安全发送"""
 
 
 def context_safety_margin(context_window: int) -> int:
-    """为估算误差和工具 schema 预留至少 5% 或 8192 tokens。"""
+    """为估算误差和工具 schema 预留的安全余量"""
 
     return max(MIN_SAFETY_MARGIN_TOKENS, ceil(context_window * 0.05))
 
 
 def _image_content_count(messages: list[ModelMessage], start: int = 0) -> int:
-    """统计 usage anchor 之后的图片数量。
+    """统计 usage anchor 之后的图片数量
 
     pydantic-ai的通用估算不把二进制 payload 当文本计数。这里不按文件字节数换算：
     DeepSeek单张图片最多占用约 1024 tokens，原始JPEG/PNG大小与计费token数没有线性关系。
@@ -78,13 +79,15 @@ def _image_content_count(messages: list[ModelMessage], start: int = 0) -> int:
 
 def estimate_request_tokens(
     messages: list[ModelMessage],
-    request_parameters: Any = None,
+    request_parameters: ModelRequestParameters | None = None,
     *,
     image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE,
 ) -> int:
-    """估算即将发送的输入 tokens，并补上启发式忽略的新增图片内容。
+    """估算即将发送的输入 tokens
 
-    provider usage anchor 已覆盖其之前的图片；anchor 之后新增的图片按生产 DeepSeek
+    增强Pydantic AI Harness的通用估算。
+
+    provider usage anchor 已覆盖其之前的图片；anchor 之后新增的图片按DeepSeek
     的单张上限计入，避免本轮图片绕过压缩阈值，也避免按文件大小严重高估。
     """
 
@@ -104,14 +107,13 @@ def summary_model_settings(
     output_upper_tokens: int | None,
 ) -> ModelSettings | Callable[[RunContext[Any]], ModelSettings] | None:
     """为摘要请求继承主模型设置，并为摘要输出保留上下文空间。"""
-
-    settings = dict(base or {})
+    settings = ModelSettings(base or {})
     window = params.context_window
     if window is None or (base is None and output_upper_tokens is None):
-        return cast("ModelSettings | None", settings or None)
+        return settings or None
 
     def resolve(ctx: RunContext[Any]) -> ModelSettings:
-        resolved = dict(settings)
+        resolved = ModelSettings(settings)
         estimated = estimate_request_tokens(list(ctx.messages))
         available = window - estimated - context_safety_margin(window)
         if available < MIN_OUTPUT_TOKENS:
@@ -120,7 +122,7 @@ def summary_model_settings(
                 f"无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
             )
         resolved["max_tokens"] = min(output_upper_tokens or available, available)
-        return cast("ModelSettings", resolved)
+        return resolved
 
     return resolve
 
@@ -135,20 +137,16 @@ class RequestBudgetCapability(AbstractCapability[Any]):
 
     def get_model_settings(self):
         def resolve(ctx: RunContext[Any]) -> ModelSettings:
-            settings = dict(ctx.model_settings or {})
+            settings = copy(ctx.model_settings) or ModelSettings()
             configured = self.output_upper_tokens or settings.get("max_tokens")
             if self.context_window is None:
-                return (
-                    cast("ModelSettings", {"max_tokens": configured})
-                    if configured
-                    else cast("ModelSettings", {})
-                )
+                return {"max_tokens": configured} if configured else {}
             estimated = estimate_request_tokens(
                 list(ctx.messages), image_tokens_per_image=self.image_tokens_per_image
             )
             available = self.context_window - estimated - context_safety_margin(self.context_window)
             requested = configured if isinstance(configured, int) else available
-            return cast("ModelSettings", {"max_tokens": max(0, min(requested, available))})
+            return {"max_tokens": max(0, min(requested, available))}
 
         return resolve
 
@@ -157,7 +155,7 @@ class RequestBudgetCapability(AbstractCapability[Any]):
         ctx: RunContext[Any],
         request_context: ModelRequestContext,
     ) -> ModelRequestContext:
-        window = self.context_window or getattr(request_context.model, "context_window", None)
+        window = self.context_window or request_context.model.context_window
         if window is None:
             return request_context
 
@@ -173,7 +171,8 @@ class RequestBudgetCapability(AbstractCapability[Any]):
                 f"安全余量 {context_safety_margin(window)}，无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
             )
 
-        settings = dict(request_context.model_settings or {})
+        # 拷贝后修改
+        settings = ModelSettings(request_context.model_settings or {})
         configured = self.output_upper_tokens or settings.get("max_tokens")
         effective = min(configured or available, available)
         if effective < MIN_OUTPUT_TOKENS:
@@ -181,8 +180,8 @@ class RequestBudgetCapability(AbstractCapability[Any]):
                 f"上下文预算不足：可用输出 {effective} tokens，低于最小预算 {MIN_OUTPUT_TOKENS}"
             )
         settings["max_tokens"] = effective
-        # pyright 误报：ModelRequestContext 为 dataclass，上游文档明示此用法
-        return replace(request_context, model_settings=settings)  # type: ignore[reportArgumentType]
+        request_context.model_settings = settings
+        return request_context
 
 
 @dataclass
@@ -264,7 +263,7 @@ def build_summary(
         preserve_first_user_message=False,
         # 上游桩类型未声明 callable 形态，运行时经嵌套 Agent(model_settings=) 生效
         model_settings=cast(
-            "ModelSettings | None",
+            ModelSettings | None,
             summary_model_settings(params, model_settings, output_upper_tokens),
         ),
     )

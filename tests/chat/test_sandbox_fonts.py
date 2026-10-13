@@ -95,7 +95,7 @@ def _load_manager_module():
     sandbox_mod = _load_sandbox_module()
 
     cfg = sys.modules["kchat.config"].cfg
-    cfg.session = types.SimpleNamespace(db_file_path=Path(tempfile.gettempdir()) / "t.db")  # type: ignore[attr-defined]
+    cfg.session = types.SimpleNamespace(sessions_dir_path=Path(tempfile.gettempdir()) / "sessions")  # type: ignore[attr-defined]
     cfg.memory = types.SimpleNamespace(  # type: ignore[attr-defined]
         database_file_path=Path(tempfile.gettempdir()) / "m.db", max_records_per_scope=8
     )

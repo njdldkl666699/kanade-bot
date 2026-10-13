@@ -117,9 +117,7 @@ class ChatSessionManager:
     """聊天会话管理器：会话存储、消息缓冲区、会话锁与Agent运行"""
 
     def __init__(self):
-        self._store = SessionStore(
-            cfg.session.sessions_dir_path, legacy_db_path=cfg.session.db_file_path
-        )
+        self._store = SessionStore(cfg.session.sessions_dir_path)
         """会话存储"""
 
         self.memory_store = MemoryStore(
@@ -130,10 +128,7 @@ class ChatSessionManager:
         self._memory_contexts: dict[str, MemoryContext] = {}
 
         self._compaction_params = cfg.compaction
-        # 主模型窗口固化进压缩参数：配置未显式指定时从 pai_runtime 解析
-        # （显式配置 > /models 元数据缓存 > genai-prices）。固化后
-        # TieredCompaction 不再依赖每请求的 registry 解析（窗口漂移会静默
-        # 改变压缩阈值），且该值进入 mark 指纹，跨进程漂移可被检测
+        # 窗口未显式配置时解析并固化；固化值进入 mark 指纹，跨进程漂移可检测
         if self._compaction_params.context_window is None and (
             window := resolve_model_context_window(cfg.agent)
         ):
@@ -202,7 +197,6 @@ class ChatSessionManager:
 
         driver = get_driver()
         driver.on_startup(self._start_mcp)
-        driver.on_startup(self._store.migrate_legacy)
         driver.on_startup(self._load_sessions_messages_cache)
         driver.on_shutdown(self._save_sessions_messages_cache)
         driver.on_shutdown(self._shutdown)

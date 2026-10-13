@@ -531,7 +531,6 @@ class SandboxSession:
                         uv_bin,
                         "pip",
                         "install",
-                        # "--no-build",  # 只装 wheel，避免 sdist 构建钩子在宿主执行任意代码
                         "--python",
                         venv_python,
                         *packages,
@@ -557,7 +556,6 @@ class SandboxSession:
                         "install",
                         "--disable-pip-version-check",
                         "--no-input",
-                        # "--only-binary", ":all:",  # 等价 uv --no-build
                         *packages,
                     ]
                 )

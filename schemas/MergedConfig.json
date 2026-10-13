@@ -262,8 +262,8 @@
       "description": "会话压缩配置",
       "properties": {
         "trigger_fraction": {
-          "default": 0.8,
-          "description": "触发清理的上下文占用比例",
+          "default": 0.7,
+          "description": "零成本档（清理工具结果）的触发比例\n\n摘要档启用时，轮末压缩由`summary_target_fraction`驱动，本值不参与；\n仅摘要档未启用时，轮末零成本档清理以本值为闸门。",
           "title": "Trigger Fraction",
           "type": "number"
         },
@@ -329,10 +329,29 @@
         },
         "summary_keep_messages": {
           "default": 40,
-          "description": "生成摘要时保留的最近消息条数",
+          "description": "生成摘要时保留的最近消息条数\n\n启用 `summary_keep_user_messages` 时，本值是「被摘要范围内保留的用户消息条数」与\n「原样保留的最近原始消息条数」共享的名额。用户消息优先占名额，剩余名额才留给最近的原始消息。",
           "minimum": 0,
           "title": "Summary Keep Messages",
           "type": "integer"
+        },
+        "summary_keep_user_messages": {
+          "default": true,
+          "description": "摘要压缩时保留被摘要范围内最近的用户消息\n\n每条有截断上限，由`SummarizingCompaction.keep_user_messages_max_chars`设置，\n默认20000字符，够用故暂不提供配置。",
+          "title": "Summary Keep User Messages",
+          "type": "boolean"
+        },
+        "online_valve_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.92,
+          "description": "run 内应急压缩阈值；None 表示完全关闭在线压缩\n\n常规压缩在轮次结束后进行；run 内仅在估算超过该阈值时才应急压缩，防止单轮内上下文暴涨击穿窗口。",
+          "title": "Online Valve Fraction"
         }
       },
       "title": "CompactionConfig",
@@ -887,10 +906,10 @@
     "SessionConfig": {
       "description": "会话历史存储配置",
       "properties": {
-        "db_file": {
-          "default": "agent_sessions.sqlite3",
-          "description": "会话历史 SQLite 数据库文件名",
-          "title": "Db File",
+        "sessions_dir": {
+          "default": "sessions",
+          "description": "会话历史数据库目录，每个会话一个 SQLite 文件",
+          "title": "Sessions Dir",
           "type": "string"
         },
         "buffer_max_size": {
@@ -1125,7 +1144,7 @@
         "session": {
           "$ref": "#/$defs/SessionConfig",
           "default": {
-            "db_file": "agent_sessions.sqlite3",
+            "sessions_dir": "sessions",
             "buffer_max_size": 100,
             "buffer_cache_file": "session_messages_cache.json"
           }
@@ -1133,13 +1152,15 @@
         "compaction": {
           "$ref": "#/$defs/CompactionConfig",
           "default": {
-            "trigger_fraction": 0.8,
+            "trigger_fraction": 0.7,
             "keep_pairs": 3,
             "min_clear_tokens": null,
             "context_window": null,
             "summary_target_fraction": null,
             "summary_model": null,
-            "summary_keep_messages": 40
+            "summary_keep_messages": 40,
+            "summary_keep_user_messages": true,
+            "online_valve_fraction": 0.92
           }
         },
         "scheduled_task": {
@@ -2030,16 +2051,18 @@
         "session": {
           "buffer_cache_file": "session_messages_cache.json",
           "buffer_max_size": 100,
-          "db_file": "agent_sessions.sqlite3"
+          "sessions_dir": "sessions"
         },
         "compaction": {
           "context_window": null,
           "keep_pairs": 3,
           "min_clear_tokens": null,
+          "online_valve_fraction": 0.92,
           "summary_keep_messages": 40,
+          "summary_keep_user_messages": true,
           "summary_model": null,
           "summary_target_fraction": null,
-          "trigger_fraction": 0.8
+          "trigger_fraction": 0.7
         },
         "scheduled_task": {
           "data_file": "scheduled_tasks.json",

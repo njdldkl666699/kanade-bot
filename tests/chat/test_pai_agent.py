@@ -501,27 +501,6 @@ class SessionStoreTest(unittest.IsolatedAsyncioTestCase):
 # ===== 图片外置与还原（blob 存储） =====
 
 
-_LEGACY_DDL = """
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conv_id TEXT NOT NULL,
-    seq INTEGER NOT NULL,
-    payload BLOB NOT NULL,
-    created_at REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS compaction_marks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conv_id TEXT NOT NULL,
-    strategy TEXT NOT NULL,
-    params TEXT NOT NULL,
-    result BLOB,
-    fingerprint TEXT NOT NULL DEFAULT '',
-    applied_at REAL NOT NULL,
-    up_to_seq INTEGER NOT NULL DEFAULT -1
-);
-"""
-
-
 def make_image_history(tag: str = "img") -> list[ModelMessage]:
     """带 BinaryContent 图片的用户消息 + 响应"""
     image = BinaryContent(data=b"\x89PNG-fake-image-bytes" + tag.encode(), media_type="image/png")
@@ -609,71 +588,6 @@ class RestoreCacheTest(unittest.IsolatedAsyncioTestCase):
         cached = db._restore_cache
         await self.store.restore("c1", params=other)
         self.assertIsNot(db._restore_cache, cached, "参数不同不得命中旧缓存")
-
-
-class LegacyMigrationTest(unittest.IsolatedAsyncioTestCase):
-    """旧版单库（含 conv_id 列）自动迁移为分库"""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.legacy = Path(self.tmp.name) / "agent_sessions.sqlite3"
-
-    def _build_legacy(self):
-        image_history = make_image_history("legacy")
-        text_history = make_history(2, "legacy")
-        with sqlite3.connect(self.legacy) as conn:
-            conn.executescript(_LEGACY_DDL)
-            for seq, msg in enumerate(image_history):
-                conn.execute(
-                    "INSERT INTO messages (conv_id, seq, payload, created_at) VALUES (?, ?, ?, ?)",
-                    ("c1", seq, ModelMessagesTypeAdapter.dump_json([msg]), 1.0),
-                )
-            for seq, msg in enumerate(text_history):
-                conn.execute(
-                    "INSERT INTO messages (conv_id, seq, payload, created_at) VALUES (?, ?, ?, ?)",
-                    ("c2", seq, ModelMessagesTypeAdapter.dump_json([msg]), 1.0),
-                )
-            mark = compaction_mod.build_summary_mark(TEST_PARAMS, image_history)
-            mark.up_to_seq = 1
-            conn.execute(
-                "INSERT INTO compaction_marks "
-                "(conv_id, strategy, params, result, fingerprint, applied_at, up_to_seq) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    "c1",
-                    mark.strategy,
-                    json.dumps(mark.params),
-                    mark.result,
-                    mark.fingerprint,
-                    mark.applied_at,
-                    mark.up_to_seq,
-                ),
-            )
-            conn.commit()
-        return image_history, text_history
-
-    async def test_migrate_splits_and_archives(self):
-        image_history, text_history = self._build_legacy()
-        store = SessionStore(Path(self.tmp.name) / "sessions", legacy_db_path=self.legacy)
-        await store.migrate_legacy()
-
-        self.assertFalse(self.legacy.exists(), "旧库应被改名归档")
-        self.assertTrue(self.legacy.with_name(self.legacy.name + ".migrated.bak").exists())
-
-        self.assertEqual(await store.count("c1"), 2)
-        self.assertEqual(await store.count("c2"), 6)
-        self.assertEqual(fp(await store.load("c2")), fp(text_history))
-        restored = await store.restore("c1", params=TEST_PARAMS)
-        self.assertEqual(fp(restored), fp(image_history), "迁移后图片与摘要快照均应无损还原")
-
-    async def test_migrate_idempotent_and_skip_partial(self):
-        self._build_legacy()
-        store = SessionStore(Path(self.tmp.name) / "sessions", legacy_db_path=self.legacy)
-        await store.migrate_legacy()
-        # 旧库已归档：再次迁移为空操作
-        await store.migrate_legacy()
-        self.assertEqual(await store.count("c2"), 6)
 
 
 # ===== 恢复一致性（压缩事件可重放的前提） =====

@@ -1,15 +1,4 @@
-"""会话历史存储：每个会话一个 SQLite 库 + 二进制内容外置
-
-- 消息 payload 仍是 `ModelMessagesTypeAdapter` 的 JSON 文本，但图片等
-  `BinaryContent` 以 `$kanade-blob:{hash}:{mime}` 占位符存储，原始 bytes
-  去重后存同库 `blobs` 表（见 `message_blobs`）
-- 所有读取边界（`load` / `restore` / marks result）把占位还原为真实
-  `BinaryContent`，上层（压缩、请求）无感知
-- `restore` 结果以占位形态缓存在内存：所有写路径都在本类内，写后失效，
-  命中时只需还原 blobs（LRU 缓存兜底），免去每轮全量反序列化
-- 旧版单库（`agent_sessions.sqlite3`，含 conv_id 列）在启动时自动迁移
-  为分库，完成后改名 `.migrated.bak`
-"""
+"""会话历史存储：每会话一个 SQLite 库，消息 JSON + 外置 blobs + restore 缓存"""
 
 import asyncio
 import hashlib
@@ -24,7 +13,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 
-from nonebot import logger
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
 from ..config import CompactionConfig
@@ -64,26 +52,6 @@ CREATE TABLE IF NOT EXISTS blobs (
 );
 """
 
-_LEGACY_SCHEMA = """
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conv_id TEXT NOT NULL,
-    seq INTEGER NOT NULL,
-    payload BLOB NOT NULL,
-    created_at REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS compaction_marks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conv_id TEXT NOT NULL,
-    strategy TEXT NOT NULL,
-    params TEXT NOT NULL,
-    result BLOB,
-    fingerprint TEXT NOT NULL DEFAULT '',
-    applied_at REAL NOT NULL,
-    up_to_seq INTEGER NOT NULL DEFAULT -1
-);
-"""
-
 
 def _write_blobs(conn: sqlite3.Connection, writes: Sequence[BlobWrite]) -> None:
     if writes:
@@ -94,7 +62,7 @@ def _write_blobs(conn: sqlite3.Connection, writes: Sequence[BlobWrite]) -> None:
 
 
 def _externalize_payload(payload: bytes) -> tuple[bytes, list[BlobWrite]]:
-    """把一段已序列化的消息 JSON 外置化（迁移与 mark result 复用）"""
+    """把一段已序列化的消息 JSON 外置化（mark result 写入时复用）"""
     messages = ModelMessagesTypeAdapter.validate_json(payload)
     externalized, writes = externalize_messages(messages)
     return ModelMessagesTypeAdapter.dump_json(externalized), writes
@@ -187,12 +155,8 @@ class SessionStore:
     root: Path
     """会话数据库目录，每个会话一个 `{session_id}.sqlite3`"""
 
-    legacy_db_path: Path | None = None
-    """旧版单库路径；存在则自动迁移后改名 `.migrated.bak`"""
-
     _convs: dict[str, _ConvDB] = field(default_factory=dict, init=False, repr=False)
     _conv_lock: Lock = field(default_factory=Lock, init=False, repr=False)
-    _migrated: bool = field(default=False, init=False, repr=False)
 
     # ===== 会话库路由 =====
 
@@ -205,8 +169,6 @@ class SessionStore:
         return self.root / f"{name}.sqlite3"
 
     def _conv_db(self, conv_id: str) -> _ConvDB:
-        if not self._migrated:
-            self._migrate_legacy_sync()
         with self._conv_lock:
             db = self._convs.get(conv_id)
             if db is None:
@@ -432,94 +394,6 @@ class SessionStore:
             conn.commit()
         db.clear_blob_cache()
         db.invalidate_restore_cache()
-
-    # ===== 旧库迁移 =====
-
-    async def migrate_legacy(self) -> None:
-        """把旧版单库迁移为分库；已迁移/无旧库时为空操作"""
-        await asyncio.to_thread(self._migrate_legacy_sync)
-
-    def _migrate_legacy_sync(self) -> None:
-        with self._conv_lock:
-            if self._migrated:
-                return
-            self._migrate_locked()
-            self._migrated = True
-
-    def _migrate_locked(self) -> None:
-        """实际迁移（调用方持有 _conv_lock，避免与 _conv_db 递归加锁）"""
-        legacy = self.legacy_db_path
-        if legacy is None or not legacy.is_file():
-            return
-        started = time.time()
-        with closing(sqlite3.connect(legacy, timeout=30)) as conn:
-            conn.execute("PRAGMA journal_mode = WAL")
-            conv_ids = [
-                row[0]
-                for row in conn.execute(
-                    "SELECT DISTINCT conv_id FROM messages "
-                    "UNION SELECT DISTINCT conv_id FROM compaction_marks"
-                )
-            ]
-            for conv_id in conv_ids:
-                db = _ConvDB(self._conv_db_path(conv_id))
-                db.ensure()
-                if self._conv_has_data(db):
-                    continue  # 此前部分迁移过，跳过防重复
-                self._migrate_conv(conn, db, conv_id)
-        # 检查点落盘后改名归档，防止重复迁移
-        with closing(sqlite3.connect(legacy, timeout=30)) as conn:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        legacy.rename(legacy.with_name(legacy.name + ".migrated.bak"))
-        for suffix in ("-wal", "-shm"):
-            sidecar = legacy.with_name(legacy.name + suffix)
-            if sidecar.exists():
-                sidecar.unlink()
-        logger.info(
-            f"旧版会话单库已迁移为分库：{len(conv_ids)} 个会话，"
-            f"耗时 {time.time() - started:.1f}s，旧库归档为 {legacy.name}.migrated.bak"
-        )
-
-    @staticmethod
-    def _conv_has_data(db: _ConvDB) -> bool:
-        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
-            row = conn.execute(
-                "SELECT (SELECT COUNT(*) FROM messages) + (SELECT COUNT(*) FROM compaction_marks)"
-            ).fetchone()
-        return bool(row and row[0])
-
-    @staticmethod
-    def _migrate_conv(legacy_conn: sqlite3.Connection, db: _ConvDB, conv_id: str) -> None:
-        """单个会话：消息与 marks 外置化后搬入新库（保留 seq 与时间戳）"""
-        msg_rows = legacy_conn.execute(
-            "SELECT seq, payload, created_at FROM messages WHERE conv_id = ? ORDER BY seq",
-            (conv_id,),
-        ).fetchall()
-        mark_rows = legacy_conn.execute(
-            "SELECT strategy, params, result, fingerprint, applied_at, up_to_seq "
-            "FROM compaction_marks WHERE conv_id = ? ORDER BY id",
-            (conv_id,),
-        ).fetchall()
-        with closing(sqlite3.connect(db.db_path, timeout=30)) as conn:
-            for seq, payload, created_at in msg_rows:
-                externalized, writes = _externalize_payload(payload)
-                conn.execute(
-                    "INSERT INTO messages (seq, payload, created_at) VALUES (?, ?, ?)",
-                    (seq, externalized, created_at),
-                )
-                _write_blobs(conn, writes)
-            for strategy, params, result, fingerprint, applied_at, up_to_seq in mark_rows:
-                writes: list[BlobWrite] = []
-                if result is not None:
-                    result, writes = _externalize_payload(result)
-                conn.execute(
-                    "INSERT INTO compaction_marks "
-                    "(strategy, params, result, fingerprint, applied_at, up_to_seq) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (strategy, params, result, fingerprint, applied_at, up_to_seq),
-                )
-                _write_blobs(conn, writes)
-            conn.commit()
 
 
 def _messages_equal(a: list[ModelMessage], b: list[ModelMessage]) -> bool:

@@ -1,17 +1,7 @@
-"""消息级二进制内容（图片等）的外置存储纯函数
+"""消息二进制内容（图片等）与占位字符串的互转
 
-消息持久化时，`BinaryContent` 的原始 bytes 不进消息 JSON——pydantic 会把
-bytes 序列化为 base64 巨串，导致消息行膨胀、指纹与压缩扫描反复搬运大字符串。
-这里把 `BinaryContent` 替换为 `$kanade-blob:{sha256}:{mime}` 占位字符串，
-bytes 本体由 `SessionStore` 存入独立的 blobs 表；读取时在
-`ModelMessagesTypeAdapter.validate_json` 之后把占位还原为 `BinaryContent`，
-pydantic-ai 对此完全无感知。
-
-占位是官方类型系统内的普通 `str`，因此标准序列化/反序列化无需任何定制；
-还原只发生在 `SessionStore` 的读取边界（`load` / `restore`）。
+`SessionStore`持久化时把`BinaryContent`替换为占位并把 bytes 存入 blobs 表，读取边界再还原。
 """
-
-from __future__ import annotations
 
 import hashlib
 import re
