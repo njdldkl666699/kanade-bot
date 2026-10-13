@@ -9,13 +9,18 @@ from collections.abc import Sequence
 
 import httpx
 from openai import AsyncOpenAI
-from pydantic_ai import Agent, ModelResponse
-from pydantic_ai.messages import ModelMessage, UserContent
+from pydantic_ai import (
+    Agent,
+    ModelMessage,
+    ModelResponse,
+    ModelSettings,
+    RunUsage,
+    UsageLimits,
+    UserContent,
+)
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.settings import ModelSettings
-from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_ai_harness.compaction import resolve_context_window
 
 from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig

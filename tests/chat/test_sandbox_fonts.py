@@ -34,6 +34,7 @@ import pytest
 REPO_ROOT = Path(__file__).parents[2]
 SANDBOX_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/sandbox.py"
 MANAGER_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/manager.py"
+SESSION_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/session.py"
 
 HAVE_SANDLOCK = shutil.which("sandlock") is not None
 HAVE_UV = shutil.which("uv") is not None
@@ -100,7 +101,7 @@ def _load_manager_module():
         database_file_path=Path(tempfile.gettempdir()) / "m.db", max_records_per_scope=8
     )
     cfg.compaction = types.SimpleNamespace(  # type: ignore[attr-defined]
-        enabled=False, keep_tail=10
+        enabled=False, keep_tail=10, context_window=None
     )
     cfg.agent = types.SimpleNamespace(vision=False)  # type: ignore[attr-defined]
 
@@ -127,10 +128,13 @@ def _load_manager_module():
     stub(
         "kchat.agent.compaction",
         RecordingCompaction=_Obj,
+        RequestBudgetCapability=_Obj,
         build_compaction_capability=lambda *a, **k: _Obj(),
         build_summary=lambda *a, **k: _Obj(),
         build_summary_mark=lambda *a, **k: _Obj(),
         extract_summary=lambda *a, **k: None,
+        compact_between_turns=_noop,
+        persist_run=_noop,
     )
     stub("kchat.agent.deps", ChatDeps=_Obj)
     stub("kchat.agent.image_caption", get_image_caption=_noop)
@@ -144,11 +148,16 @@ def _load_manager_module():
     stub(
         "kanade_bot.utils.pai_runtime",
         CONTINUE_PROMPT="",
-        build_model_settings=lambda *a, **k: None,
+        build_model_settings=lambda *a, **k: {},
         get_model=lambda *a, **k: None,
+        resolve_model_context_window=lambda *a, **k: None,
     )
 
     import nonebot
+
+    # manager 现在 `from .session import ChatSession`：先把 session.py 真身
+    # 加载进假包链（其依赖与 manager 同一套桩），manager 加载即可命中
+    _load_session_module()
 
     fake_driver = types.SimpleNamespace(  # type: ignore[attr-defined]
         on_startup=lambda fn: None, on_shutdown=lambda fn: None
@@ -167,6 +176,16 @@ def _load_manager_module():
     finally:
         nonebot.get_driver = orig_get_driver  # type: ignore[assignment]
     return module, sandbox_mod
+
+
+def _load_session_module():
+    """把 session.py 加载成 kchat.agent.session（依赖与 manager 同一套桩）"""
+    spec = importlib.util.spec_from_file_location("kchat.agent.session", SESSION_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["kchat.agent.session"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _make_manager(module, root: Path):
@@ -245,10 +264,11 @@ class FakeSandbox:
 class StageImagesTest(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.manager_mod, _ = _load_manager_module()
+        _load_manager_module()
+        cls.session_mod = sys.modules["kchat.agent.session"]
 
     async def stage(self, sandbox, images):
-        return await self.manager_mod.ChatSessionManager._stage_images_to_sandbox(sandbox, images)
+        return await self.session_mod._stage_images_to_sandbox(sandbox, images)
 
     async def test_new_image_written(self):
         sandbox = FakeSandbox()

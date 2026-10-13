@@ -7,7 +7,7 @@ from functools import cache
 from pathlib import Path
 
 from nonebot import get_driver, logger
-from pydantic_ai.messages import InstructionPart
+from pydantic_ai import InstructionPart
 
 from kanade_bot.utils.parse import build_sender_info
 

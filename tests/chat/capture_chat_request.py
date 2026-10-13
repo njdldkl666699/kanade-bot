@@ -120,7 +120,7 @@ async def main() -> None:
     )
     try:
         async with aclosing(
-            chat_manager.send_and_wait(
+            chat_manager.get_session(session_info.session_id).send_and_wait(
                 session_info,
                 "你好，请用一两句话介绍一下你自己。",
                 bot_id="10000",

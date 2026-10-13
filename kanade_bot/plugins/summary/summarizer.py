@@ -4,8 +4,7 @@ from collections import deque
 from typing import ClassVar
 
 from nonebot import get_driver, get_plugin_config, logger
-from pydantic_ai import Agent
-from pydantic_ai.usage import RunUsage
+from pydantic_ai import Agent, RunUsage
 
 from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 

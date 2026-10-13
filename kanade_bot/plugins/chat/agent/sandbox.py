@@ -9,10 +9,9 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 
-from mirage import MountMode, Workspace
+from mirage import DiskVFS, MountMode, Workspace
 from mirage.agents.pydantic_ai import MirageWorkspaceBackend
 from mirage.runtime.sandbox.sandlock import SandlockConfig, SandlockRuntime
-from mirage.vfs.disk import DiskVFS
 from nonebot import get_driver, logger
 from pydantic_ai import RunContext
 from pydantic_ai.capabilities import AbstractCapability

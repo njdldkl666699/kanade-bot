@@ -113,7 +113,7 @@ async def send_message_in_chunks(
         # aclosing确保中途异常退出时也会关闭生成器：
         # 退订事件、清空消息缓冲区、释放会话锁
         async with aclosing(
-            chat_manager.send_and_wait(
+            chat_manager.get_session(session_info.session_id).send_and_wait(
                 session_info,
                 prompt,
                 bot_id=onebot.self_id if onebot else None,
@@ -190,7 +190,7 @@ def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
         return False
     auto_reply_config = group_config[group_id]
 
-    size = chat_manager.get_session_messages_size(session_id)
+    size = len(chat_manager.get_session(session_id).buffer)
     threshold = auto_reply_config.threshold
     # 阈值小于等于0，或当前消息数小于阈值，不触发自动回复
     if threshold <= 0 or size < threshold:

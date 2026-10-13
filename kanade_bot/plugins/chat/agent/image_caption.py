@@ -2,8 +2,7 @@ import asyncio
 import base64
 
 from nonebot import logger
-from pydantic_ai import Agent, UserContent
-from pydantic_ai.messages import BinaryContent
+from pydantic_ai import Agent, BinaryContent, UserContent
 
 from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 

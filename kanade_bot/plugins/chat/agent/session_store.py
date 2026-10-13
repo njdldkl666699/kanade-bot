@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai import ModelMessage, ModelMessagesTypeAdapter
 
 from ..config import CompactionConfig
 from .compaction import CompactionMark, _messages_fingerprint, apply_strategy, build_clear_mark

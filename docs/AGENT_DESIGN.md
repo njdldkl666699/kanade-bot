@@ -27,7 +27,8 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 
 | 文件 | 职责 |
 | --- | --- |
-| `manager.py` | `ChatSessionManager`：会话锁、提示词组装、流式运行与异常恢复的总编排 |
+| `manager.py` | `ChatSessionManager`：共享运行时（Agent/存储/MCP/沙箱池/压缩配置）持有者、每会话 `ChatSession` 注册表、MCP 连接与缓冲区缓存生命周期钩子；调用方经 `get_session()` 持有会话对象 |
+| `session.py` | `ChatSession`：每会话运行时状态（缓冲区/通知槽/流中断/会话锁/记忆上下文）与轮次编排（`send_and_wait`） |
 | `deps.py` | `ChatDeps`：单次运行绑定的本地上下文（会话/发送者、记忆作用域、沙箱句柄） |
 | `compaction.py` | 分层压缩策略、`RequestBudgetCapability`（动态 max_tokens）、轮末压缩与落库（见 `COMPACTION_DESIGN.md`） |
 | `session_store.py` / `message_blobs.py` | append-only 会话数据库与图片外置（见 `SESSION_STORE_DESIGN.md`） |
@@ -43,7 +44,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 适配器事件
   → matcher.py 规则匹配（唤醒词 / 自动回复判定 / ban 名单）
   → handler.py：水晶计费检查 → send_message_in_chunks
-  → ChatSessionManager.send_and_wait（异步生成器，逐条 yield 助手消息）
+  → ChatSession.send_and_wait（异步生成器，逐条 yield 助手消息；调用方经 `chat_manager` 薄转发）
       1. 获取每会话 asyncio.Lock；群聊会话在此锁内切换记忆作用域到当前发送者
       2. 组装提示词：RAG 检索片段 + 消息缓冲区 + 引用消息 + 系统通知 + 时间行
       3. 沙箱启用时：获取会话常驻沙箱，用户图片写入工作区并附路径说明
@@ -62,6 +63,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 | --- | --- |
 | Chat Completions 直连 | 主用上游是 Chat Completions 兼容 API，选 Pydantic AI 即因其对该路径一等公民支持；不再有代理层 |
 | 会话并发模型 | 每会话一把锁串行化；`ChatDeps` 每次 run 重建，Agent 与工具静态化；工具循环无请求数上限（`REQUEST_LIMIT=None`，默认 50 不适用长工具链） |
+| 会话对象模型 | 全局单 `ChatSessionManager`（`manager.py`）持有重量级共享资源（Agent、会话/记忆存储、MCP 连接、沙箱池、压缩配置、提示词渲染），会话级运行时状态（消息缓冲区、通知槽、流中断引用、会话锁、记忆上下文）内聚到每会话一个的 `ChatSession`（`session.py`）。会话对象经 `get_session` 注册表获取：get-or-create 为纯同步代码，事件循环内无协程切换、无需锁；`current_stream` 同理为普通属性赋值，`interrupt` 无锁读取。由此每会话仅一把语义纯粹的锁，无全局锁与锁序约束。依赖方向恒为 session → 共享设施：`SandboxManager._sessions`、`SessionStore._convs` 这类资源域的每会话分片留在各自模块内部（其生命周期锚点是宿主工作区目录/进程级缓存，而非会话运行时对象，随 ChatSession 重建会丢沙箱 shell 状态与缓存收益）。沿革：Copilot SDK 时期为单 Client 多 Session，迁移 Pydantic AI 后长期残留「5 个平行 dict + 全局锁 + 双层锁序」形态，2026-10 拆分；调用方经 `get_session()` 获取会话对象直接调用 |
 | 历史与压缩 | DB 保留全量原始消息，压缩事件以 marks 落库、恢复时重放——内存与磁盘上永远是可重放的确定性状态，且保护上游 KV 前缀缓存（详见 `SESSION_STORE_DESIGN.md`） |
 | 压缩策略 | TieredCompaction：先 `ClearToolResults`（零成本、前缀缓存友好），不够再 `SummarizingCompaction`；轮末例行压缩 + 在线应急阀（详见 `COMPACTION_DESIGN.md`） |
 | 沙箱 | mirage 进程内 VFS（约 0.1MB/会话）+ sandlock（Landlock/seccomp）做边界，取代 Docker；`KanadeWorkspace` 把相对路径绑定到每会话工作区根；低内核自动降级 Landlock ABI（详见 `SANDBOX_DESIGN.md`） |
@@ -79,7 +81,9 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 
 ## 6. 子 Agent 与生态
 
-chat 主 agent 之外还有两个独立 `Agent` 实例共用 `pai_runtime` 模型层：`image_caption`（图片转述，无工具）与 summary 插件的会话总结器（压缩摘要也复用同一套构建函数）。`schedule.py` 让主 agent 能通过定时任务在未来时点主动发起会话，是"被动应答"之外唯一的主动出口（配合消息缓冲区与系统通知槽位）。
+chat 主 agent 之外还有两个独立 `Agent` 实例共用 `pai_runtime` 模型层：`image_caption`（图片转述，无工具）与 summary 插件的会话总结器（压缩摘要也复用同一套构建函数）。
+
+`schedule.py` 是"被动应答"之外唯一的主动出口。agent 经 `schedule_task` 工具创建一次性任务（`run_at` ISO 8601 时刻或 `delay_minutes` 延迟分钟，二选一，上海时区；非法输入的报错文本直接反馈给模型纠正）。任务定义持久化为 JSON（含会话快照与 `bot_id`，原子写），重启后恢复、已过期任务跳过并清理。到点由 APScheduler 回调唤醒会话：以显式 `system_notification` 注入 + 空用户消息运行一轮（显式注入不消费排队的系统通知槽位），流式回复经 `deliver` 主动发回原会话。触发链路上有两个放弃点：目标会话已拉黑则静默放弃（视为完成，不重试）；创建者水晶余额为负则不唤醒 agent，直接发文本告知。触发失败按配置有限重试（尝试计数与下次触发时间写回文件，重启可恢复重试），耗尽后丢弃；主动唤醒的运行按实际 usage 向创建者计费，峰谷按触发时刻判定。用户命令「任务列表 / 取消任务」（取消仅限本会话创建的任务）；主动发送仅支持 OneBot 平台。
 
 ## 7. 代码地图
 

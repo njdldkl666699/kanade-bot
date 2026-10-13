@@ -11,8 +11,7 @@ from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from PicImageSearch import BaiDu
 from pydantic import Field
-from pydantic_ai import RunContext
-from pydantic_ai.messages import BinaryContent
+from pydantic_ai import BinaryContent, RunContext
 
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file

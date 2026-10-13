@@ -58,7 +58,7 @@ async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent)
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
     session_info = extract_session_info_sync(event)
-    await chat_manager.reset_session(session_info.session_id)
+    await chat_manager.get_session(session_info.session_id).reset()
     await chat_reset.finish("会话已重置（工作区文件保留，可用 /清理工作区 删除）")
 
 
@@ -67,7 +67,7 @@ async def handle_chat_workspace_clear(event: Event):
     """删除当前会话的沙箱工作区文件，不影响会话历史"""
     session_id = extract_session_info_sync(event).session_id
     try:
-        result = await chat_manager.clear_workspace(session_id)
+        result = await chat_manager.get_session(session_id).clear_workspace()
     except Exception as e:
         logger.opt(exception=e).warning(f"清理会话{session_id}工作区时发生错误")
         await chat_workspace_clear.finish(f"清理工作区失败：{e}")
@@ -83,7 +83,7 @@ async def handle_chat_interrupt(event: Event):
     """手动中断当前正在进行的回复，等待中的消息不受影响照常处理"""
     session_id = extract_session_info_sync(event).session_id
     try:
-        result = await chat_manager.interrupt_session_turn(session_id)
+        result = chat_manager.get_session(session_id).interrupt()
     except Exception as e:
         logger.opt(exception=e).warning(f"中断会话{session_id}时发生错误")
         await chat_interrupt.finish(f"中断会话失败：{e}")
@@ -100,7 +100,7 @@ async def handle_chat_compact(event: Event):
     """
     session_id = extract_session_info_sync(event).session_id
     try:
-        result = await chat_manager.compact_session(session_id)
+        result = await chat_manager.get_session(session_id).compact()
     except Exception as e:
         logger.opt(exception=e).warning(f"手动压缩会话{session_id}时发生错误")
         await chat_compact.finish(f"会话压缩失败：{e}")
@@ -129,7 +129,7 @@ async def handle_chat_stats(event: Event):
     """查看会话统计：上下文token估算/模型窗口上限、消息条数、工作区文件列表"""
     session_id = extract_session_info_sync(event).session_id
     try:
-        result = await chat_manager.session_stats(session_id)
+        result = await chat_manager.get_session(session_id).stats()
     except Exception as e:
         logger.opt(exception=e).warning(f"查询会话{session_id}统计时发生错误")
         await chat_stats.finish(f"查询会话统计失败（会话可能正在处理中）：{e}")
@@ -179,7 +179,7 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     message_str, _ = await parse_message_for_ai(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         message_str = f"{user_info}：{message_str}"
-    await chat_manager.add_message(session_id, message_str)
+    await chat_manager.get_session(session_id).add_message(message_str)
 
 
 @chat_task_list.handle()
@@ -287,6 +287,6 @@ async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Messa
         # 添加系统通知
         session_info = await extract_session_info(event, bot)
         session_id = session_info.session_id
-        await chat_manager.add_system_notification(session_id, "表情包已更新")
+        await chat_manager.get_session(session_id).add_system_notification("表情包已更新")
 
     await add_meme.finish(f"已添加表情包 {name}")

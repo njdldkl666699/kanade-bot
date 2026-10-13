@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from pydantic_ai.messages import BinaryContent, ModelMessage, ModelRequest, UserPromptPart
+from pydantic_ai import BinaryContent, ModelMessage, ModelRequest, UserPromptPart
 
 BLOB_REF_PREFIX = "$kanade-blob:"
 """占位字符串前缀；完整格式 `$kanade-blob:{sha256(media+bytes)}:{mime}`"""

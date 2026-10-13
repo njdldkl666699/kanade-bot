@@ -2,7 +2,7 @@ import math
 from collections.abc import Callable
 from datetime import datetime, time
 
-from pydantic_ai.usage import RunUsage
+from pydantic_ai import RunUsage
 
 from kanade_bot.utils.common import asia_shanghai_now
 from kanade_bot.utils.schema import AttrDocModel

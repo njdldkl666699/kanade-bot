@@ -1,13 +1,4 @@
-"""聊天Agent定时任务
-
-Agent通过 `schedule_task` 工具以自然语言描述创建一次性定时任务；到点后由
-APScheduler 回调主动唤醒会话：以显式 system_notification 注入 + 空用户消息
-运行一轮，并把agent的回复主动发送回原会话（群或私聊）。
-
-任务定义持久化为JSON（含会话快照与bot_id），重启后恢复，已过期的任务跳过
-并清理。触发失败按配置有限重试，重试耗尽后丢弃。触发前预检创建者水晶余额，
-已为负则不唤醒agent，直接发文本告知用户。
-"""
+"""聊天Agent定时任务：一次性任务的创建、持久化与到点主动唤醒"""
 
 import asyncio
 import json
@@ -22,7 +13,7 @@ from zoneinfo import ZoneInfo
 from nonebot import get_bot, get_driver, logger, require
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from pydantic import BaseModel
-from pydantic_ai.usage import RunUsage
+from pydantic_ai import RunUsage
 
 from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
 from kanade_bot.utils.session import SessionInfo
@@ -367,7 +358,7 @@ class ScheduledTaskManager:
             consume_crystal(platform, creator, cost)
 
         async with aclosing(
-            chat_manager.send_and_wait(
+            chat_manager.get_session(info.session_id).send_and_wait(
                 info,
                 "",
                 bot_id=task.bot_id,
