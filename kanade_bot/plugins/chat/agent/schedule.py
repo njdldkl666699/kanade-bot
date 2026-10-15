@@ -5,9 +5,11 @@ import json
 import os
 import tempfile
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from nonebot import get_bot, get_driver, logger, require
@@ -16,7 +18,7 @@ from nonebot.adapters.onebot.v11 import Bot as OneBot
 from pydantic import BaseModel
 from pydantic_ai import RunUsage
 
-from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
+from kanade_bot.utils.billing import UsageCallback, compute_token_cost, is_peak_hours
 from kanade_bot.utils.session import SessionInfo
 
 from ..ban import is_banned
@@ -127,6 +129,23 @@ def _resolve_task_bot(task: ScheduledTask) -> OneBot | ConsoleBot:
     return bot
 
 
+class SessionWaker(Protocol):
+    """会话唤醒回调：唤醒目标会话运行一轮并流式产出助手回复
+
+    由 `ChatSessionManager` 构造时注入 `ScheduledTaskManager`
+    """
+
+    def __call__(
+        self,
+        session_info: SessionInfo,
+        *,
+        bot_id: str,
+        timeout: float,
+        on_usage: UsageCallback,
+        system_notification: str,
+    ) -> AsyncGenerator[str]: ...
+
+
 class ScheduledTaskStore:
     """定时任务JSON文件持久化"""
 
@@ -183,6 +202,7 @@ class ScheduledTaskManager:
         self._retry_delay = timedelta(minutes=retry_delay_minutes)
         self._tasks: dict[str, ScheduledTask] = {}
         self._lock = asyncio.Lock()
+        self._waker: SessionWaker | None = None
 
     # ===== 生命周期 =====
 
@@ -278,6 +298,10 @@ class ScheduledTaskManager:
             key=lambda t: t.run_at_dt,
         )
 
+    def bind_session_waker(self, waker: SessionWaker) -> None:
+        """注入会话唤醒回调（由 ChatSessionManager 构造时调用）"""
+        self._waker = waker
+
     # ===== 触发 =====
 
     async def _fire(self, task_id: str) -> None:
@@ -315,8 +339,9 @@ class ScheduledTaskManager:
 
         任何异常向上抛出，由 `_fire` 决定重试；正常返回视为任务完成。
         """
-        # 延迟导入避免循环依赖（manager → tool → schedule → manager）
-        from .manager import chat_manager
+        if self._waker is None:
+            raise RuntimeError("会话唤醒回调未绑定：应由 ChatSessionManager 构造时注入")
+        waker = self._waker
 
         info = task.session_info
 
@@ -365,9 +390,8 @@ class ScheduledTaskManager:
             consume_crystal(platform, creator, cost)
 
         async with aclosing(
-            chat_manager.get_session(info.session_id).send_and_wait(
+            waker(
                 info,
-                "",
                 bot_id=task.bot_id,
                 timeout=PROACTIVE_RUN_TIMEOUT,
                 on_usage=_bill,

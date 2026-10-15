@@ -2,6 +2,7 @@
 
 import json
 from collections import deque
+from collections.abc import AsyncGenerator
 
 from nonebot import get_driver, logger
 from pydantic_ai import AbstractToolset, Agent, FilteredToolset, RunContext
@@ -9,11 +10,13 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai_backends import PERMISSIVE_RULESET, ConsoleCapability
 
+from kanade_bot.utils.billing import UsageCallback
 from kanade_bot.utils.pai_runtime import (
     build_model_settings,
     get_model,
     resolve_model_context_window,
 )
+from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .compaction import RequestBudgetCapability, build_compaction_capability
@@ -21,6 +24,7 @@ from .deps import ChatDeps
 from .memory import MemoryStore
 from .prompt import ChatPrompt
 from .sandbox import SandboxManager, SandboxWorkspaceCapability
+from .schedule import scheduled_task_manager
 from .session import ChatSession
 from .session_store import SessionStore
 from .tool import build_tools
@@ -103,6 +107,9 @@ class ChatSessionManager:
         driver.on_shutdown(self._save_sessions_messages_cache)
         driver.on_shutdown(self._shutdown)
 
+        # 唤醒回调注入：定时任务到点经此唤醒会话
+        scheduled_task_manager.bind_session_waker(self._wake_session)
+
     # ===== 会话注册表 =====
 
     def get_session(self, session_id: str) -> ChatSession:
@@ -112,6 +119,28 @@ class ChatSessionManager:
             session = ChatSession(session_id, manager=self)
             self._sessions[session_id] = session
         return session
+
+    def _wake_session(
+        self,
+        session_info: SessionInfo,
+        *,
+        bot_id: str,
+        timeout: float,
+        on_usage: UsageCallback,
+        system_notification: str,
+    ) -> AsyncGenerator[str]:
+        """定时任务唤醒入口：定位会话并转发到 `send_and_wait`
+
+        以回调形式绑定给 `scheduled_task_manager`，schedule 侧无需导入本模块。
+        """
+        return self.get_session(session_info.session_id).send_and_wait(
+            session_info,
+            "",
+            bot_id=bot_id,
+            timeout=timeout,
+            on_usage=on_usage,
+            system_notification=system_notification,
+        )
 
     # ===== 消息缓冲区缓存 =====
 

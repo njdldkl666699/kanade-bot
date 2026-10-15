@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from kanade_bot.utils.session import SessionInfo
 
-from .memory import MemoryContext
+from .memory import MemoryContext, MemoryStore
 from .sandbox import SandboxSession
 
 
@@ -15,6 +15,9 @@ class ChatDeps:
 
     memory_context: MemoryContext
     """当前发送者对应的记忆作用域上下文"""
+
+    memory_store: MemoryStore
+    """长期记忆存储句柄：记忆工具经 deps 访问，无需翻 manager 单例"""
 
     bot_id: str
     """Bot实例ID"""

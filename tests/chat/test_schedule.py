@@ -60,8 +60,43 @@ _DRIVER = _DriverStub()
 SCHEDULER_STUB = _SchedulerStub()
 
 
+class SessionInfo(BaseModel):
+    """SessionInfo 最小替身（pydantic模型，字段兼容）"""
+
+    session_id: str
+    platform: str | None = None
+    nickname: str | None = None
+    user_id: str | None = None
+    group_name: str | None = None
+    group_id: str | None = None
+
+
 def _load_schedule_module():
-    """把 schedule.py 加载成 kchat.agent.schedule，桩掉重依赖"""
+    """把 schedule.py 加载成 kchat.agent.schedule，桩掉重依赖
+
+    stub 全部走 sys.modules，加载完成后恢复原状，避免污染
+    同进程后续收集/执行的真实模块测试（如 test_pai_agent）。
+    """
+    stub_keys = (
+        "kchat",
+        "kchat.agent",
+        "kchat.agent.schedule",
+        "kchat.config",
+        "kchat.ban",
+        "kchat.deliver",
+        "kanade_bot",
+        "kanade_bot.utils",
+        "kanade_bot.utils.billing",
+        "kanade_bot.utils.session",
+        "kanade_bot.plugins",
+        "kanade_bot.plugins.crystal",
+        "nonebot",
+        "nonebot.adapters",
+        "nonebot.adapters.onebot.v11",
+        "nonebot.adapters.console.bot",
+        "nonebot_plugin_apscheduler",
+    )
+    saved = {k: sys.modules[k] for k in stub_keys if k in sys.modules}
     for name in (
         "kchat",
         "kchat.agent",
@@ -83,6 +118,9 @@ def _load_schedule_module():
     ob_mod = types.ModuleType("nonebot.adapters.onebot.v11")
     ob_mod.Bot = type("Bot", (), {})
     sys.modules["nonebot.adapters.onebot.v11"] = ob_mod
+    console_mod = types.ModuleType("nonebot.adapters.console.bot")
+    console_mod.Bot = type("ConsoleBot", (), {})
+    sys.modules["nonebot.adapters.console.bot"] = console_mod
     for pkg in ("nonebot.adapters",):
         m = types.ModuleType(pkg)
         m.__path__ = []
@@ -100,20 +138,10 @@ def _load_schedule_module():
     billing_mod = types.ModuleType("kanade_bot.utils.billing")
     billing_mod.compute_token_cost = lambda *a, **k: 1
     billing_mod.is_peak_hours = lambda *a, **k: False
+    billing_mod.UsageCallback = object  # 类型标注运行时求值用占位
     sys.modules["kanade_bot.utils.billing"] = billing_mod
 
     session_mod = types.ModuleType("kanade_bot.utils.session")
-
-    class SessionInfo(BaseModel):
-        """SessionInfo 最小替身（pydantic模型，字段兼容）"""
-
-        session_id: str
-        platform: str | None = None
-        nickname: str | None = None
-        user_id: str | None = None
-        group_name: str | None = None
-        group_id: str | None = None
-
     session_mod.SessionInfo = SessionInfo
     sys.modules["kanade_bot.utils.session"] = session_mod
 
@@ -140,19 +168,19 @@ def _load_schedule_module():
 
     async def _no_send(*a, **k): ...
 
-    deliver_mod.send_onebot_proactive = _no_send
-    deliver_mod.send_text_onebot_proactive = _no_send
+    deliver_mod.send_proactive = _no_send
+    deliver_mod.send_text_proactive = _no_send
     sys.modules["kchat.deliver"] = deliver_mod
-
-    manager_mod = types.ModuleType("kchat.agent.manager")
-    manager_mod.chat_manager = types.SimpleNamespace()
-    sys.modules["kchat.agent.manager"] = manager_mod
 
     spec = importlib.util.spec_from_file_location("kchat.agent.schedule", SCHEDULE_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["kchat.agent.schedule"] = module
     spec.loader.exec_module(module)
+    # 恢复 sys.modules：_schedule 已绑定 stub 对象，后续真实导入不受污染
+    for k in stub_keys:
+        sys.modules.pop(k, None)
+    sys.modules.update(saved)
     return module
 
 
@@ -276,7 +304,6 @@ class TestManagerLifecycle(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_persists_and_schedules(self):
         manager, store = _make_manager(self.tmp)
-        from kanade_bot.utils.session import SessionInfo  # 桩
 
         info = {
             "session_id": "qq-group-1",

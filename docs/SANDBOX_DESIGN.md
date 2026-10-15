@@ -64,12 +64,12 @@ sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）；低于 v6 但 
 
 - `landlock_degrade`：`auto`（默认，按 `sandlock check` 判断）/ `always` / `strict`（不足即拒绝启动）。ABI < v4 连文件系统规则都保不住，任何模式都报错。
 - 实现 = **PATH shim wrapper**：在 PATH 前置目录生成 `sandlock` 脚本，在 `run` 子命令之后、`--` 之前插入三条 `--allow-degraded`，再 exec 真二进制（mirage 的 `SandlockRuntime` 硬编码 argv 无透传接口；wrapper 用 `sub="$1"; shift; exec ... "$@"`，`${@:2}` 是 bash 扩展 dash 不支持，会静默失效）。
-- **自检防静默失效**：生成后立即用 wrapper 跑探针命令。探针授权 = 解释器根 + 系统只读目录（/usr /lib /lib64 /bin /etc /proc /dev）——只授权解释器根不够：解释器是动态链接 ELF，execve 还要读 ld-linux/libc，CPython 启动还要读 /dev/urandom，任一被拒都直接 EACCES，极易误判为执行权限问题。uv run 会把 .venv/bin 前置 PATH 导致 `which("python3")` 解析到 /home 下的软链，系统根必须显式补齐。
+- **自检防静默失效**：生成后立即用 wrapper 跑探针命令。探针授权 = 解释器根 + 系统只读目录（/usr /lib /lib64 /bin /etc /proc /dev）——只授权解释器根不够：解释器是动态链接 ELF，execve 还要读 ld-linux/libc，CPython 启动还要读 /dev/urandom，任一被拒都直接 EACCES，极易误判为执行权限问题。uv run 会把 .venv/bin 前置 PATH 导致 `which("python3")` 解析到 /home 下的软链，系统根必须显式补齐（交互 shell 直接 `nb run` 时探针根恰为 /usr，才没暴露此问题）。
 - 安全影响：降级**不破坏文件系统隔离主线**（Landlock FS rules + mirage VFS 不受影响，内存限额保留），只削弱防进程逃逸维度（沙箱内进程可 signal 宿主同用户进程、连 abstract unix socket、对设备 ioctl）。
 
 ## 6. Python 环境（宿主预配 venv）
 
-**沙箱内不能跑 uv**：sandlock supervisor 的 `readlink(非symlink)` 误返 ENOENT，uv 的解释器发现链全灭；出站网络默认禁也拦住解释器下载；`--clean-env` 后 uv 默认目录无授权。因此 venv 一律在**宿主侧**创建（走宿主网络与镜像），沙箱内只 exec：
+**装包必须在宿主侧**：沙箱内出站网络默认禁（mirage 的 sandlock runtime 不透传网络授权），`uv pip install` 在沙箱内下载不了包；`--clean-env` 后 uv 默认目录也无授权。因此 venv 一律在**宿主侧**创建（走宿主网络与镜像），沙箱内只 exec：
 
 `setup_python_env` 工具（模型可调用）的三级回退：
 
@@ -79,9 +79,11 @@ sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）；低于 v6 但 
 
 约束与细节：
 
-- **必须保持 symlink 形态**：`--copies` 的真文件解释器在沙箱内踩同一 readlink bug 启动崩溃（CPython getpath 的探测）；symlink 经内核路径解析不受影响。
+- **保持默认 symlink 形态**：venv 解释器以 symlink 引用宿主解释器，不复制文件。历史上 sandlock <0.9.0 的 readlink bug 曾使 `--copies` 真文件解释器在沙箱内启动崩溃（CPython getpath 的探测），0.9.0 已修复；symlink 仍是默认且更省空间的形态，无理由切换。
 - **包声明白名单**：`name` / `name[extras]` / `name==version` 纯文本正则，拒绝 URL/git/本地路径——装包命令在宿主侧执行，必须防注入。`--no-build` / `--only-binary` 限制已知情地禁用（需要纯 sdist 包，接受宿主构建风险）。
 - **entry point 注册**：装包后 venv/bin 新增命令（如 pytest）经 `workspace.add_runtime()` 动态挂进沙箱路由（runtime 名 `venv-bin-{n}` 唯一递增），同时会话 `export PATH` 更新；`python3 -m 模块名` 则无需注册。重启后 venv 直接可用，entry point 命令需再次调用工具补注册。
+- **装包后的会话 PATH**：更新为 `{venv}/bin:/usr/bin:/bin`——系统工具目录此时才引入（venv 已就位，`python3` 必然解析到 venv 解释器），与 §4 初始 PATH 只含 venv bin 的策略不矛盾。
+- **回退解释器解析**（无 uv 时）：优先 `python{venv_python}`（常为带完整 ensurepip/pip 的 uv 托管或自装解释器），否则系统 `python3`；选中解释器的安装根在系统目录之外（沙箱未授权）时补进只读授权，保证 venv 的解释器 symlink 在沙箱内可执行。
 - Python 环境不可用时，提示词的 Python 环境段（`sandbox_python.md`）整段不渲染（条件段 `python_env_available`）。
 
 ## 7. 配置（SandboxConfig）

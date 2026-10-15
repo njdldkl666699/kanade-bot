@@ -1,3 +1,5 @@
+"""会话压缩：分层策略、token 估算与请求预算"""
+
 from __future__ import annotations
 
 import time
@@ -58,11 +60,7 @@ def context_safety_margin(context_window: int) -> int:
 
 
 def _image_content_count(messages: list[ModelMessage], start: int = 0) -> int:
-    """统计 usage anchor 之后的图片数量
-
-    pydantic-ai的通用估算不把二进制 payload 当文本计数。这里不按文件字节数换算：
-    DeepSeek单张图片最多占用约 1024 tokens，原始JPEG/PNG大小与计费token数没有线性关系。
-    """
+    """统计 usage anchor 之后的图片数量"""
     total = 0
     for message in messages[start:]:
         for part in getattr(message, "parts", ()):
@@ -79,13 +77,7 @@ def estimate_request_tokens(
     *,
     image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE,
 ) -> int:
-    """估算即将发送的输入 tokens
-
-    增强Pydantic AI Harness的通用估算。
-
-    provider usage anchor 已覆盖其之前的图片；anchor 之后新增的图片按DeepSeek
-    的单张上限计入，避免本轮图片绕过压缩阈值，也避免按文件大小严重高估。
-    """
+    """估算即将发送的输入 tokens（harness 通用估算 + anchor 后图片按张补计）"""
 
     estimated = estimate_context_tokens(messages, model_request_parameters=request_parameters)
     anchor = -1
@@ -202,20 +194,11 @@ class CompactionMark:
     """记录时间戳"""
 
     up_to_seq: int = -1
-    """本条 mark 覆盖到 DB 的消息 seq（含）
-
-    恢复时只把 mark 应用到该 seq 为止的前缀上，再拼回其后追加的消息；
-    `-1` 表示覆盖全部（旧数据兼容，等价于整体替换）。
-    """
+    """本条 mark 覆盖到 DB 的消息 seq（含）；-1 表示覆盖全部"""
 
 
 def build_clear(params: CompactionConfig, *, online: bool) -> ClearToolResults:
-    """构造零成本档策略
-
-    `online=False`（恢复重放）时**忽略 `min_clear_tokens`**：
-    该阈值依赖 provider上报的 usage 锚点估计 token，重放时没有同样的锚点。
-    mark 记录的是「确实清理过」这个事实，所以重放无条件执行。
-    """
+    """构造零成本档策略（恢复重放时忽略 `min_clear_tokens`）"""
 
     return ClearToolResults(
         max_fraction=params.trigger_fraction,
@@ -242,15 +225,7 @@ def build_summary(
     model_settings: ModelSettings | None = None,
     output_upper_tokens: int | None = None,
 ) -> SummarizingCompaction:
-    """构造摘要档策略
-
-    轮末自动压缩、在线应急阀与手动压缩共用同一构造
-
-    手动压缩经 `compact_now` 直接调用 `compact`，不经过触发判断，
-    `max_fraction` 仅为满足构造校验；摘要档未启用时以 1.0 占位。
-
-    `preserve_first_user_message=False`：长期群聊里第一条用户消息无意义。
-    """
+    """构造摘要档策略（轮末、应急阀与手动压缩共用）"""
     return SummarizingCompaction(
         model=params.summary_model,
         max_fraction=params.summary_target_fraction or 1.0,
@@ -266,12 +241,7 @@ def build_summary(
 
 
 def build_summary_mark(params: CompactionConfig, result: list[ModelMessage]) -> CompactionMark:
-    """按当前参数与摘要产物构造一条摘要档 mark
-
-    摘要由 LLM 生成、非确定性，无法重放，必须把完整产物存进
-    `result`，恢复时直接使用（见 `apply_strategy`）。
-    `up_to_seq` 由调用方（`persist_run` / 手动压缩）按落库边界填写。
-    """
+    """按当前参数与摘要产物构造一条摘要档 mark（`up_to_seq` 由调用方填写）"""
     return CompactionMark(
         strategy="summarizing",
         params=params.model_dump(),
@@ -303,10 +273,7 @@ async def apply_strategy(
     *,
     model: Model | str | None = None,
 ) -> list[ModelMessage]:
-    """把一条压缩事件应用到消息列表上
-
-    在线压缩与恢复重放都必须经过本函数，参数一律取自 `mark.params`
-    """
+    """把一条压缩事件应用到消息列表上（参数一律取自 `mark.params`）"""
     params = CompactionConfig.model_validate(mark.params)
 
     if mark.result is not None:
@@ -319,11 +286,7 @@ async def apply_strategy(
 
 
 def _messages_fingerprint(messages: list[ModelMessage]) -> bytes:
-    """消息列表指纹
-
-    在 blob 标记形态上序列化：图片等二进制内容替换为内容 hash 标记，
-    指纹对二进制内容仍敏感（hash 由内容决定），但不再序列化 base64 巨串。
-    """
+    """消息列表指纹（blob 标记形态序列化，见 SESSION_STORE_DESIGN.md §5）"""
     return ModelMessagesTypeAdapter.dump_json(blob_marker_messages(messages))
 
 
@@ -346,12 +309,7 @@ class CompactionEvent:
 
 @dataclass
 class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
-    """包住分层压缩策略，按会话记录 run 内发生的每次压缩
-
-    压缩只改写 run 内部的消息列表，调用方（`persist_run`）必须在 run
-    结束后取出事件，把压缩前尚未落库的消息补写入库、按落库边界记录
-    mark，再持久化压缩后新产生的消息。
-    """
+    """包住分层压缩策略，按会话记录 run 内发生的每次压缩"""
 
     strategy: AbstractCapability[AgentDepsT]
     """在线压缩策略"""
@@ -368,8 +326,6 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
         request_context: ModelRequestContext,
     ) -> ModelRequestContext:
         session_id = _session_id_of(ctx)
-        # 必须拷贝快照：压缩策略（TieredCompaction）以 ctx.messages[:] = ... 原地
-        # 替换列表，直接引用同一对象会让前后指纹永远相等，压缩事件丢失
         before = list(ctx.messages)
         result = await self.strategy.before_model_request(ctx, request_context)
         if session_id is not None and _messages_fingerprint(before) != _messages_fingerprint(
@@ -404,25 +360,8 @@ async def persist_run(
 ) -> None:
     """把一次 run 的新增消息与压缩事件落库
 
-    base: 本 run 开始时的历史（与传给 `message_history` 的一致）；
-    all_messages: run 结束时的完整历史（`stream.all_messages()`，run 内
-    发生过压缩时其前缀与 base 不同——这正是不能用「base + new_messages()」
-    重建历史的原因）；
-    new_messages: `stream.new_messages()`（pydantic-ai 以 run_id 多层回退
-    维护的增量边界，仅在未发生压缩时可靠，此时是官方正确机制）。
-
-    无压缩：等价于把 `new_messages` 追加入库。
-
-    有压缩：对每个事件——补写压缩前未落库的消息（使 DB 行覆盖 `pre`）
-    → 记 mark（`up_to_seq` = 补写后的行数-1）→ 把压缩后新产生的消息
-    追加为 mark 之后的尾部行。恢复时 `restore` 按 `up_to_seq` 分段
-    重放/替换并拼回尾部，重建结果与发送内容一致。
-
-    对齐一律用**内容级公共前缀**而非位置：pydantic-ai 每次请求前跑
-    `repair_messages()`（合并相邻请求），可能缩短/改写历史（例如旧库
-    分离形态、输入与历史尾部合并），位置切片会错位丢消息。公共前缀
-    变短即检测到「改写」——改写后 DB 行无法重放在线输入，mark 强制
-    走完整快照（恢复正确性优先，放弃该次的重放优化）。
+    base: 本 run 开始时的历史；all_messages: run 结束时的完整历史；
+    new_messages: `stream.new_messages()`（仅无压缩时可靠）。
     """
     events = capability.take_events(session_id)
 
@@ -441,8 +380,7 @@ async def persist_run(
             await store.append(session_id, pre_delta)
         boundary = event.pre
 
-    # 2. mark 区间的实际内容 = post 及其后至 run 结束；若后续 repair
-    #    改写了 post 尾部（公共前缀变短），以改写后形态为准
+    # 2. mark 区间覆盖 post 及其后至 run 结束；尾部被 repair 改写时以改写后形态为准
     last_post = events[-1].post
     c_tail = _common_prefix_len(last_post, all_messages)
     rewritten = rewritten or c_tail < len(last_post)
@@ -450,8 +388,7 @@ async def persist_run(
 
     mark = build_summary_mark(capability.params, snapshot)
     if not rewritten and len(events) == 1:
-        # 自验证：零成本档是确定性纯函数，对 pre 重放能复现快照就只存
-        # 参数（零额外存储）
+        # 自验证：零成本档重放能复现快照则只存参数（零额外存储）
         candidate = build_clear_mark(capability.params)
         if _messages_fingerprint(await apply_strategy(events[0].pre, candidate)) == (
             _messages_fingerprint(snapshot)
@@ -479,14 +416,8 @@ async def compact_between_turns(
     model_settings: ModelSettings | None = None,
     output_upper_tokens: int | None = None,
 ) -> dict[str, Any] | None:
-    """轮末自动压缩：最终回复落库后、下一轮开始前执行
+    """轮末自动压缩：最终回复落库后、下一轮开始前执行（常规压缩唯一路径）
 
-    常规压缩的唯一路径。与在线应急阀`build_compaction_capability`共用同一套分层策略，
-    但闸门用常规阈值：摘要档启用时为 `summary_target_fraction`
-    （clear→summary依次升级），未启用时退化为 `trigger_fraction` 上的零成本档。
-
-    `messages` 传调用方 run 结束时的完整历史，避免重复 restore；
-    在稳定存储状态上判定与压缩，落 mark 后下一轮 `restore` 重放即得同样结果。
     未触发 / 窗口未固化返回 None。
     """
     if params.context_window is None or not messages:
@@ -519,8 +450,7 @@ async def compact_between_turns(
     if compacted is messages or _messages_fingerprint(compacted) == _messages_fingerprint(messages):
         return None
 
-    # mark 类型自验证（与 persist_run 同一判定）：零成本档对输入重放能
-    # 复现产物 → 只存参数（可重放）；否则视为摘要产物落快照
+    # mark 类型自验证（与 persist_run 同一判定）
     mark: CompactionMark = build_summary_mark(params, compacted)
     if _messages_fingerprint(await apply_strategy(messages, build_clear_mark(params))) == (
         _messages_fingerprint(compacted)
@@ -543,11 +473,7 @@ async def compact_between_turns(
 
 
 class _NoopCapability(AbstractCapability[Any]):
-    """永不改写请求上下文的占位 capability
-
-    `online_valve_fraction=None`（完全关闭在线压缩）时充当应急阀的空策略，
-    使 `RecordingCompaction` / `persist_run` 的记录路径保持统一。
-    """
+    """在线压缩完全关闭时的空策略，使记录路径保持统一"""
 
     async def before_model_request(
         self,
@@ -563,12 +489,7 @@ def build_compaction_capability(
     output_upper_tokens: int | None = None,
     model_settings: ModelSettings | None = None,
 ):
-    """构造 run 内应急压缩 capability（非常规压缩路径）
-
-    常规压缩在轮末进行（`compact_between_turns`）；
-    本 capability 仅在估算超过 `online_valve_fraction` 时才在 run 内压缩，
-    防止单轮内上下文暴涨击穿窗口导致 provider 报错。
-    """
+    """构造 run 内应急压缩 capability（仅防单轮内上下文暴涨击穿窗口）"""
     if params.online_valve_fraction is None:
         strategy: AbstractCapability[Any] = _NoopCapability()
         return RecordingCompaction(strategy=strategy, params=params)

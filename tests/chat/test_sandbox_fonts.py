@@ -140,6 +140,11 @@ def _load_manager_module():
     stub("kchat.agent.image_caption", get_image_caption=_noop)
     stub("kchat.agent.memory", MemoryContext=_Obj, MemoryStore=_Obj)
     stub("kchat.agent.prompt", ChatPrompt=_Prompt, current_time_line=lambda: "")
+
+    class _ScheduledTaskManager:
+        def bind_session_waker(self, waker): ...
+
+    stub("kchat.agent.schedule", scheduled_task_manager=_ScheduledTaskManager())
     stub("kchat.agent.session_store", SessionStore=_Obj)
     stub("kchat.agent.tool", build_tools=list)
     stub("kanade_bot.utils.parse", ImageInput=_Obj, build_sender_info=lambda *a, **k: "")

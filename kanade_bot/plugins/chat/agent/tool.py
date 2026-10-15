@@ -123,14 +123,12 @@ async def save_memory(
         topic: 稳定、简短的主题键，例如 music_preference 或 群内称呼约定；同主题会更新。
         content: 一条自包含的原子事实。只写事实，不写指令或对话原文。
     """
-    from .manager import chat_manager
-
     memory_context = ctx.deps.memory_context
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
         return f"当前会话没有可用的 {scope} 记忆范围，未保存。"
 
-    record = await chat_manager.memory_store.save(memory_scope, topic, content)
+    record = await ctx.deps.memory_store.save(memory_scope, topic, content)
     logger.info("模型保存{}记忆，ID={}，主题={}", scope, record.id, record.topic)
     return f"已保存 {scope} 记忆：ID={record.id}，topic={record.topic}。"
 
@@ -150,8 +148,6 @@ async def recall_memory(
         scopes: 检索范围。通常同时检索 user 和 group；私聊中 group 会自动忽略。
         limit: 最多返回的记忆条数。
     """
-    from .manager import chat_manager
-
     memory_context = ctx.deps.memory_context
     selected_scopes = [
         memory_scope
@@ -159,7 +155,7 @@ async def recall_memory(
         if (memory_scope := memory_context.get_scope(name)) is not None
     ]
 
-    records = await chat_manager.memory_store.search(selected_scopes, query, limit)
+    records = await ctx.deps.memory_store.search(selected_scopes, query, limit)
     logger.info("模型检索记忆，范围={}，查询={}，结果数={}", scopes, query, len(records))
     if not records:
         return "没有找到相关记忆。"
@@ -184,14 +180,12 @@ async def forget_memory(
         scope: 要删除的记忆范围。
         memory_id: recall_memory 返回的记忆 ID。只能删除当前用户或当前群的记忆。
     """
-    from .manager import chat_manager
-
     memory_context = ctx.deps.memory_context
     memory_scope = memory_context.get_scope(scope)
     if memory_scope is None:
         return f"当前会话没有可用的 {scope} 记忆范围，未删除。"
 
-    deleted = await chat_manager.memory_store.delete(memory_scope, memory_id)
+    deleted = await ctx.deps.memory_store.delete(memory_scope, memory_id)
     if not deleted:
         return "未找到该范围内的记忆，未删除。"
 

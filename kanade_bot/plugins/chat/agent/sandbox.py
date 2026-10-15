@@ -1,3 +1,5 @@
+"""聊天 Agent 沙箱：mirage VFS + sandlock 进程边界"""
+
 import asyncio
 import os
 import posixpath
@@ -24,11 +26,7 @@ VENV_DIR = ".venv"
 """每个沙箱工作区根下的虚拟环境目录名"""
 
 SANDBOX_HOME_DIR = ".home"
-"""每个沙箱工作区根下的伪HOME目录名
-
-受限进程以 `--clean-env` 启动，环境里只有运行时配置给的变量。不指一个可写 HOME 的话，
-fontconfig 等的字体缓存没有落点，`expanduser("~") 也解析不到任何可用路径。
-"""
+"""每个沙箱工作区根下的伪HOME目录名"""
 
 FONT_DIR_CANDIDATES = (
     "/usr/share/fonts",
@@ -62,9 +60,7 @@ PACKAGE_SPEC_RE = re.compile(
     r"(?:\[[A-Za-z0-9._,-]+\])?"
     r"(?:(?:==|!=|<=|>=|~=)[A-Za-z0-9.+*!]+)?"
 )
-"""合法的包声明形态：`name` / `name[extras]` / `name==version`
-
-包安装声明在**宿主侧**执行，必须从严，拒绝 URL、git、本地路径等一切可注入额外参数的形态。"""
+"""合法的包声明形态：`name` / `name[extras]` / `name==version`"""
 
 LANDLOCK_REQUIRED_ABI = 6
 """sandlock 要求的最低 Landlock ABI（Linux 6.12+）"""
@@ -80,11 +76,7 @@ DEGRADED_PROTECTIONS = (
     "abstract-unix-socket-scope",
     "fs-ioctl-dev",
 )
-"""ABI v5/v6 才有的三项 protection；降级后不再强制
-
-对应能力：signal 宿主进程 / 连宿主 abstract unix socket / 设备 ioctl。
-**文件系统隔离主线不受影响**（靠 Landlock FS rules + mirage VFS）。
-"""
+"""ABI v5/v6 才有的三项 protection；降级后不再强制"""
 
 LANDLOCK_WRAPPER = """#!/bin/sh
 # 注入 Landlock 降级参数后 exec 真正的 sandlock。
@@ -182,12 +174,6 @@ def ensure_landlock(bin_dir: Path) -> int | None:
     python3 = shutil.which("python3")
     if python3 is None:
         raise SandlockUnavailableError("自检探针需要 PATH 上有 python3")
-    # 授权「解释器所在根 + 系统根」。只授权解释器根不够：解释器是动态链接
-    # ELF，内核还要以读权限打开 ld-linux/libc（merged-usr 下在 /usr 内）、
-    # CPython 启动还要读 /dev/urandom，landlock 拒绝任何一个 execve 都直接
-    # 返回 EACCES。uv run 会把 .venv/bin 前置到 PATH，which("python3") 拿到
-    # 的是指向 uv 托管解释器的软链，resolve 后解释器根是 /home，极易漏掉
-    # 系统根（交互 shell 直接 nb run 时 probe_root 恰为 /usr 才没暴露）。
     roots: list[str] = []
     for root in (f"/{Path(python3).resolve().parts[1]}", *SYSTEM_READABLE_DIRS):
         if root not in roots and Path(root).is_dir():
@@ -226,30 +212,14 @@ def ensure_landlock(bin_dir: Path) -> int | None:
 
 
 class KanadeWorkspace(MirageWorkspaceBackend):
-    """mirage 官方 `MirageWorkspaceBackend` 的工作区根绑定版
-
-    官方实现见 `mirage.agents.pydantic_ai.backend`：文件操作（read/write/
-    ls 等）直通会话 VFS Ops 层、按**虚拟绝对路径**寻址，命令执行走
-    `Session.shell()`（克隆语义，`cd`/`export` 不跨命令持久，超时已内建）。
-
-    本项目采用 mirage「免 FUSE」布局：挂载前缀 = 宿主真实路径，虚拟路径与
-    真实路径一致，sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。
-    该布局下官方 backend 收到**相对路径**会落到 VFS 根 `/`（宿主系统视图的
-    overlay）——读则 FileNotFoundError，写则**静默落空**（宿主工作区无文件）。
-    这里把相对路径统一绑定到工作区根，与 `run` 的会话 cwd（初始化为工作区根）
-    语义对齐。
-    """
+    """mirage 官方 backend 的工作区根绑定版：相对路径统一挂到工作区根"""
 
     def __init__(self, workspace: Workspace, root: str, session_id: str | None = None) -> None:
         super().__init__(workspace, session_id)
         self._root = root
 
     def _bind(self, path: str) -> str:
-        """相对路径挂到工作区根，绝对路径原样归一化
-
-        归一化后逃出工作区根的路径（`../..` 等）无需专门拦截：VFS 里只有
-        工作区一个挂载，界外路径不存在，操作自然失败。
-        """
+        """相对路径挂到工作区根，绝对路径原样归一化"""
         if not path.startswith("/"):
             path = posixpath.join(self._root, path)
         return posixpath.normpath(path)
@@ -290,7 +260,6 @@ def sandbox_runtime_config(
     """
     readable = [str(workspace_dir)]
     if uv_python_dir is not None:
-        # venv 内的解释器是指向 uv 托管解释器的符号链接，需要只读授权
         readable.append(str(uv_python_dir))
     readable.extend(font_dirs)
     sandbox_home = workspace_dir / SANDBOX_HOME_DIR
@@ -299,9 +268,7 @@ def sandbox_runtime_config(
         fs_writable=(str(workspace_dir),),
         max_memory=cfg.sandbox.memory_limit,
         env={
-            # 受限子进程的 PATH 只含 venv bin，不提供系统 python3；
             "PATH": str(workspace_dir / VENV_DIR / "bin"),
-            # HOME/XDG 指向工作区内可写目录，字体缓存才有落点
             "HOME": str(sandbox_home),
             "XDG_CACHE_HOME": str(sandbox_home / ".cache"),
             "XDG_CONFIG_HOME": str(sandbox_home / ".config"),
@@ -315,9 +282,6 @@ class SandboxWorkspaceCapability(AbstractCapability[AgentDepsT]):
     def get_workspace(
         self, ctx: RunContext[AgentDepsT], *, ref: WorkspaceRef | None
     ) -> WorkspaceBackend | None:
-        # mirage 官方 `MirageWorkspace` capability 持有单个固定 workspace，而本项目
-        # 每个聊天会话一个沙箱。这里在 `get_workspace` 时从`ctx.deps.sandbox`
-        # 解析当前会话的沙箱，返回其根绑定 backend。
         sandbox: SandboxSession | None = getattr(ctx.deps, "sandbox", None)
         if sandbox is None or sandbox.closed:
             return None
@@ -494,8 +458,7 @@ class SandboxSession:
                     return f"创建虚拟环境失败:\n{output}"
                 report.append(f"已创建虚拟环境 {VENV_DIR}/（uv，Python {version}）")
             else:
-                # 原生回退：保持默认 symlink 形态
-                # 不能用 --copies，真文件解释器在沙箱内会踩 sandlock 的 readlink bug 启动崩溃
+                # 原生回退：保持默认 symlink 形态即可，无需 --copies
                 if host_python is None:
                     return "宿主 python3 不可用，无法创建 Python 环境。"
                 interpreter = host_python
@@ -570,8 +533,7 @@ class SandboxSession:
         if registered:
             report.append(f"已注册沙箱命令: {' '.join(registered)}")
 
-        # 更新会话 PATH：venv 优先，附带系统工具目录。
-        # 系统目录到这里才引入：venv 已存在，python3 必然解析到 venv 解释器。
+        # 更新会话 PATH：系统工具目录此时才引入（python3 已必然解析到 venv 解释器）
         io = await self.workspace.shell(
             f"export PATH={shlex.quote(str(self.venv_bin_dir))}:/usr/bin:/bin",
             session_id=self.session_id,
@@ -711,12 +673,7 @@ class SandboxManager:
     async def _create(self, session_id: str) -> SandboxSession:
         """构建 Workspace + mirage 会话 + 官方 Pydantic AI backend
 
-        挂载前缀 = DiskVFS 自己的宿主 realpath：虚拟路径与真实路径一致，
-        sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。
-
-        会话初始化（cd + export）走 shell 命令：不传 per-call `cwd` 时命令
-        直接跑在持久 session 上，`cd`/`export` 会留在 session 状态里，
-        之后的 `execute` 即以工作区根为 cwd、带配置的环境变量。
+        会话初始化（cd 工作区根 + export 环境变量）写入持久会话状态。
         """
         workspace_dir = self._workspace_dir(session_id)
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -785,12 +742,7 @@ class SandboxManager:
         )
 
     def _resolve_host_python(self) -> str | None:
-        """解析无 uv 时的原生回退解释器
-
-        优先 `python{venv_python}`（若在 PATH 上，常为带完整 ensurepip/pip
-        的 uv 托管或自装解释器），否则退回系统 python3。若选中解释器位于
-        系统目录之外（沙箱未授权），把其安装根补进只读授权，保证 venv 符号链接在沙箱内可执行。
-        """
+        """解析无 uv 时的原生回退解释器；其安装根在系统目录外时补进只读授权"""
         interpreter = shutil.which(f"python{cfg.sandbox.venv_python}") or shutil.which("python3")
         if interpreter is None:
             return None

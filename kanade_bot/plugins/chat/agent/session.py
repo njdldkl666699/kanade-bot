@@ -341,6 +341,7 @@ class ChatSession:
                 session_info=session_info,
                 bot_id=bot_id,
                 memory_context=memory_context,
+                memory_store=mgr.memory_store,
                 sandbox=sandbox_session,
                 sandbox_root=sandbox_root,
             )
