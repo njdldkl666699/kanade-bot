@@ -41,7 +41,7 @@ register_matcher(remove_gallery_alias, "删除画廊别名")
 
 gallery_pictures = on_command(
     "看所有",
-    aliases={"gallery_pictures", "画廊图片列表", "图片一览"},
+    aliases={"gallery_pictures", "画廊图片列表", "图片一览", "看全部"},
     priority=2,
     block=True,
 )

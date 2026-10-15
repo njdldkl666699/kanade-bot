@@ -230,9 +230,21 @@ def _symmetrize_frame(frame: Image.Image, mode: str) -> Image.Image:
     return result
 
 
+# 中文方向参数展开为内部的 v/r 标记，语义与帮助文档的方向描述一致。
+_DIRECTION_ALIASES: dict[str, list[str]] = {
+    "左": [],
+    "右": ["r"],
+    "上": ["v"],
+    "下": ["v", "r"],
+}
+
+
 def _direction(args: list[str], *, allow_vertical: bool) -> str:
     allowed = {"r", "v"} if allow_vertical else {"r"}
-    direction_args = [arg for arg in args if not arg.endswith("x")]
+    direction_args: list[str] = []
+    for arg in args:
+        if not arg.endswith("x"):
+            direction_args.extend(_DIRECTION_ALIASES.get(arg, [arg]))
     if any(arg not in allowed for arg in direction_args):
         raise ImageToolError("方向参数无效。")
     if len(direction_args) != len(set(direction_args)):
@@ -242,7 +254,7 @@ def _direction(args: list[str], *, allow_vertical: bool) -> str:
 
 def _mid(data: bytes, args: list[str]) -> bytes:
     if len(args) > 2 or any(arg.endswith("x") for arg in args):
-        raise ImageToolError("用法：/对称 [r|v|v r]")
+        raise ImageToolError("用法：/对称 [r|v|v r|上|右|下]")
     mode = _direction(args, allow_vertical=True)
     return _map_frames(data, lambda frame: _symmetrize_frame(frame, mode))
 

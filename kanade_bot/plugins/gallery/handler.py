@@ -253,6 +253,9 @@ async def _(
     force_arg: str | None = args["force"]
     if not name_or_alias:
         await add_picture.finish("请提供画廊名称。")
+    # Haruki Bot重叠命令
+    if name_or_alias in {"个人信息背景", "背景", "个人背景", "个人信息图片"}:
+        await add_picture.finish()
     if force_arg is not None and force_arg.lower() != "force":
         await add_picture.finish("第二个参数仅支持 force，格式：<画廊名称> [force]")
     force = force_arg is not None
