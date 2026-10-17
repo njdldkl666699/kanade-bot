@@ -25,6 +25,7 @@ from pydantic_ai import (
     PartEndEvent,
     RunUsage,
     TextPart,
+    ToolReturnPart,
     UsageLimits,
     UserContent,
 )
@@ -77,6 +78,22 @@ MAX_WORKSPACE_ENTRIES = 10
 
 WORKSPACE_WALK_DEPTH = 3
 """会话统计遍历工作区的最大目录深度"""
+
+CLEARED_TOOL_RESULT_PLACEHOLDER = "[tool result cleared]"
+"""零成本档压缩后的工具结果占位文本（`pydantic_ai_harness` 默认值）"""
+
+
+def _count_emptied_messages(messages: list[ModelMessage]) -> int:
+    """统计被零成本档清空的「空壳」消息条数（全部 part 均为清除占位）"""
+    count = 0
+    for m in messages:
+        parts = getattr(m, "parts", ())
+        if parts and all(
+            isinstance(part, ToolReturnPart) and part.content == CLEARED_TOOL_RESULT_PLACEHOLDER
+            for part in parts
+        ):
+            count += 1
+    return count
 
 
 class EmptyResponseError(RuntimeError):
@@ -596,6 +613,17 @@ class ChatSession:
                 "total_messages": total,
                 "sent_messages": len(messages),
             }
+            # 展示口径：剔除内容已全部清空的空壳消息（实际请求仍包含它们）
+            if emptied := _count_emptied_messages(messages):
+                stats["emptied_messages"] = emptied
+
+            # restore 之后读取：参数漂移时 restore 会重写 marks，之后才是稳定状态
+            if marks := await mgr.store.load_compaction_marks(self.session_id):
+                stats["compaction"] = {
+                    "marks": len(marks),
+                    "latest_strategy": marks[-1].strategy,
+                    "latest_at": marks[-1].applied_at,
+                }
 
             if mgr.sandbox_manager is not None:
                 stats["workspace_files"] = _list_workspace_files(

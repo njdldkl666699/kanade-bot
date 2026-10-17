@@ -1,5 +1,6 @@
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from nonebot import logger, require
@@ -143,12 +144,26 @@ async def handle_chat_stats(event: Event):
     if window:
         usage_line += f"（{tokens / window:.1%}）"
 
+    emptied = result.get("emptied_messages", 0)
+    message_line = (
+        f"消息：数据库全量 {result['total_messages']} 条，"
+        f"压缩后发送 {result['sent_messages'] - emptied} 条"
+    )
+
     lines = [
         "📊 会话统计",
         f"模型：{result['model']} | 窗口上限：{window_line}",
         f"上下文估算：{usage_line}",
-        f"消息：数据库全量 {result['total_messages']} 条，压缩后发送 {result['sent_messages']} 条",
+        message_line,
     ]
+
+    if comp := result.get("compaction"):
+        label = {
+            "clear_tool_results": "清除工具结果",
+            "summarizing": "摘要压缩",
+        }.get(comp["latest_strategy"], comp["latest_strategy"])
+        latest_at = datetime.fromtimestamp(comp["latest_at"]).strftime("%m-%d %H:%M")
+        lines.append(f"压缩：已应用 {comp['marks']} 次，最近 {label} @ {latest_at}")
 
     if files := result.get("workspace_files"):
         lines.append(f"工作区文件（{len(files)}）：")
