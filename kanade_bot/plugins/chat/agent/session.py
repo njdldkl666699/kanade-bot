@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import mimetypes
-import os
 import uuid
 from collections import deque
 from io import BytesIO
@@ -79,6 +78,9 @@ MAX_WORKSPACE_ENTRIES = 10
 WORKSPACE_WALK_DEPTH = 3
 """会话统计遍历工作区的最大目录深度"""
 
+EXCLUDED_WORKSPACE_DIRS = frozenset({"images", "rendered"})
+"""会话统计整目录排除的顶层目录：工具暂存/生成内容（用户图片暂存、HTML渲染输出）"""
+
 CLEARED_TOOL_RESULT_PLACEHOLDER = "[tool result cleared]"
 """零成本档压缩后的工具结果占位文本（`pydantic_ai_harness` 默认值）"""
 
@@ -114,23 +116,42 @@ def _format_size(size: int) -> str:
 
 
 def _list_workspace_files(root: Path) -> list[str]:
-    """列出工作区条目（限深限量），返回 `相对路径 (大小)` 文本列表"""
+    """以 tree 风格列出工作区条目（限深限量），返回带树形连接符的文本行
+
+    顶层的 images/ 与 rendered/ 为工具暂存/生成内容，整目录排除不展示。
+    """
     entries: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        depth = len(Path(dirpath).relative_to(root).parts)
-        if depth >= WORKSPACE_WALK_DEPTH:
-            dirnames[:] = []  # 超过深度不再下钻
-        for name in sorted(filenames):
-            path = Path(dirpath) / name
-            entries.append(f"{path.relative_to(root)} ({_format_size(path.stat().st_size)})")
+    truncated = False
+
+    def walk(directory: Path, prefix: str, depth: int) -> None:
+        nonlocal truncated
+        if truncated or depth >= WORKSPACE_WALK_DEPTH:
+            return
+        try:
+            children = sorted(directory.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return
+        if depth == 0:
+            children = [p for p in children if p.name not in EXCLUDED_WORKSPACE_DIRS]
+        for i, path in enumerate(children):
+            last = i == len(children) - 1
+            connector = "└── " if last else "├── "
+            if path.is_dir():
+                entries.append(f"{prefix}{connector}{path.name}/")
+            else:
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    size = 0
+                entries.append(f"{prefix}{connector}{path.name} ({_format_size(size)})")
             if len(entries) >= MAX_WORKSPACE_ENTRIES:
+                truncated = True
                 entries.append("…（超出部分省略）")
-                return entries
-        for name in sorted(dirnames):
-            entries.append(f"{Path(dirpath, name).relative_to(root)}/")
-            if len(entries) >= MAX_WORKSPACE_ENTRIES:
-                entries.append("…（超出部分省略）")
-                return entries
+                return
+            if path.is_dir():
+                walk(path, prefix + ("    " if last else "│   "), depth + 1)
+
+    walk(root, "", 0)
     return entries
 
 
@@ -257,6 +278,12 @@ class ChatSession:
 
         self.memory_context: MemoryContext | None = None
         """最近发送者的记忆作用域上下文"""
+
+        self._cache_read_total: int = 0
+        """会话级缓存命中 token 累计（内存态、不持久化，重启后重新累计）"""
+
+        self._input_total: int = 0
+        """会话级输入 token 累计（内存态、不持久化，重启后重新累计）"""
 
     # ===== 缓冲区与通知 =====
 
@@ -433,6 +460,9 @@ class ChatSession:
                         history = run
                         # 累计本次运行的usage（含空响应重发与续写）
                         total_usage.incr(stream.usage)
+                        # 会话级缓存命中累计：平均命中率 = cache_read总量 / 输入总量（Token加权）
+                        self._input_total += stream.usage.input_tokens
+                        self._cache_read_total += stream.usage.cache_read_tokens
 
                         # 输出因 max_output_tokens 截断：续写历史已入库，续写输入只需一句提示
                         if (
@@ -517,6 +547,8 @@ class ChatSession:
             self.buffer.clear()
             self.notification = None
             self.memory_context = None
+            self._cache_read_total = 0
+            self._input_total = 0
 
             try:
                 await mgr.store.clear(self.session_id)
@@ -616,6 +648,14 @@ class ChatSession:
             # 展示口径：剔除内容已全部清空的空壳消息（实际请求仍包含它们）
             if emptied := _count_emptied_messages(messages):
                 stats["emptied_messages"] = emptied
+
+            # 平均缓存命中率：会话级累计值（Token加权），内存态、重启后重新计算
+            if self._input_total > 0:
+                stats["cache"] = {
+                    "hit_rate": self._cache_read_total / self._input_total,
+                    "cache_read_tokens": self._cache_read_total,
+                    "input_tokens": self._input_total,
+                }
 
             # restore 之后读取：参数漂移时 restore 会重写 marks，之后才是稳定状态
             if marks := await mgr.store.load_compaction_marks(self.session_id):

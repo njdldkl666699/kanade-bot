@@ -127,7 +127,7 @@ async def handle_chat_compact(event: Event):
 
 @chat_stats.handle()
 async def handle_chat_stats(event: Event):
-    """查看会话统计：上下文token估算/模型窗口上限、消息条数、工作区文件列表"""
+    """查看会话统计：上下文token估算/模型窗口上限、消息条数、缓存命中率、工作区文件列表"""
     session_id = extract_session_info_sync(event).session_id
     try:
         result = await chat_manager.get_session(session_id).stats()
@@ -157,6 +157,11 @@ async def handle_chat_stats(event: Event):
         message_line,
     ]
 
+    if cache := result.get("cache"):
+        lines.append(
+            f"平均缓存命中：{cache['hit_rate']:.1%} {cache['cache_read_tokens']}/{cache['input_tokens']} tokens"
+        )
+
     if comp := result.get("compaction"):
         label = {
             "clear_tool_results": "清除工具结果",
@@ -166,8 +171,8 @@ async def handle_chat_stats(event: Event):
         lines.append(f"压缩：已应用 {comp['marks']} 次，最近 {label} @ {latest_at}")
 
     if files := result.get("workspace_files"):
-        lines.append(f"工作区文件（{len(files)}）：")
-        lines.extend(f"- {entry}" for entry in files)
+        lines.append("工作区文件：")
+        lines.extend(files)
     else:
         lines.append("工作区：未启用沙箱或工作区为空")
 

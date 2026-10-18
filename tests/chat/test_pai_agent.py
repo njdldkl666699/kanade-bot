@@ -18,6 +18,7 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -79,10 +80,13 @@ from pydantic_ai.usage import RequestUsage, UsageLimits
 from pydantic_ai_harness.compaction import compact_now
 
 from kanade_bot.plugins.chat.agent import compaction as compaction_mod
+from kanade_bot.plugins.chat.agent import session as session_mod
 from kanade_bot.plugins.chat.agent import session_store as store_mod
+from kanade_bot.plugins.chat.agent.session import ChatSession
 from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
 from kanade_bot.utils import pai_runtime
 from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig
+from kanade_bot.utils.session import SessionInfo
 
 SessionStore = store_mod.SessionStore
 
@@ -1121,6 +1125,198 @@ class StreamingTest(unittest.IsolatedAsyncioTestCase):
                     pass
 
         self.assertIsNone(stream.result, "取消后不应有结果")
+
+
+# ===== 会话统计：平均缓存命中率 =====
+
+
+class UsageScriptedModel(FunctionModel):
+    """按脚本返回响应序列，并在流式路径注入脚本指定的 usage
+
+    FunctionModel 的流式实现用 `_estimate_usage` 自行估算 usage，完全丢弃
+    脚本响应 `ModelResponse.usage` 里的显式值；这里在流交付给消费方之前，
+    用脚本条目配对的 usage 替换估算值，使 `stream.usage` 反映设定。
+    每次流式请求消耗一个脚本条目（与 `ScriptedModel` 的推进规则一致）。
+    """
+
+    def __init__(self, script: list[tuple[ModelResponse, RequestUsage]]):
+        scripted = ScriptedModel([response for response, _ in script])
+        super().__init__(scripted, stream_function=scripted.stream)
+        self._usages = [usage for _, usage in script]
+        self._stream_index = 0
+
+    @asynccontextmanager
+    async def request_stream(self, *args, **kwargs):
+        async with super().request_stream(*args, **kwargs) as response:
+            response._usage = self._usages[min(self._stream_index, len(self._usages) - 1)]
+            self._stream_index += 1
+            yield response
+
+
+def resp_usage(
+    text: str, *, input_tokens: int, cache_read_tokens: int
+) -> tuple[ModelResponse, RequestUsage]:
+    """构造「文本响应 + 指定 usage」的脚本条目"""
+    return (
+        resp_text(text),
+        RequestUsage(
+            input_tokens=input_tokens, cache_read_tokens=cache_read_tokens, output_tokens=10
+        ),
+    )
+
+
+STATS_SESSION_INFO = SessionInfo(session_id="c1", nickname="测试者", user_id="u1")
+"""缓存命中率测试用的发送者信息"""
+
+NOOP_PARAMS = CompactionParams(
+    trigger_fraction=0.8,
+    context_window=10**9,
+    summary_target_fraction=0.9,
+)
+"""窗口极大：轮末压缩必然不触发，隔离出纯 usage 累计行为"""
+
+
+class SessionCacheStatsTest(unittest.IsolatedAsyncioTestCase):
+    """`ChatSession` 平均缓存命中率：会话级累计（Token加权），内存态、不落库"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    def _make_session(self, script: list[tuple[ModelResponse, RequestUsage]]) -> ChatSession:
+        """构造与 manager 同构的最小 ChatSession（无沙箱/记忆/MCP）"""
+        recorder = compaction_mod.build_compaction_capability(NOOP_PARAMS)
+        agent = Agent(
+            UsageScriptedModel(script),
+            capabilities=[recorder, PrepareTools(lambda ctx, defs: defs)],
+        )
+        mgr = SimpleNamespace(
+            store=self.store,
+            agent=agent,
+            compaction=recorder,
+            compaction_params=NOOP_PARAMS,
+            model_settings={},
+            output_upper_tokens=None,
+            mcp_toolsets=[],
+            sandbox_manager=None,
+            memory_store=None,
+        )
+        return ChatSession("c1", manager=mgr)
+
+    async def _turn(self, session: ChatSession, prompt: str) -> None:
+        async for _ in session.send_and_wait(STATS_SESSION_INFO, prompt, bot_id="b1"):
+            pass
+
+    async def test_token_weighted_hit_rate(self):
+        """命中率 = 会话累计 cache_read / 累计输入 token（跨轮累计）"""
+        session = self._make_session(
+            [
+                resp_usage("第一轮回答", input_tokens=1000, cache_read_tokens=800),
+                resp_usage("第二轮回答", input_tokens=500, cache_read_tokens=500),
+            ]
+        )
+        await self._turn(session, "问题1")
+        await self._turn(session, "问题2")
+
+        stats = await session.stats()
+        assert stats is not None
+        self.assertAlmostEqual(stats["cache"]["hit_rate"], 1300 / 1500)
+        self.assertEqual(stats["cache"]["cache_read_tokens"], 1300)
+        self.assertEqual(stats["cache"]["input_tokens"], 1500)
+
+    async def test_reset_clears_counters(self):
+        """重置会话后累计清零、命中率重新计算"""
+        session = self._make_session(
+            [
+                resp_usage("第一轮回答", input_tokens=1000, cache_read_tokens=800),
+                resp_usage("重置后回答", input_tokens=400, cache_read_tokens=100),
+            ]
+        )
+        await self._turn(session, "问题1")
+        await session.reset()
+        await self._turn(session, "问题2")
+
+        stats = await session.stats()
+        assert stats is not None
+        self.assertAlmostEqual(stats["cache"]["hit_rate"], 100 / 400)
+
+    async def test_no_usage_no_cache_entry(self):
+        """未产生任何模型用量时不输出 cache 字段"""
+        session = self._make_session([])
+        # 仅落历史、不运行模型：内存累计仍为零
+        await self.store.append("c1", make_history(1))
+        stats = await session.stats()
+        assert stats is not None
+        self.assertNotIn("cache", stats)
+
+
+class WorkspaceTreeTest(unittest.TestCase):
+    """`_list_workspace_files`：tree 风格渲染 + 限深限量"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_tree_rendering(self):
+        """目录/文件按名混排，带树形连接符与缩进"""
+        (self.root / "assets").mkdir()
+        (self.root / "assets" / "b.jpg").write_bytes(b"x" * 2048)
+        (self.root / "assets" / "a.jpg").write_bytes(b"x")
+        (self.root / "main.py").write_text("print()")
+
+        lines = session_mod._list_workspace_files(self.root)
+        self.assertEqual(
+            lines,
+            [
+                "├── assets/",
+                "│   ├── a.jpg (1 B)",
+                "│   └── b.jpg (2.0 KB)",
+                "└── main.py (7 B)",
+            ],
+        )
+
+    def test_generated_dirs_excluded(self):
+        """顶层 images/ 与 rendered/ 为工具生成内容，整目录不展示；嵌套同名目录不受影响"""
+        (self.root / "images").mkdir()
+        (self.root / "images" / "a.jpg").write_bytes(b"x")
+        (self.root / "rendered").mkdir()
+        (self.root / "rendered" / "out.png").write_bytes(b"x")
+        (self.root / "nested").mkdir()
+        (self.root / "nested" / "images").mkdir()
+        (self.root / "nested" / "images" / "keep.txt").write_text("x")
+
+        lines = session_mod._list_workspace_files(self.root)
+        self.assertEqual(
+            lines,
+            ["└── nested/", "    └── images/", "        └── keep.txt (1 B)"],
+        )
+
+    def test_entry_limit_keeps_marker(self):
+        """超出条数上限时截断并追加省略标记"""
+        for i in range(15):
+            (self.root / f"f{i:02d}.txt").write_text("x")
+
+        lines = session_mod._list_workspace_files(self.root)
+        self.assertEqual(len(lines), session_mod.MAX_WORKSPACE_ENTRIES + 1)
+        self.assertEqual(lines[-1], "…（超出部分省略）")
+
+    def test_depth_limit_lists_but_not_descends(self):
+        """第 3 层目录仍列出，但不再下钻展示其内容"""
+        deep = self.root / "d1" / "d2" / "d3"
+        deep.mkdir(parents=True)
+        (deep / "hidden.txt").write_text("x")
+
+        lines = session_mod._list_workspace_files(self.root)
+        # d1/d2 均为独子：延续前缀全为空格，无 │ 竖线
+        self.assertIn("        └── d3/", lines)
+        self.assertNotIn("hidden.txt", "\n".join(lines))
+
+    def test_empty_or_missing_root(self):
+        """根目录不存在/为空时返回空列表"""
+        self.assertEqual(session_mod._list_workspace_files(self.root), [])
+        self.assertEqual(session_mod._list_workspace_files(self.root / "missing"), [])
 
 
 if __name__ == "__main__":
