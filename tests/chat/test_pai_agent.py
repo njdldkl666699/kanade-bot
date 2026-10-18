@@ -1270,10 +1270,10 @@ class WorkspaceTreeTest(unittest.TestCase):
         self.assertEqual(
             lines,
             [
-                "├── assets/",
-                "│   ├── a.jpg (1 B)",
-                "│   └── b.jpg (2.0 KB)",
-                "└── main.py (7 B)",
+                "├ assets/",
+                "│ ├ a.jpg (1 B)",
+                "│ └ b.jpg (2.0 KB)",
+                "└ main.py (7 B)",
             ],
         )
 
@@ -1290,8 +1290,21 @@ class WorkspaceTreeTest(unittest.TestCase):
         lines = session_mod._list_workspace_files(self.root)
         self.assertEqual(
             lines,
-            ["└── nested/", "    └── images/", "        └── keep.txt (1 B)"],
+            ["└ nested/", "  └ images/", "    └ keep.txt (1 B)"],
         )
+
+    def test_hidden_entries_excluded(self):
+        """`.` 开头的隐藏文件/目录默认不展示（含嵌套层级）"""
+        (self.root / ".venv").mkdir()
+        (self.root / ".venv" / "bin").mkdir()
+        (self.root / ".bashrc").write_text("x")
+        (self.root / "sub").mkdir()
+        (self.root / "sub" / ".hidden").mkdir()
+        (self.root / "sub" / ".secret").write_text("x")
+        (self.root / "sub" / "visible.txt").write_text("x")
+
+        lines = session_mod._list_workspace_files(self.root)
+        self.assertEqual(lines, ["└ sub/", "  └ visible.txt (1 B)"])
 
     def test_entry_limit_keeps_marker(self):
         """超出条数上限时截断并追加省略标记"""
@@ -1300,7 +1313,7 @@ class WorkspaceTreeTest(unittest.TestCase):
 
         lines = session_mod._list_workspace_files(self.root)
         self.assertEqual(len(lines), session_mod.MAX_WORKSPACE_ENTRIES + 1)
-        self.assertEqual(lines[-1], "…（超出部分省略）")
+        self.assertEqual(lines[-1], "…")
 
     def test_depth_limit_lists_but_not_descends(self):
         """第 3 层目录仍列出，但不再下钻展示其内容"""
@@ -1310,7 +1323,7 @@ class WorkspaceTreeTest(unittest.TestCase):
 
         lines = session_mod._list_workspace_files(self.root)
         # d1/d2 均为独子：延续前缀全为空格，无 │ 竖线
-        self.assertIn("        └── d3/", lines)
+        self.assertIn("    └ d3/", lines)
         self.assertNotIn("hidden.txt", "\n".join(lines))
 
     def test_empty_or_missing_root(self):

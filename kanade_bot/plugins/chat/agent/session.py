@@ -116,10 +116,7 @@ def _format_size(size: int) -> str:
 
 
 def _list_workspace_files(root: Path) -> list[str]:
-    """以 tree 风格列出工作区条目（限深限量），返回带树形连接符的文本行
-
-    顶层的 images/ 与 rendered/ 为工具暂存/生成内容，整目录排除不展示。
-    """
+    """以 tree 风格列出工作区条目（限深限量），返回带树形连接符的文本行"""
     entries: list[str] = []
     truncated = False
 
@@ -131,11 +128,13 @@ def _list_workspace_files(root: Path) -> list[str]:
             children = sorted(directory.iterdir(), key=lambda p: p.name)
         except OSError:
             return
+        # `.` 开头的隐藏条目默认不展示（同 tree 无 -a，如沙箱的 .venv/.home）
+        children = [p for p in children if not p.name.startswith(".")]
         if depth == 0:
             children = [p for p in children if p.name not in EXCLUDED_WORKSPACE_DIRS]
         for i, path in enumerate(children):
             last = i == len(children) - 1
-            connector = "└── " if last else "├── "
+            connector = "└ " if last else "├ "
             if path.is_dir():
                 entries.append(f"{prefix}{connector}{path.name}/")
             else:
@@ -146,10 +145,10 @@ def _list_workspace_files(root: Path) -> list[str]:
                 entries.append(f"{prefix}{connector}{path.name} ({_format_size(size)})")
             if len(entries) >= MAX_WORKSPACE_ENTRIES:
                 truncated = True
-                entries.append("…（超出部分省略）")
+                entries.append("…")
                 return
             if path.is_dir():
-                walk(path, prefix + ("    " if last else "│   "), depth + 1)
+                walk(path, prefix + ("  " if last else "│ "), depth + 1)
 
     walk(root, "", 0)
     return entries

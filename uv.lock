@@ -1160,7 +1160,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.144.0"
+version = "0.145.0"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -1170,9 +1170,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/d7/c0/0d48292d19c33bade0d1f3a72b2be832dadb1ecc8e9c00e1ae71dda80b5d/fastapi-0.144.0.tar.gz", hash = "sha256:7392b2609ebaf7e2dbffd38b8a927499e61a50e55dd0e57323ebee30efc1a462", size = 471424, upload-time = "2026-10-18T12:42:50.858Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/0c/55/df6fa8263890d122c46ff87162b58af19771c3bdb37f05e0f22fb6993a4a/fastapi-0.145.0.tar.gz", hash = "sha256:13936fd7ee99f4f52ac8b700e083e9abf3d63168a8d818aceb301d1b3a17fb7f", size = 471439, upload-time = "2026-10-18T14:40:37.388Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/60/38/7435e963d3966b21e5113ce5ee2b0a0e64837e177f9f64fb86d23aeb0b7d/fastapi-0.144.0-py3-none-any.whl", hash = "sha256:ce62d92f1abe5e06f9111a3d39c675340d440ee7095beab06ec31fee7c070a71", size = 144899, upload-time = "2026-10-18T12:42:49.377Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/c3/ee/efa866aa258a9590dd8417b85a89c6370a8515a9155a82e2bbe59483322c/fastapi-0.145.0-py3-none-any.whl", hash = "sha256:f13adee715291191b8d72642b747f73f83c4f5ad8f384771cb6c5103e95234c2", size = 144614, upload-time = "2026-10-18T14:40:35.721Z" },
 ]
 
 [[package]]
@@ -2061,7 +2061,7 @@ requires-dist = [
     { name = "nonebot-plugin-chatrecorder", git = "https://gh-proxy.org/https://github.com/njdldkl666699/nonebot-plugin-chatrecorder.git?rev=main" },
     { name = "nonebot-plugin-datastore", specifier = ">=1.3.1" },
     { name = "nonebot-plugin-githubcard", specifier = ">=0.4.1" },
-    { name = "nonebot-plugin-htmlrender", git = "https://gh-proxy.org/https://github.com/njdldkl666699/nonebot-plugin-htmlrender.git?rev=backport%2Fpr-112" },
+    { name = "nonebot-plugin-htmlrender", specifier = "==0.6.7" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
     { name = "nonebot-plugin-orm", extras = ["default"], specifier = ">=0.8.3" },
     { name = "nonebot-plugin-picstatus", specifier = ">=2.3.0" },
@@ -3070,7 +3070,7 @@ wheels = [
 [[package]]
 name = "nonebot-plugin-htmlrender"
 version = "0.6.7"
-source = { git = "https://gh-proxy.org/https://github.com/njdldkl666699/nonebot-plugin-htmlrender.git?rev=backport%2Fpr-112#88e9a30e07795637e6ef4d22830a1eb99bda1cac" }
+source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "aiofiles" },
     { name = "jinja2" },
@@ -3080,6 +3080,10 @@ dependencies = [
     { name = "pygments" },
     { name = "pymdown-extensions" },
     { name = "python-markdown-math" },
+]
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/69/b4/bb23fa23ff5a554a64dbfa849fd505f7270f25d9a178f153e9f685e9ee73/nonebot_plugin_htmlrender-0.6.7.tar.gz", hash = "sha256:968b06bdfef10e06ad64c9d945c89000b1eaa82a89d5bae71a0647a3a6271c38", size = 1392554, upload-time = "2025-08-19T03:41:09.054Z" }
+wheels = [
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/75/30/e307374ef0b83fe8dc36004d94332255ff746698af0adb47b3337a7e8305/nonebot_plugin_htmlrender-0.6.7-py3-none-any.whl", hash = "sha256:d782f20dbfd7573944ccd3e4dff2c69daaee8aa5e6f78443ef94057d4126e252", size = 1064240, upload-time = "2025-08-19T03:41:07.025Z" },
 ]
 
 [[package]]
