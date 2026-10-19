@@ -22,10 +22,7 @@ async def handle_60s_console(bot: ConsoleBot):
 
 @daily60s.handle()
 async def handle_60s_onebot(bot: OneBot):
-    r = await client.get("/v2/60s")
-    r.raise_for_status()
-    url: str = r.json()["data"]["image"]
-    r = await client.get(url)
+    r = await client.get("/v2/60s", params={"encoding": "image-proxy"})
     r.raise_for_status()
     await daily60s.finish(OneBotMessageSegment.image(r.content))
 
