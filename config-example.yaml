@@ -68,10 +68,10 @@ chat:
     openai_api_key: *siliconflow-api_key
     openai_model: BAAI/bge-m3
   billing: &billing
-    peak_input_per_1k: 12
-    peak_output_per_1k: 48
-    off_peak_input_per_1k: 6
-    off_peak_output_per_1k: 24
+    peak_input_per_1k: 6
+    peak_output_per_1k: 24
+    off_peak_input_per_1k: 3
+    off_peak_output_per_1k: 12
     min_cost: 1
 
 fun:

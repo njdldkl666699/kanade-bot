@@ -2593,7 +2593,7 @@ wheels = [
 [[package]]
 name = "mirage-ai"
 version = "0.0.7a2"
-source = { git = "https://gh-proxy.org/https://github.com/strukto-ai/mirage.git?subdirectory=python&rev=main#25328317e0ae9aba2dd0f20b79e3f07dee437df3" }
+source = { git = "https://gh-proxy.org/https://github.com/strukto-ai/mirage.git?subdirectory=python&rev=main#436da6297f6559152d3e2ca58f65c4c2aefd856b" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
@@ -2620,7 +2620,7 @@ dependencies = [
 [[package]]
 name = "mirage-rs"
 version = "0.0.7a2"
-source = { git = "https://gh-proxy.org/https://github.com/strukto-ai/mirage.git?subdirectory=rust%2Fpython&rev=main#25328317e0ae9aba2dd0f20b79e3f07dee437df3" }
+source = { git = "https://gh-proxy.org/https://github.com/strukto-ai/mirage.git?subdirectory=rust%2Fpython&rev=main#436da6297f6559152d3e2ca58f65c4c2aefd856b" }
 
 [[package]]
 name = "mmh3"
