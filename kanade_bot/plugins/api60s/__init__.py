@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import nonebot
-from httpx import TimeoutException
+from httpx import HTTPError
 from nonebot.matcher import Matcher
 from nonebot.message import run_postprocessor
 from nonebot.plugin import PluginMetadata
@@ -21,5 +21,5 @@ sub_plugins = nonebot.load_plugins(str(Path(__file__).parent.joinpath("plugins")
 @run_postprocessor
 async def _(matcher: Matcher, exception: Exception | None):
     match exception:
-        case TimeoutException():
-            await matcher.finish("请求超时，请稍后再试")
+        case HTTPError():
+            await matcher.finish("请求失败，请稍后再试")
