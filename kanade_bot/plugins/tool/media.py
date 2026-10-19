@@ -27,7 +27,18 @@ SENSENOVA_EDITS_URL = "https://token.sensenova.cn/v1/images/edits"
 
 AGNES_IMAGE_MODEL = "agnes-image-2.5-flash"
 AGNES_VIDEO_MODEL = "agnes-video-2.5-flash"
-AGNES_IMAGE_RATIOS = frozenset({"1:1", "3:4", "4:3", "16:9", "9:16", "2:3", "3:2", "21:9"})
+AGNES_IMAGE_RATIO_ASPECTS = {
+    "1:1": 1.0,
+    "3:4": 3 / 4,
+    "4:3": 4 / 3,
+    "16:9": 16 / 9,
+    "9:16": 9 / 16,
+    "2:3": 2 / 3,
+    "3:2": 3 / 2,
+    "21:9": 21 / 9,
+}
+"""Agnes 宽高比到宽高数值的映射"""
+AGNES_IMAGE_RATIOS = frozenset(AGNES_IMAGE_RATIO_ASPECTS)
 """Agnes 图片创作支持的宽高比"""
 AGNES_VIDEO_RATIOS = frozenset({"21:9", "16:9", "4:3", "1:1", "3:4", "9:16"})
 """Agnes 视频生成支持的画幅"""
@@ -205,6 +216,22 @@ def _agnes_image_size(size: str) -> str:
     return "1K" if size == "auto" else size
 
 
+def _infer_image_ratio(image_url: str) -> str:
+    """从 Data-URL 图片的尺寸推断最接近的受支持宽高比。"""
+    try:
+        _, _, b64_data = image_url.partition(",")
+        data = base64.b64decode(b64_data)
+        with Image.open(BytesIO(data)) as img:
+            width, height = img.size
+    except Exception as exc:
+        raise CreationError("解析图片尺寸失败，请显式指定宽高比后重试。") from exc
+    aspect = width / height
+    return min(
+        AGNES_IMAGE_RATIOS,
+        key=lambda ratio: abs(aspect / AGNES_IMAGE_RATIO_ASPECTS[ratio] - 1),
+    )
+
+
 async def create_image(
     prompt: str, size: str, ratio: str | None, prompt_extend: bool
 ) -> list[MessageSegment]:
@@ -238,6 +265,9 @@ async def edit_image(
     images: list[str], prompt: str, size: str, ratio: str | None, prompt_extend: bool
 ) -> list[MessageSegment]:
     if cfg.image_provider == "agnes":
+        if ratio is None and images:
+            # 未指定宽高比时，按第一张图片推断最接近的受支持宽高比，而非使用API默认值
+            ratio = _infer_image_ratio(images[0])
         payload: dict = {
             "model": AGNES_IMAGE_MODEL,
             "prompt": prompt,
