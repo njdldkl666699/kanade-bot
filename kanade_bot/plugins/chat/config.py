@@ -151,6 +151,16 @@ class CompactionConfig(AttrDocModel):
     默认20000字符，够用故暂不提供配置。
     """
 
+    summary_prompt_file: str = "CompactionSummary.md"
+    """摘要档提示词模板文件名
+
+    模板须含`{messages}`占位符且无其它未转义花括号；文件缺失或非法时回退 harness 默认模板"""
+
+    @property
+    def summary_prompt_file_path(self) -> Path:
+        """摘要档提示词模板文件路径"""
+        return get_plugin_config_file(self.summary_prompt_file)
+
     online_valve_fraction: float | None = 0.92
     """run 内应急压缩阈值；None 表示完全关闭在线压缩
 

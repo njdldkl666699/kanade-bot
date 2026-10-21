@@ -24,6 +24,8 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 
 摘要档两个关键参数：`preserve_first_user_message=False`（长期群聊第一条用户消息无意义——历史上曾因 upstream 默认 True 导致「喵喵」复读事故）；`keep_user_messages=True` 时保留被摘要范围内最近的用户消息，`summary_keep_messages` 是用户消息与原样保留的尾部消息共享的名额（用户消息优先）。
 
+摘要档提示词从 `config/chat/CompactionSummary.md` 读入（聊天场景定制，替代 harness 面向编码助手的默认模板；须含 `{messages}` 占位符且无其它未转义花括号），缺失或非法时回退 harness 默认模板。harness 的增量更新指令（英文，`<previous-summary>` 锚点回填）固定追加在模板之后，不可配置。
+
 ## 3. 触发时机：轮末压缩 + 在线应急阀（v3）
 
 当前架构出自两起生产事故（在线估算误触发 + 压缩打断进行中的工具链），核心原则是**常规压缩绝不打断进行中的轮次**：
@@ -85,6 +87,7 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 | `summary_model` | None | null | 摘要模型；None 继承主模型 |
 | `summary_keep_messages` | 40 | 20 | 摘要范围内保留名额（与用户消息共享） |
 | `summary_keep_user_messages` | True | true | 保留被摘要范围内最近用户消息 |
+| `summary_prompt_file` | CompactionSummary.md | 同默认 | 摘要档提示词模板（相对插件配置目录）；缺失/非法回退 harness 默认 |
 | `online_valve_fraction` | 0.92 | 0.92 | 应急阀阈值；None 完全关闭 |
 
 阈值约束（1M 窗口实测）：最小 ≥0.7（最大群常态占用 66.8%）；在线阀须低于预算拒绝线 ≈0.945。

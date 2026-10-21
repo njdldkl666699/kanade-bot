@@ -219,6 +219,23 @@ def build_clear_mark(params: CompactionConfig) -> CompactionMark:
     )
 
 
+def _summary_prompt_template(params: CompactionConfig) -> str | None:
+    """读入摘要档提示词模板文件；缺失或非法时返回 None（不覆盖，用 harness 默认）"""
+    path = params.summary_prompt_file_path
+    if not path.is_file():
+        logger.warning(f"摘要档提示词文件不存在，使用 harness 默认模板：{path.absolute()}")
+        return None
+    template = path.read_text(encoding="utf-8")
+    try:
+        if not template.strip() or "{messages}" not in template:
+            raise ValueError("模板为空或缺少 {messages} 占位符")
+        template.format(messages="")  # 干跑校验：无其它未转义花括号
+    except (KeyError, IndexError, ValueError) as e:
+        logger.warning(f"摘要档提示词模板非法（{e}），已回退 harness 默认：{path}")
+        return None
+    return template
+
+
 def build_summary(
     params: CompactionConfig,
     *,
@@ -226,6 +243,10 @@ def build_summary(
     output_upper_tokens: int | None = None,
 ) -> SummarizingCompaction:
     """构造摘要档策略（轮末、应急阀与手动压缩共用）"""
+    # 模板文件缺失/非法时不覆盖提示词字段，回退 harness 默认
+    prompt_kwargs: dict[str, Any] = {}
+    if (template := _summary_prompt_template(params)) is not None:
+        prompt_kwargs = {"summary_prompt": template}
     return SummarizingCompaction(
         model=params.summary_model,
         max_fraction=params.summary_target_fraction or 1.0,
@@ -237,6 +258,7 @@ def build_summary(
             ModelSettings | None,
             summary_model_settings(params, model_settings, output_upper_tokens),
         ),
+        **prompt_kwargs,
     )
 
 
