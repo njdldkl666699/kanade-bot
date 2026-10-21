@@ -75,7 +75,7 @@ class HarvestConfig(BaseModel):
     """行为配置，键为行为类别名称，值为对应的采集行为类别配置"""
 
 
-p = Path("config") / "crystal" / "harvest_config.json"
+p = Path("config") / "crystal" / "harvest" / "harvest_config.json"
 harvest_config = HarvestConfig.model_validate_json(p.read_text(encoding="utf-8"))
 
 

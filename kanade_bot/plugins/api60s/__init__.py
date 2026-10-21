@@ -19,7 +19,5 @@ sub_plugins = nonebot.load_plugins(str(Path(__file__).parent.joinpath("plugins")
 
 
 @run_postprocessor
-async def _(matcher: Matcher, exception: Exception | None):
-    match exception:
-        case HTTPError():
-            await matcher.finish("请求失败，请稍后再试")
+async def _(matcher: Matcher, exception: HTTPError | None):
+    await matcher.finish(f"请求失败：{exception}")

@@ -21,3 +21,4 @@ cache/
 # 杂项
 kanade_banner*
 .VSCodeCounter/
+.mcp.json

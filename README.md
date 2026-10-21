@@ -45,7 +45,7 @@ sandbox:
 ```bash
 # 从 https://github.com/multikernel/sandlock/releases 下载对应架构的二进制
 curl -fsSL -o sandlock.tar.gz \
-  https://github.com/multikernel/sandlock/releases/download/v0.8.9/sandlock-x86_64-unknown-linux-gnu.tar.gz
+  https://github.com/multikernel/sandlock/releases/download/v0.9.0/sandlock-x86_64-unknown-linux-gnu.tar.gz
 tar xzf sandlock.tar.gz && install -m755 sandlock ~/.local/bin/
 sandlock check   # 确认 ABI 与 protection 可用性
 ```

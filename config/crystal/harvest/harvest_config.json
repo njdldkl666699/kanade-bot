@@ -99,7 +99,7 @@
     },
     "item_plant_1": {
       "name": "四叶草",
-      "bonus_crystal": 25
+      "bonus_crystal": 20
     },
     "item_plant_2": {
       "name": "顺滑的亚麻",
@@ -135,7 +135,7 @@
     },
     "item_wood_5": {
       "name": "夕桐",
-      "bonus_crystal": 25
+      "bonus_crystal": 20
     }
   },
   "action_categories": {
@@ -144,7 +144,7 @@
       "actions": {
         "item_wood_2": {
           "name": "阔叶树",
-          "probability": 0.31,
+          "probability": 0.32,
           "items": [
             {
               "material_id": "item_wood_1",
@@ -170,7 +170,7 @@
         },
         "item_wood_3": {
           "name": "针叶树",
-          "probability": 0.31,
+          "probability": 0.32,
           "items": [
             {
               "material_id": "item_wood_1",
@@ -196,7 +196,7 @@
         },
         "item_wood_4": {
           "name": "热带树",
-          "probability": 0.31,
+          "probability": 0.32,
           "items": [
             {
               "material_id": "item_wood_1",
@@ -222,7 +222,7 @@
         },
         "item_wood_5": {
           "name": "夕桐",
-          "probability": 0.07,
+          "probability": 0.04,
           "items": [
             {
               "material_id": "item_wood_1",
@@ -278,7 +278,7 @@
             {
               "material_id": "item_mineral_7",
               "quantity": 1,
-              "probability": 0.01
+              "probability": 0.005
             }
           ]
         },
@@ -309,7 +309,7 @@
             {
               "material_id": "item_mineral_7",
               "quantity": 1,
-              "probability": 0.01
+              "probability": 0.005
             }
           ]
         },
@@ -340,7 +340,7 @@
             {
               "material_id": "item_mineral_7",
               "quantity": 1,
-              "probability": 0.01
+              "probability": 0.005
             }
           ]
         },
@@ -371,7 +371,7 @@
             {
               "material_id": "item_mineral_7",
               "quantity": 1,
-              "probability": 0.01
+              "probability": 0.005
             }
           ]
         },
@@ -402,7 +402,7 @@
             {
               "material_id": "item_mineral_7",
               "quantity": 1,
-              "probability": 0.01
+              "probability": 0.005
             }
           ]
         },
@@ -627,7 +627,7 @@
         },
         "item_mineral_7": {
           "name": "钻石",
-          "probability": 0.024,
+          "probability": 0.01,
           "items": [
             {
               "material_id": "item_mineral_7",
@@ -669,13 +669,24 @@
             }
           ]
         },
+        "item_plant_1": {
+          "name": "四叶草",
+          "probability": 0.019,
+          "items": [
+            {
+              "material_id": "item_plant_1",
+              "quantity": 1,
+              "probability": 1
+            }
+          ]
+        },
         "item_plant_2": {
           "name": "顺滑的亚麻",
           "probability": 0.034,
           "items": [
             {
               "material_id": "item_plant_2",
-              "quantity": 2,
+              "quantity": 1,
               "probability": 1
             }
           ]
@@ -686,7 +697,7 @@
           "items": [
             {
               "material_id": "item_plant_3",
-              "quantity": 2,
+              "quantity": 1,
               "probability": 1
             }
           ]
@@ -697,7 +708,7 @@
           "items": [
             {
               "material_id": "item_plant_4",
-              "quantity": 2,
+              "quantity": 1,
               "probability": 1
             }
           ]
@@ -708,7 +719,7 @@
           "items": [
             {
               "material_id": "item_wood_1",
-              "quantity": 2,
+              "quantity": 1,
               "probability": 1
             }
           ]
@@ -748,7 +759,7 @@
         },
         "item_wood_5": {
           "name": "夕桐",
-          "probability": 0.024,
+          "probability": 0.019,
           "items": [
             {
               "material_id": "item_wood_5",

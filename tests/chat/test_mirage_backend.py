@@ -1,9 +1,10 @@
 """mirage 官方 Pydantic AI 集成（`KanadeWorkspace`）的行为测试。
 
-mirage 提供 `PydanticAIWorkspace`（`pydantic-ai-backend` 的 `SandboxProtocol`
-实现），本项目在其上加**工作区根绑定**（免 FUSE 布局下相对路径会落到 VFS
-根 `/`）与 `execute` 超时。这里验证官方 backend 的行为契约 + 本项目特有的
-**隔离边界**（模型读不到 bot 的配置/密钥/源码）。
+mirage（PyPI 0.0.7）经 `mirage.agents.pydantic_ai` 提供官方
+`MirageWorkspaceBackend`（`pydantic_ai.workspaces` 协议实现），本项目在其上
+加**工作区根绑定**（免 FUSE 布局下相对路径会落到 VFS 根 `/`）。这里验证
+官方 backend 的行为契约 + 本项目特有的**隔离边界**（模型读不到 bot 的
+配置/密钥/源码）。
 
 **宿主落地断言必须走子进程**：mirage 会给整个进程打 `os`/`open` 补丁
 （`mirage.runtime.python.host.*`），本布局挂载前缀 = 宿主真实路径，进程内

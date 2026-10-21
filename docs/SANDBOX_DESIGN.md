@@ -9,20 +9,22 @@ Agent 需要读写文件、执行命令（渲染 HTML、跑 Python 脚本、分�
 
 | 组件 | 角色 | 关键事实 |
 | --- | --- | --- |
-| [mirage](https://github.com/strukto-ai/mirage)（git main） | 进程内虚拟文件系统（VFS）+ 会话 shell | 每活跃 workspace 约 0.1MB RSS；官方提供 `MirageWorkspaceBackend`（Pydantic AI workspace 协议实现） |
+| [mirage](https://github.com/strukto-ai/mirage)（PyPI 0.0.7） | 进程内虚拟文件系统（VFS）+ 会话 shell | 每活跃 workspace 约 0.1MB RSS；官方提供 `MirageWorkspaceBackend`（Pydantic AI workspace 协议实现） |
 | [sandlock](https://github.com/multikernel/sandlock) CLI | 受限子进程的 OS 级边界 | Landlock（文件系统）+ seccomp（系统调用/网络）；每次执行 spawn 新 sandlock 进程 |
 | Pydantic AI `workspaces` | 工具协议 | ConsoleCapability 提供 shell/read/write/edit/grep/glob 等客户端工具，经 `get_workspace` 取后端 |
 
-不用 bubblewrap（实测沙箱内可读到 bot 的 `config.yaml` 含密钥）；不用 mirage PyPI 版（相对 git main 有 3 个未修缺陷：cwd 不传、相对路径读写落根、sandlock 子进程 cwd 错误）。
+不用 bubblewrap（实测沙箱内可读到 bot 的 `config.yaml` 含密钥）。mirage 依赖演进：早期 PyPI 0.0.7a2 相对 git main 有 3 个缺陷（cwd 不传、相对路径读写落根、sandlock 子进程 cwd 错误）而临时改用 git main；0.0.7 正式版已包含全部修复（2026-10-21 实测确认），依赖已切回 PyPI。
 
 ## 2. 隔离模型
 
 双层边界：
 
 1. **VFS 视图层**（mirage）：每个会话一个 `Workspace`，唯一挂载是自己的工作区目录。界外路径在 VFS 里不存在，工具的相对路径天然无法逃逸。
-2. **进程层**（sandlock）：所有命令执行经 sandlock 拉起，受 Landlock 文件系统规则（读写白名单）、seccomp（出站网络默认全禁）、内存上限（512M）约束。**shell allowlist 不是隔离**，边界在执行环境。
+2. **进程层**（sandlock）：经 captures 路由到 `SandlockRuntime` 的命令（`python3`/`python` 及动态注册的 venv entry point）由 sandlock 拉起受限子进程，受 Landlock 文件系统规则（读写白名单）、seccomp（出站网络默认全禁）、内存上限（512M）约束。**shell allowlist 不是隔离**，边界在执行环境。
 
-**免 FUSE 布局**是两者的粘合点：VFS 挂载前缀 = 宿主真实路径（虚拟路径与真实路径一致），sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。该布局下官方 backend 收到相对路径会落到 VFS 根 `/`（读报 FileNotFoundError，**写静默落空**）——`KanadeWorkspace` 子类把全部文件操作（read/write/stat/list_dir/make_dir/exists/remove/realpath）的相对路径绑定到工作区根，与 shell 会话 cwd 对齐。
+例外是 **mirage 内置命令**（`curl`/`gh`/`cat`/`head` 等 mirage 自带实现的命令）：它们在宿主 bot 进程内执行，不经 sandlock——文件访问仍经 VFS 判定（界外不可见），但**网络访问走宿主**（实测内置 `curl` 可直接取回 URL 内容；沙箱内受限进程联网仍被 seccomp 拒绝）。bot 自身本就持有宿主网络，这不构成新的密钥泄露面，但评估模型行为与审计网络请求时应知道 `curl` 不受沙箱网络策略约束。未注册的外部命令（如 `ffmpeg`）返回 127。
+
+**免 FUSE 布局**是两者的粘合点：VFS 挂载前缀 = 宿主真实路径（虚拟路径与真实路径一致），sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。该布局下官方 backend 收到相对路径会落到 VFS 根 `/` 的合成视图（0.0.7 实测：overlay 内可读回，但**宿主磁盘无文件、沙箱进程不可见**）——`KanadeWorkspace` 子类把全部文件操作（read/write/stat/list_dir/make_dir/exists/remove/realpath）的相对路径绑定到工作区根，与 shell 会话 cwd 对齐。
 
 ## 3. 对象模型
 
@@ -101,10 +103,13 @@ sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）；低于 v6 但 
 | `venv_python` | 3.13 | venv 默认 Python 版本 |
 | `venv_timeout` | 300 | 宿主侧命令超时秒数 |
 
-## 8. 已知限制（mirage main 仍在）
+## 8. 已知限制与边界事实（mirage 0.0.7 实测）
 
-- 内置 `curl` 的 `-m <秒>` / `-k` 被误当端口（exit 7）；`-s` / `-L` / `-o file` 正常。
+- mirage 内置命令在宿主进程内执行（见 §2），`curl` 的网络访问不受沙箱约束。
 - `MountMode` 必须 EXEC（WRITE 下 python3 → exit 126）。
 - 工作区目录必须 `realpath()`，否则写进 overlay 而宿主目录为空。
-- `/dev` 只读授权：`>/dev/null` 报 Permission denied。
+- 官方 backend 裸相对路径仍落 VFS 根 overlay（VFS 内读得到、宿主无文件），而 `remove`/`realpath` 按会话 cwd 解析——`KanadeWorkspace` 统一绑定为绝对路径规避该不一致。
 - AI 敲绝对路径命令会被 basename 化经会话 PATH 重解析（防绕过，属设计而非缺陷）。
+- 受限进程的会话 cwd 不在宿主磁盘上时拒绝执行（exit 126）。
+
+0.0.7 已修复（旧文档记录、现已不适用）：内置 `curl` 的 `-m`/`-k` 误当端口（exit 7）；`/dev` 只读授权下 `>/dev/null` 报 Permission denied（null sink 现可写）；backend 写文件需手动建父目录（现自动创建）；`remove` 可删除会话工作目录（现拒绝 cwd 及其祖先）。

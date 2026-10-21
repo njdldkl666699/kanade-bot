@@ -1,9 +1,11 @@
 [project]
 name = "kanade-bot"
-version = "v6.2.1"
+version = "v6.2.2"
 description = "kanade-bot"
 readme = "README.md"
 requires-python = ">=3.13"
+license-files = ["LICENSE"]
+authors = [{ name = "njdldkl666699", email = "zhangle666699@qq.com" }]
 dependencies = [
   "anyconfig>=0.15.1",
   "chardet>=5.2",
@@ -11,7 +13,7 @@ dependencies = [
   "emoji>=2.15.0",
   "httpx>=0.28.1",
   "mcstatus>=13.0.1",
-  "mirage-ai @ git+https://gh-proxy.org/https://github.com/strukto-ai/mirage.git@main#subdirectory=python",
+  "mirage-ai>=0.0.7",
   "nonebot-adapter-console>=0.9.0",
   "nonebot-adapter-onebot @ git+https://gh-proxy.org/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git@master",
   "nonebot-plugin-apscheduler>=0.5.0",
