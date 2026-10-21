@@ -19,5 +19,12 @@ sub_plugins = nonebot.load_plugins(str(Path(__file__).parent.joinpath("plugins")
 
 
 @run_postprocessor
-async def _(matcher: Matcher, exception: HTTPError | None):
-    await matcher.finish(f"请求失败：{exception}")
+async def _(matcher: Matcher, exception: Exception | None):
+    if (
+        (id := matcher.plugin_id)
+        and id.startswith("api60s")
+        and exception
+        and isinstance(exception, HTTPError)
+    ):
+        nonebot.logger.warning(f"请求失败：{exception}")
+        await matcher.finish(f"请求失败：{exception}")

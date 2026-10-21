@@ -1998,7 +1998,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "6.2.2"
+version = "6.2.3"
 source = { virtual = "." }
 dependencies = [
     { name = "anyconfig" },
@@ -2990,7 +2990,7 @@ wheels = [
 [[package]]
 name = "nonebot-adapter-onebot"
 version = "2.4.6"
-source = { git = "https://gh-proxy.org/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git?rev=master#e5459b5713e59a0c8e877b7b53b356948c5540e6" }
+source = { git = "https://gh-proxy.org/https://github.com/njdldkl666699/kanade-bot-adapter-onebot.git?rev=master#b79b8e7f3c1ebc16bfa02fba1795a7a72e94859b" }
 dependencies = [
     { name = "msgpack" },
     { name = "nonebot2" },
