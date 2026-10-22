@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable
 from copy import copy
@@ -31,7 +30,7 @@ from pydantic_ai_harness.compaction import compact_now, estimate_context_tokens
 
 from kanade_bot.utils.session import SessionInfo
 
-from ..config import REPLAY_RELEVANT_FIELDS, CompactionConfig
+from ..config import CompactionConfig
 from .message_blobs import blob_marker_messages
 
 if TYPE_CHECKING:
@@ -272,30 +271,6 @@ def build_summary_mark(params: CompactionConfig, result: list[ModelMessage]) -> 
         fingerprint=params.fingerprint(),
         applied_at=time.time(),
     )
-
-
-def fingerprint_matches(mark: CompactionMark, params: CompactionConfig) -> bool:
-    """mark 与当前参数是否同参数（兼容历史全量指纹形态）
-
-    历史版本的 `CompactionConfig.fingerprint()` 是全量 `model_dump_json()`：
-    schema 演进（哪怕只是新增生成期配置字段）或生成期调参都会令全部
-    存量 marks 失配，触发漂移重放、丢弃摘要产物（2026-10-22 413 事故）。
-
-    兼容规则：历史指纹本身是 JSON dict，只比对其中重放相关字段的值
-    （`REPLAY_RELEVANT_FIELDS`）——与当前参数的重放相关子集一致即视为
-    同参数；指纹不可解析（含空串）或重放相关字段值真变了则失配
-    （向安全侧倒）。
-    """
-    if mark.fingerprint == params.fingerprint():
-        return True
-    try:
-        stored = json.loads(mark.fingerprint)
-    except (TypeError, ValueError):
-        return False
-    if not isinstance(stored, dict):
-        return False
-    current = params.model_dump(include=REPLAY_RELEVANT_FIELDS)
-    return all(stored.get(field) == value for field, value in current.items())
 
 
 _SUMMARY_PREFIX = "Summary of previous conversation:\n\n"

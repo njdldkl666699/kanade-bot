@@ -109,13 +109,12 @@ class SessionConfig(AttrDocModel):
         return get_plugin_cache_file(self.buffer_cache_file)
 
 
-REPLAY_RELEVANT_FIELDS = frozenset({"trigger_fraction", "keep_pairs", "context_window"})
+REPLAY_RELEVANT_FIELDS = {"trigger_fraction", "keep_pairs", "context_window"}
 """决定压缩 mark 重放确定性的参数字段（进入 `CompactionConfig.fingerprint`）
 
-- clear 档重放（`build_clear(online=False)`）只消费这三个字段
-  （`min_clear_tokens` 仅在线生效，重放时本就忽略）；
-- summarizing 档重放直接使用存储的 result，与参数无关。
-其余字段只影响未来压缩的生成，不参与指纹。
+- clear 档重放（`build_clear(online=False)`）只消费这三个字段；
+- summarizing 档重放直接使用存储的 result，与参数无关；
+- 其余字段只影响未来压缩的生成，不参与指纹。
 """
 
 
@@ -178,14 +177,7 @@ class CompactionConfig(AttrDocModel):
     """
 
     def fingerprint(self) -> str:
-        """重放相关参数指纹：仅覆盖决定压缩 mark 重放结果的字段
-
-        其余字段（摘要提示词/摘要模型/保留条数等）只影响未来压缩的生成，
-        不影响既有 marks 的重放，故不参与指纹——避免无害的 schema 演进
-        （如新增生成期配置字段）触发全量漂移重放、丢弃摘要产物
-        （2026-10-22 413 事故根因）。历史版本存的是全量 `model_dump_json()`，
-        读取侧 `fingerprint_matches` 对旧形态做兼容。
-        """
+        """重放相关参数指纹：仅覆盖决定压缩 mark 重放结果的字段"""
         return self.model_dump_json(include=REPLAY_RELEVANT_FIELDS)
 
 

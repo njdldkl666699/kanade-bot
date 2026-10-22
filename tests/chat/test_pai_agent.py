@@ -595,11 +595,7 @@ class RestoreCacheTest(unittest.IsolatedAsyncioTestCase):
 
 
 class FingerprintScopeTest(unittest.TestCase):
-    """参数指纹只覆盖重放相关字段（2026-10-22 413 事故回归）
-
-    事故根因：指纹曾为全量 `model_dump_json()`，新增生成期配置字段
-    （summary_prompt_file）令全部存量 marks 失配 → 漂移重放丢弃摘要产物。
-    """
+    """参数指纹只覆盖重放相关字段：生成期字段变更不触发漂移，重放字段变更必触发"""
 
     def test_generation_fields_excluded(self):
         """生成期字段变化不影响指纹"""
@@ -627,72 +623,6 @@ class FingerprintScopeTest(unittest.TestCase):
             with self.subTest(field=field):
                 tweaked = CompactionParams(**{**TEST_PARAMS.model_dump(), field: value})
                 self.assertNotEqual(TEST_PARAMS.fingerprint(), tweaked.fingerprint())
-
-    def test_legacy_full_fingerprint_compat(self):
-        """旧全量指纹形态：重放参数一致视为同参数，重放参数变化才漂移"""
-        params = CompactionParams(keep_pairs=5)
-        mark = compaction_mod.CompactionMark(
-            strategy="clear_tool_results",
-            params=params.model_dump(),
-            fingerprint=params.model_dump_json(),  # 旧形态=全量 dump
-        )
-        self.assertTrue(compaction_mod.fingerprint_matches(mark, params))
-        self.assertFalse(
-            compaction_mod.fingerprint_matches(
-                mark, CompactionParams(**{**params.model_dump(), "keep_pairs": 1})
-            ),
-            "重放相关字段值变了必须视为漂移",
-        )
-        self.assertTrue(
-            compaction_mod.fingerprint_matches(
-                mark, CompactionParams(**{**params.model_dump(), "summary_keep_messages": 77})
-            ),
-            "仅生成期字段变化不应误判漂移",
-        )
-
-    def test_schema_evolution_no_drift(self):
-        """模拟 69f9e26b：新增生成期字段后，旧 schema 写入的 mark 不漂移"""
-        old_params = {
-            k: v for k, v in TEST_PARAMS.model_dump().items() if k != "summary_prompt_file"
-        }
-        mark = compaction_mod.CompactionMark(
-            strategy="clear_tool_results",
-            params=old_params,  # 旧 schema 无新字段
-            fingerprint=json.dumps(old_params, separators=(",", ":")),  # 旧代码的全量 dump
-        )
-        self.assertTrue(compaction_mod.fingerprint_matches(mark, TEST_PARAMS))
-        drifted = CompactionParams(**{**TEST_PARAMS.model_dump(), "context_window": 123456})
-        self.assertFalse(
-            compaction_mod.fingerprint_matches(mark, drifted),
-            "窗口固化值漂移仍必须检测到",
-        )
-
-
-class RestoreDriftCompatTest(unittest.IsolatedAsyncioTestCase):
-    """restore 对历史全量指纹 marks 的兼容：不触发漂移重放"""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.db = Path(self.tmp.name) / "sessions"
-
-    async def test_legacy_mark_kept_on_restore(self):
-        store = SessionStore(self.db)
-        history = make_history(4)
-        await store.append("c1", history)
-        mark = compaction_mod.build_clear_mark(TEST_PARAMS)
-        mark.fingerprint = TEST_PARAMS.model_dump_json()  # 旧形态=全量 dump
-        mark.up_to_seq = len(history) - 1
-        await store.add_compaction_mark("c1", mark)
-
-        reborn = SessionStore(self.db)
-        restored = await reborn.restore("c1", params=TEST_PARAMS)
-        marks = await reborn.load_compaction_marks("c1")
-        self.assertEqual(len(marks), 1, "同重放参数的旧形态指纹不应触发漂移重放")
-        expected = await compaction_mod.apply_strategy(
-            history, compaction_mod.build_clear_mark(TEST_PARAMS)
-        )
-        self.assertEqual(fp(restored), fp(expected))
 
 
 # ===== 恢复一致性（压缩事件可重放的前提） =====

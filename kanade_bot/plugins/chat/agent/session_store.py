@@ -16,13 +16,7 @@ from threading import Lock
 from pydantic_ai import ModelMessage, ModelMessagesTypeAdapter
 
 from ..config import CompactionConfig
-from .compaction import (
-    CompactionMark,
-    _messages_fingerprint,
-    apply_strategy,
-    build_clear_mark,
-    fingerprint_matches,
-)
+from .compaction import CompactionMark, _messages_fingerprint, apply_strategy, build_clear_mark
 from .message_blobs import BlobWrite, externalize_messages, rehydrate_messages
 
 _BLOB_CACHE_MAX_BYTES = 128 * 1024 * 1024
@@ -343,8 +337,7 @@ class SessionStore:
         整体替换掉（历史丢失）。
 
         `params` 为当前压缩参数；与 marks 记录的指纹不一致（重放相关
-        参数漂移，见 `CompactionConfig.fingerprint` 与 `fingerprint_matches`
-        的兼容规则）时，丢弃旧 marks 并按新参数从全量重放，重放有实际
+        参数漂移）时，丢弃旧 marks 并按新参数从全量重放，重放有实际
         效果时落一条覆盖全量的新 mark，保证后续恢复状态稳定。
 
         结果缓存为占位形态：命中后只需还原 blobs（LRU 兜底），写路径
@@ -362,9 +355,8 @@ class SessionStore:
         marks = await self.load_compaction_marks(conv_id)
         if not marks:
             final = history
-        elif params is not None and any(not fingerprint_matches(m, params) for m in marks):
-            # 参数漂移：丢弃旧 marks，从全量按新参数重放
-            # （指纹仅覆盖重放相关字段，历史全量形态经 fingerprint_matches 兼容）
+        elif params is not None and any(m.fingerprint != params.fingerprint() for m in marks):
+            # 参数漂移（指纹仅覆盖重放相关字段）：丢弃旧 marks，从全量按新参数重放
             await self.clear_marks(conv_id)
             replayed = await apply_strategy(history, build_clear_mark(params))
             if not _messages_equal(replayed, history):
