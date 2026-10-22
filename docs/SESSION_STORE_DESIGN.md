@@ -104,7 +104,12 @@ $kanade-blob:{sha256(media_type + \0 + data)}:{media_type}
 - `persist_run`：run 结束后补写压缩前消息 → 记 mark（`up_to_seq` = 补写后行数-1）→ 追加压缩后尾部消息
 - `restore`：按 `up_to_seq` 分段重放/替换并拼回尾部，重建结果与最后一次请求发送的内容一致
 - 对齐使用内容级公共前缀（`repair_messages` 可能改写历史，位置切片会错位）
-- 参数漂移：marks 记录的指纹与当前参数不一致时，丢弃旧 marks 并按新参数从全量重放
+- 参数漂移：marks 记录的指纹与当前参数不一致时，丢弃旧 marks 并按新参数从全量重放。
+  指纹仅覆盖重放相关字段（`trigger_fraction`/`keep_pairs`/`context_window`，
+  见 `REPLAY_RELEVANT_FIELDS`）——生成期字段（摘要提示词/模型/保留条数等）变更
+  或 schema 演进不再触发漂移；历史全量指纹形态由 `fingerprint_matches` 兼容读取
+  （2026-10-22 413 事故：新增 `summary_prompt_file` 字段令全部存量 marks 失配，
+  摘要产物被漂移重放丢弃，全量历史复活击穿网关请求体上限）
 
 ## 7. 实测数据（v6.0.3，本地 81MB 生产副本）
 

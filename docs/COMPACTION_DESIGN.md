@@ -90,6 +90,8 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 | `summary_prompt_file` | CompactionSummary.md | 同默认 | 摘要档提示词模板（相对插件配置目录）；缺失/非法回退 harness 默认 |
 | `online_valve_fraction` | 0.92 | 0.92 | 应急阀阈值；None 完全关闭 |
 
+参数指纹（`fingerprint()`）仅覆盖重放相关字段 `trigger_fraction`/`keep_pairs`/`context_window`：它们决定 clear 档重放结果（`min_clear_tokens` 仅在线生效，重放本就忽略）；summarizing 档重放直接用存储的 result，与参数无关。生成期字段不进指纹，避免无害的 schema 演进触发漂移重放（2026-10-22 413 事故根因）；历史全量指纹形态由 `fingerprint_matches` 兼容。
+
 阈值约束（1M 窗口实测）：最小 ≥0.7（最大群常态占用 66.8%）；在线阀须低于预算拒绝线 ≈0.945。
 
 ## 9. 已知限制
