@@ -27,11 +27,13 @@ type SendFunc = Callable[[OneBotMessage | MessageSegment | str], Awaitable[None]
 """单条消息发送函数：接收完整消息，负责投递到目标"""
 
 
-def extract_segments_preserving_code(content: str) -> list[MessageSegment]:
+def parse_message_segments(content: str) -> list[MessageSegment]:
     """把一段助手回复文本解析为消息段列表
 
-    按两个及以上换行拆分（代码块先替换为占位符保护，拆分后还原），
-    并把 `{{表情包名称}}` 引用替换为对应的表情包图片消息段。
+    1. 按两个及以上换行拆分，代码块先替换为占位符保护
+    2. 还原代码块占位符为原始代码块
+    3. `{{表情包名称}}`引用替换为动画表情消息段
+    4. `[CQ:at,qq=10001000]`替换为at消息段
     """
     # 用于存储最终的块
     segments: list[MessageSegment] = []
@@ -69,6 +71,12 @@ def extract_segments_preserving_code(content: str) -> list[MessageSegment]:
                     if image_files:
                         selected_image = random.choice(image_files)
                         segments.append(OneBotMessageSegmentMeme(selected_image))
+
+        # 处理@消息段
+        if at_match := re.search(r"\[CQ:at,qq=(\d+)\]", chunk):
+            chunk = chunk.replace(at_match.group(0), "")
+            qq_id = int(at_match.group(1))
+            segments.append(MessageSegment.at(qq_id))
 
         # 处理后的文本块，如果不为空，则添加为文本消息段
         if chunk.strip():
@@ -162,12 +170,9 @@ async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content:
     """
     group_id = session_info.group_id
     user_id = session_info.user_id
-    reply = None
 
     if group_id:
         target = {"message_type": "group", "group_id": int(group_id)}
-        if user_id:
-            reply = MessageSegment.at(user_id)
     elif user_id:
         target = {"message_type": "private", "user_id": int(user_id)}
     else:
@@ -183,8 +188,7 @@ async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content:
     await send_segments(
         _send,
         bot,
-        extract_segments_preserving_code(content),
-        reply=reply,
+        parse_message_segments(content),
         content_long=len(content) > 600 or len(content.splitlines()) > 20,
         content_format=guess_format(content),
     )

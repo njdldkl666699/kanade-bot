@@ -28,7 +28,7 @@ from kanade_bot.utils.session import extract_session_info
 from .agent.manager import chat_manager
 from .ban import is_banned
 from .config import cfg, chat_configs
-from .deliver import extract_segments_preserving_code, send_segments
+from .deliver import parse_message_segments, send_segments
 
 require("crystal")
 from kanade_bot.plugins.crystal import consume_crystal
@@ -131,7 +131,7 @@ async def send_message_in_chunks(
                 replied = True
 
                 if isinstance(event, OneBotMessageEvent):
-                    segments = extract_segments_preserving_code(content)
+                    segments = parse_message_segments(content)
                     await _send_onebot_message(
                         matcher,
                         cast(OneBot, bot),

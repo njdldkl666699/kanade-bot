@@ -340,6 +340,12 @@
           "title": "Summary Keep User Messages",
           "type": "boolean"
         },
+        "summary_prompt_file": {
+          "default": "CompactionSummary.md",
+          "description": "摘要档提示词模板文件名\n\n模板须含`{messages}`占位符且无其它未转义花括号；文件缺失或非法时回退 harness 默认模板",
+          "title": "Summary Prompt File",
+          "type": "string"
+        },
         "online_valve_fraction": {
           "anyOf": [
             {
@@ -1160,6 +1166,7 @@
             "summary_model": null,
             "summary_keep_messages": 40,
             "summary_keep_user_messages": true,
+            "summary_prompt_file": "CompactionSummary.md",
             "online_valve_fraction": 0.92
           }
         },
@@ -2061,6 +2068,7 @@
           "summary_keep_messages": 40,
           "summary_keep_user_messages": true,
           "summary_model": null,
+          "summary_prompt_file": "CompactionSummary.md",
           "summary_target_fraction": null,
           "trigger_fraction": 0.7
         },

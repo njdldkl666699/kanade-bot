@@ -22,7 +22,7 @@ dependencies = [
   "nonebot-plugin-githubcard>=0.4.1",
   "nonebot-plugin-htmlrender==0.6.7",
   "nonebot-plugin-localstore>=0.7.4",
-  "nonebot-plugin-orm[default]>=0.8.3",
+  "nonebot-plugin-orm[aiosqlite]>=0.8.3",
   "nonebot-plugin-picstatus>=2.3.0",
   "nonebot-plugin-whateat-pic>=1.5.9",
   "nonebot-plugin-wordcloud>=0.10.0",
@@ -73,6 +73,7 @@ nonebot-plugin-whateat-pic = ["nonebot_plugin_whateat_pic"]
 nonebot-plugin-wordcloud = ["nonebot_plugin_wordcloud"]
 nonebot-plugin-picstatus = ["nonebot_plugin_picstatus"]
 nonebot-plugin-githubcard = ["nonebot_plugin_githubcard"]
+nonebot-plugin-orm = ["nonebot_plugin_orm"]
 
 [tool.ruff]
 line-length = 100

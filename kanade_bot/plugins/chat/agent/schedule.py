@@ -373,7 +373,7 @@ class ScheduledTaskManager:
 
         notification = "\n".join(
             [
-                "你设定的定时任务已到点，请处理并主动向会话反馈结果。",
+                "你设定的定时任务已到点，请处理并主动向会话反馈结果。建议@相关用户。",
                 f"任务内容：{task.description}",
                 f"创建者：{task.creator_name or task.creator_id or '未知'}",
                 f"设定时间：{task.created_at}",

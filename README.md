@@ -2,9 +2,8 @@
   <img src="https://gh-proxy.org/https://raw.githubusercontent.com/njdldkl666699/kanade-bot/refs/heads/main/Ciallo.webp" alt="Ciallo～(∠・ω< )⌒☆" style="width: 20em;"/>
   <h1>宵崎奏Bot (Kanade Bot)</h1>
   <p><picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://pydantic.dev/docs/ai/img/pydantic-ai-light.svg">
-    <img style="width: 15em;" alt="Pydantic AI" src="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg">
+    <img style="width: 15em" src="https://pydantic.dev/docs/ai/img/pydantic-ai-light.svg" alt="Pydantic AI">
   </picture></p>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/njdldkl666699/kanade-bot.svg" alt="license"></a>
   <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="python">
@@ -30,9 +29,9 @@
 uv sync --with rag
 ```
 
-### 沙箱（可选）
+### 沙箱
 
-聊天Agent的文件与shell能力由 [mirage](https://github.com/strukto-ai/mirage) 沙箱提供。启用方式：
+聊天Agent的文件与Shell能力由 [mirage](https://github.com/strukto-ai/mirage) 沙箱提供。启用方式：
 
 ```yaml
 # config-{环境}.yaml
@@ -64,14 +63,14 @@ sandlock check   # 确认 ABI 与 protection 可用性
 
 此外，本项目配置加载使用`anyconfig`，支持多种格式（YAML、JSON、TOML、INI等），可自行扩展。
 
-## Watchdog（自动更新与重启）
+## GitHub Watchdog
 
-Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pull --ff-only` 并重启核心进程（`nb run`）。
+GitHub Watchdog 用于轮询 GitHub 最新提交，当检测到更新时自动 `git pull --ff-only` 并重启核心进程（`nb run`）。
 
 使用方式：
 
 1. 配置Watchdog只需在配置文件中修改`watchdog`段即可。
-2. 启动 Watchdog：`uv run -m scripts.watchdog`
+2. 启动 Watchdog：`uv run -m scripts.github_watchdog`
 
 ## 生成JSON Schema
 
