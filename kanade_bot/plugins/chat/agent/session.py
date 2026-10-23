@@ -49,10 +49,10 @@ from .compaction import (
     persist_run,
 )
 from .deps import ChatDeps
-from .image_caption import get_image_caption
 from .memory import MemoryContext
 from .prompt import current_time_line
 from .sandbox import SandboxSession
+from .vision import get_image_caption
 
 if TYPE_CHECKING:
     from .manager import ChatSessionManager

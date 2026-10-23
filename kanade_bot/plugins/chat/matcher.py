@@ -1,6 +1,4 @@
 from nonebot import on_command, on_message, require
-from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11 import PrivateMessageEvent as OneBotPrivateMessageEvent
 from nonebot.params import EventToMe
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
@@ -8,14 +6,8 @@ from nonebot.rule import to_me
 require("command_counter")
 from kanade_bot.plugins.command_counter import register_matcher
 
-
-def chat_permission(event: Event) -> bool:
-    """匹配非OneBot私聊消息类型事件"""
-    return not isinstance(event, OneBotPrivateMessageEvent)
-
-
 chat = on_message(
-    rule=to_me() & chat_permission,
+    rule=to_me(),
     priority=100000,
     block=True,
 )
@@ -127,3 +119,21 @@ add_meme = on_command(
     block=True,
 )
 register_matcher(add_meme, "添加表情")
+
+retag_meme = on_command(
+    "改标",
+    aliases={"retag_meme", "retagmeme"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(retag_meme, "改标")
+
+del_meme = on_command(
+    "删除表情",
+    aliases={"del_meme", "delmeme"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(del_meme, "删除表情")

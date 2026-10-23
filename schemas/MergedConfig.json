@@ -116,6 +116,10 @@
                 "when": "python_env_available"
               },
               {
+                "file": "memes.md",
+                "when": "memes_enabled"
+              },
+              {
                 "file": "group_chat.md",
                 "when": "is_group"
               }
@@ -166,6 +170,10 @@
             {
               "file": "sandbox_python.md",
               "when": "python_env_available"
+            },
+            {
+              "file": "memes.md",
+              "when": "memes_enabled"
             },
             {
               "file": "group_chat.md",
@@ -935,6 +943,202 @@
       "title": "SessionConfig",
       "type": "object"
     },
+    "StickerEmbeddingConfig": {
+      "description": "表情包 embedding 模型配置",
+      "properties": {
+        "model": {
+          "default": "",
+          "description": "embedding 模型 ID，留空视为未启用",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "embedding API 提供商配置，None 时使用 OpenAI 官方端点"
+        }
+      },
+      "title": "StickerEmbeddingConfig",
+      "type": "object"
+    },
+    "StickerMemeConfig": {
+      "description": "表情包语义检索配置\n\n基于向量检索的表情包系统：图片由视觉模型自动打标，\nLLM 以 `{{表情: 描述}}` 占位符引用，投递时按语义相似度加权随机选图。",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "是否启用表情包语义检索；未启用时占位符将被静默丢弃",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "memes_dir": {
+          "default": "memes/",
+          "description": "表情包存储目录名",
+          "title": "Memes Dir",
+          "type": "string"
+        },
+        "tagger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StickerTaggerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "视觉打标模型配置，None 时无法自动打标"
+        },
+        "embedding": {
+          "$ref": "#/$defs/StickerEmbeddingConfig",
+          "default": {
+            "model": "",
+            "provider": null
+          },
+          "description": "embedding 模型配置"
+        },
+        "topk": {
+          "default": 5,
+          "description": "检索候选数：TopK 内按相似度 softmax 加权随机抽取",
+          "exclusiveMinimum": 0,
+          "title": "Topk",
+          "type": "integer"
+        },
+        "min_similarity": {
+          "default": 0.3,
+          "description": "最低余弦相似度，低于该值的候选不参与抽取",
+          "title": "Min Similarity",
+          "type": "number"
+        },
+        "softmax_scale": {
+          "default": 55.0,
+          "description": "相似度 softmax 温度系数，越大越偏向最高分",
+          "title": "Softmax Scale",
+          "type": "number"
+        },
+        "index_file": {
+          "default": "memes_index.json",
+          "description": "索引元数据文件名（json）",
+          "title": "Index File",
+          "type": "string"
+        },
+        "matrix_file": {
+          "default": "memes_index.npy",
+          "description": "向量矩阵文件名（npy）",
+          "title": "Matrix File",
+          "type": "string"
+        }
+      },
+      "title": "StickerMemeConfig",
+      "type": "object"
+    },
+    "StickerTaggerConfig": {
+      "description": "表情包视觉打标模型配置",
+      "properties": {
+        "model": {
+          "default": "",
+          "description": "模型ID",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型提供商配置，如果为None则使用openai官方端点"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度，仅对支持的模型生效",
+          "title": "Reasoning Effort"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型单次响应的最大输出token数",
+          "title": "Max Output Tokens"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口",
+          "title": "Context Window"
+        },
+        "vision": {
+          "default": false,
+          "description": "模型是否支持图片（视觉）输入",
+          "title": "Vision",
+          "type": "boolean"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/MCPServerConfig"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置，键为服务器名称",
+          "title": "Mcp Servers"
+        },
+        "system_prompt_file": {
+          "default": "StickerTagging.md",
+          "description": "系统提示词文件名",
+          "title": "System Prompt File",
+          "type": "string"
+        }
+      },
+      "title": "StickerTaggerConfig",
+      "type": "object"
+    },
     "TTSConfig": {
       "description": "文本转语音模型配置",
       "properties": {
@@ -1139,6 +1343,10 @@
                   "when": "python_env_available"
                 },
                 {
+                  "file": "memes.md",
+                  "when": "memes_enabled"
+                },
+                {
                   "file": "group_chat.md",
                   "when": "is_group"
                 }
@@ -1170,19 +1378,19 @@
             "online_valve_fraction": 0.92
           }
         },
+        "memory": {
+          "$ref": "#/$defs/MemoryConfig",
+          "default": {
+            "database_file": "memories.sqlite3",
+            "max_records_per_scope": 256
+          }
+        },
         "scheduled_task": {
           "$ref": "#/$defs/ScheduledTaskConfig",
           "default": {
             "data_file": "scheduled_tasks.json",
             "retry_limit": 2,
             "retry_delay_minutes": 5
-          }
-        },
-        "memory": {
-          "$ref": "#/$defs/MemoryConfig",
-          "default": {
-            "database_file": "memories.sqlite3",
-            "max_records_per_scope": 256
           }
         },
         "sandbox": {
@@ -1199,6 +1407,24 @@
             "venv_python": "3.13",
             "venv_timeout": 300
           }
+        },
+        "sticker_meme": {
+          "$ref": "#/$defs/StickerMemeConfig",
+          "default": {
+            "enabled": false,
+            "memes_dir": "memes/",
+            "tagger": null,
+            "embedding": {
+              "model": "",
+              "provider": null
+            },
+            "topk": 5,
+            "min_similarity": 0.3,
+            "softmax_scale": 55.0,
+            "index_file": "memes_index.json",
+            "matrix_file": "memes_index.npy"
+          },
+          "description": "表情包语义检索配置"
         },
         "image_caption": {
           "anyOf": [
@@ -1257,12 +1483,6 @@
           "default": "chat_fail.jpg",
           "description": "聊天失败时发送的图片名，不存在则返回默认的文本消息",
           "title": "Fail Image File",
-          "type": "string"
-        },
-        "memes_dir": {
-          "default": "memes/",
-          "description": "表情包存储目录名",
-          "title": "Memes Dir",
           "type": "string"
         }
       },
@@ -2045,6 +2265,10 @@
                 "when": "python_env_available"
               },
               {
+                "file": "memes.md",
+                "when": "memes_enabled"
+              },
+              {
                 "file": "group_chat.md",
                 "when": "is_group"
               }
@@ -2072,14 +2296,14 @@
           "summary_target_fraction": null,
           "trigger_fraction": 0.7
         },
+        "memory": {
+          "database_file": "memories.sqlite3",
+          "max_records_per_scope": 256
+        },
         "scheduled_task": {
           "data_file": "scheduled_tasks.json",
           "retry_delay_minutes": 5,
           "retry_limit": 2
-        },
-        "memory": {
-          "database_file": "memories.sqlite3",
-          "max_records_per_scope": 256
         },
         "sandbox": {
           "enabled": false,
@@ -2092,6 +2316,20 @@
           "venv_python": "3.13",
           "venv_timeout": 300,
           "workspace_dir": "sandboxes/"
+        },
+        "sticker_meme": {
+          "embedding": {
+            "model": "",
+            "provider": null
+          },
+          "enabled": false,
+          "index_file": "memes_index.json",
+          "matrix_file": "memes_index.npy",
+          "memes_dir": "memes/",
+          "min_similarity": 0.3,
+          "softmax_scale": 55.0,
+          "tagger": null,
+          "topk": 5
         },
         "image_caption": null,
         "rag": {
@@ -2120,8 +2358,7 @@
           "peak_output_per_1k": 48.0
         },
         "configs_file": "chat_configs.json",
-        "fail_image_file": "chat_fail.jpg",
-        "memes_dir": "memes/"
+        "fail_image_file": "chat_fail.jpg"
       }
     },
     "chatrecorder_record_send_msg": {

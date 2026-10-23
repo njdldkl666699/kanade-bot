@@ -73,22 +73,6 @@
         "banned_groups": [],
         "auto_reply_group_config": {}
       }
-    },
-    "memes": {
-      "additionalProperties": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "default": {},
-      "description": "表情包列表\n\n每个表情包为一个字典，key为表情包名称，value为表情包描述。\n\n每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。",
-      "title": "Memes",
-      "type": "object"
     }
   },
   "title": "ChatConfigs",

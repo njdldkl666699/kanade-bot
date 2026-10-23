@@ -131,7 +131,7 @@ async def send_message_in_chunks(
                 replied = True
 
                 if isinstance(event, OneBotMessageEvent):
-                    segments = parse_message_segments(content)
+                    segments = await parse_message_segments(content)
                     await _send_onebot_message(
                         matcher,
                         cast(OneBot, bot),

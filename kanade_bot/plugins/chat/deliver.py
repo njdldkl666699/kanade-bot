@@ -1,14 +1,12 @@
 """消息投递：助手回复解析与分批发送
 
-被动回复与主动发送共用同一套内容解析与批量发送逻辑；
-主动发送按Bot类型分发到OneBot或Console适配器。
+被动回复与主动发送共用同一套内容解析与批量发送逻辑
 """
 
-import random
 import re
 from collections.abc import Awaitable, Callable
 
-from nonebot import require
+from nonebot import logger, require
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -18,7 +16,7 @@ from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
 from kanade_bot.utils.parse import TextFormat, guess_format
 from kanade_bot.utils.session import SessionInfo
 
-from .config import cfg, chat_configs
+from .meme_service import get_memes
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import md_to_pic
@@ -26,13 +24,16 @@ from nonebot_plugin_htmlrender import md_to_pic
 type SendFunc = Callable[[OneBotMessage | MessageSegment | str], Awaitable[None]]
 """单条消息发送函数：接收完整消息，负责投递到目标"""
 
+MEME_PLACEHOLDER = re.compile(r"\{\{表情[:：]\s*([^{}]+?)\s*\}\}")
+"""表情包引用占位符：`{{表情: 自然语言描述}}`，投递时按语义检索选图"""
 
-def parse_message_segments(content: str) -> list[MessageSegment]:
+
+async def parse_message_segments(content: str) -> list[MessageSegment]:
     """把一段助手回复文本解析为消息段列表
 
     1. 按两个及以上换行拆分，代码块先替换为占位符保护
     2. 还原代码块占位符为原始代码块
-    3. `{{表情包名称}}`引用替换为动画表情消息段
+    3. `{{表情: 描述}}`引用替换为动画表情消息段（向量检索）
     4. `[CQ:at,qq=10001000]`替换为at消息段
     """
     # 用于存储最终的块
@@ -60,17 +61,22 @@ def parse_message_segments(content: str) -> list[MessageSegment]:
         for i, code_block in enumerate(code_blocks):
             chunk = chunk.replace(f"__CODE_BLOCK_{i}__", code_block)
 
-        # 处理表情包引用，格式{{表情包名称}}
-        if meme_match := re.search(r"\{\{(\w+?)\}\}", chunk):
-            chunk = chunk.replace(meme_match.group(0), "")
-            meme_name = meme_match.group(1)
-            if meme_name in chat_configs.instance.memes:
-                meme_path = cfg.memes_dir_path / meme_name
-                if meme_path.is_dir():
-                    image_files = list(meme_path.glob("*"))
-                    if image_files:
-                        selected_image = random.choice(image_files)
-                        segments.append(OneBotMessageSegmentMeme(selected_image))
+        # 处理表情包引用：语义检索匹配一张表情包
+        if meme_match := MEME_PLACEHOLDER.search(chunk):
+            chunk = chunk.replace(meme_match.group(0), "", 1)
+            desc = meme_match.group(1)
+            if (memes := get_memes()) is None:
+                logger.warning("表情包索引未启用，丢弃占位符：{{表情: {}}}", desc)
+            else:
+                try:
+                    rec = await memes.select(desc)
+                except Exception:
+                    logger.exception("表情包检索失败：{{表情: {}}}", desc)
+                    rec = None
+                if rec is not None:
+                    segments.append(OneBotMessageSegmentMeme(memes.file_path(rec)))
+                else:
+                    logger.warning("未检索到匹配的表情包，丢弃占位符：{{表情: {}}}", desc)
 
         # 处理@消息段
         if at_match := re.search(r"\[CQ:at,qq=(\d+)\]", chunk):
@@ -188,7 +194,7 @@ async def send_onebot_proactive(bot: OneBot, session_info: SessionInfo, content:
     await send_segments(
         _send,
         bot,
-        parse_message_segments(content),
+        await parse_message_segments(content),
         content_long=len(content) > 600 or len(content.splitlines()) > 20,
         content_format=guess_format(content),
     )

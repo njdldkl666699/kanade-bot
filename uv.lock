@@ -1962,11 +1962,11 @@ wheels = [
 
 [[package]]
 name = "json-repair"
-version = "0.64.1"
+version = "0.64.2"
 source = { registry = "https://mirrors.bfsu.edu.cn/pypi/web/simple" }
-sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/0b/d8/aed287ba5549e07f9688e88ba3e531cb41c966c6c44980d05e5560020b7b/json_repair-0.64.1.tar.gz", hash = "sha256:7640f80e70c15862ad262cabe91d20afc3248f3187a9811b8c8d0fddd2d62f19", size = 54226, upload-time = "2026-10-19T09:38:37.711Z" }
+sdist = { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/7c/b2/52bdd0fca981b289a4d9966366e1dfe50fac315f2c87440fa70726bdcb69/json_repair-0.64.2.tar.gz", hash = "sha256:3f8e76631edab40e7e0c9b859e64c06992a39488b4bbb8285f0e9c3e61d684e9", size = 54227, upload-time = "2026-10-23T05:35:23.447Z" }
 wheels = [
-    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/14/ba/af2d648f80e4c6400c2e596a79c4fab71be8c0690d15c2c0ea3eac66df1e/json_repair-0.64.1-py3-none-any.whl", hash = "sha256:1e1022f8d9b5a24433f7e28c2ee5c4ef42256e11ff0eef8abf7cad17fc8b9e0a", size = 52649, upload-time = "2026-10-19T09:38:36.295Z" },
+    { url = "https://mirrors.bfsu.edu.cn/pypi/web/packages/9a/79/91b83df91d03b9647ee759f286900957f0d113f49a606e28c8a43d39365b/json_repair-0.64.2-py3-none-any.whl", hash = "sha256:1dec7868c05abff0c52e91dc896e01f28fda6ba1c9f2a9ede18ab520dde637e1", size = 52688, upload-time = "2026-10-23T05:35:21.978Z" },
 ]
 
 [[package]]
@@ -1998,7 +1998,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "6.3.0"
+version = "6.4.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anyconfig" },
@@ -2021,6 +2021,7 @@ dependencies = [
     { name = "nonebot-plugin-whateat-pic" },
     { name = "nonebot-plugin-wordcloud" },
     { name = "nonebot2", extra = ["fastapi"] },
+    { name = "numpy" },
     { name = "picimagesearch" },
     { name = "pydantic-ai-backend" },
     { name = "pydantic-ai-harness" },
@@ -2068,6 +2069,7 @@ requires-dist = [
     { name = "nonebot-plugin-whateat-pic", specifier = ">=1.5.9" },
     { name = "nonebot-plugin-wordcloud", specifier = ">=0.10.0" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0" },
+    { name = "numpy", specifier = ">=2.5" },
     { name = "openai", marker = "extra == 'rag'", specifier = ">=3.0.0" },
     { name = "picimagesearch", specifier = ">=3.12.11" },
     { name = "pydantic-ai-backend", specifier = ">=0.2.16" },

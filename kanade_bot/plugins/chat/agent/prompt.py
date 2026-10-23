@@ -11,7 +11,8 @@ from pydantic_ai import InstructionPart
 
 from kanade_bot.utils.parse import build_sender_info
 
-from ..config import ChatPromptConfig, ScopedConfig, cfg, chat_configs
+from ..config import ChatPromptConfig, ScopedConfig, cfg
+from ..meme_service import memes_available
 from .deps import ChatDeps
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -228,6 +229,6 @@ class ChatPrompt:
             "vision_enabled": _bool_str(self._agent_cfg.vision),
             "memories_enabled": _bool_str(bool(memory_context and memory_context.scopes())),
             "tts_enabled": _bool_str(bool(cfg.tts.base_url)),
-            "memes_enabled": _bool_str(bool(chat_configs.instance.memes)),
+            "memes_enabled": _bool_str(memes_available()),
             "rag_enabled": _bool_str(cfg.rag.enabled),
         }

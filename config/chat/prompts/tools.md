@@ -12,14 +12,6 @@ You have access to several tools. Below are additional guidelines on how to use 
 
 </memory>
 
-<list_memes>
-当你不知道有哪些表情包可用时，调用此工具来获取。不要编造表情名称。
-
-- 如果要在回复中使用表情包，请以 {{表情包名称}} 的形式引用，例如 {{happy}}；必须作为独立的一条消息发送，即前后都各有两个换行符分隔。
-- 建议在适当的场景下使用表情包，例如在闲聊或表达情绪时使用，避免在技术讨论或提供严肃建议时使用，以免影响回复的清晰度和专业性。
-
-</list_memes>
-
 <send_voice>
 使用send_voice工具可以将文本转换为符合角色语音的音频，并发送到当前会话。
 

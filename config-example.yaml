@@ -8,7 +8,7 @@ nickname: [宵崎奏]
 console_headless_mode: true
 
 # Provider配置
-siliconflow:
+siliconflow: &siliconflow
   base_url: &siliconflow-base_url https://api.siliconflow.cn/v1
   api_key: &siliconflow-api_key sk-xxxxxxxxxxxxxxxxxxxxx
 agnes-ai: &agnes-ai
@@ -33,7 +33,6 @@ sensenova-6-8-flash-lite: &sensenova-6-8-flash-lite
   provider: *sensenova
   reasoning_effort: high
   vision: true
-  max_output_tokens: 65536
 
 chat:
   agent:
@@ -45,28 +44,21 @@ chat:
           Authorization: "Bearer tvly-dev-xxxxxxxxxxxxxxxxxxxxx"
       anysearch:
         url: https://api.anysearch.com/mcp
-  compaction:
-    trigger_fraction: 0.7
-    keep_pairs: 3
-    min_clear_tokens: 2000
-    summary_target_fraction: 0.8
-    summary_model: null
-    summary_keep_messages: 20
-    summary_keep_user_messages: true
-    online_valve_fraction: 0.92
-  session:
-    buffer_max_size: 256
-  memory:
-    max_records_per_scope: 256
   sandbox:
     enabled: true
   # image_caption:
   #   <<: *sensenova-6-8-flash-lite
+  sticker_meme:
+    enabled: true
+    tagger: *sensenova-6-8-flash-lite
+    embedding:
+      model: BAAI/bge-m3
+      provider: *siliconflow
   rag:
     embedding_type: openai
+    openai_model: BAAI/bge-m3
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
-    openai_model: BAAI/bge-m3
   billing: &billing
     peak_input_per_1k: 6
     peak_output_per_1k: 24
@@ -119,11 +111,8 @@ wordle:
     13: 25
 
 github_token: &github_token github_pat_xxxxxxxxxxxxxxxxxxx
-github_type: 0
 
 watchdog:
   github_token: *github_token
 
-print_kanade_banner: true
-print_pydantic_ai_banner: true
 generate_schemas: false

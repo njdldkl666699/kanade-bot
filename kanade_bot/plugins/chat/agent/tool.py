@@ -16,11 +16,11 @@ from pydantic_ai import BinaryContent, RunContext
 from kanade_bot.utils.common import HTTPX_CLIENT
 from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
 
-from ..config import cfg, chat_configs
+from ..config import cfg
 from .deps import ChatDeps
-from .image_caption import get_image_caption
 from .memory import MemoryScopeType
 from .schedule import parse_run_at, scheduled_task_manager
+from .vision import get_image_caption
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import html_to_pic
@@ -54,11 +54,6 @@ async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> s
         logger.exception("发送OneBot消息失败: {}", e)
         return f"发送消息失败: {e}"
     return None
-
-
-async def list_memes() -> dict[str, str | None]:
-    """列出当前可用的表情包字典，键为表情包名称，值为表情包描述。"""
-    return chat_configs.instance.memes
 
 
 async def view_image(ctx: RunContext[ChatDeps], url: str) -> str | list[str | BinaryContent]:
@@ -486,7 +481,6 @@ async def schedule_task(
 def build_tools() -> list[Any]:
     """构建聊天Agent的静态工具列表"""
     return [
-        list_memes,
         view_image,
         save_memory,
         recall_memory,

@@ -6,7 +6,13 @@ from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
 from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.common import PlatformType
-from kanade_bot.utils.schema import AttrDocModel, BaseAgentConfig, ConfigRegistry, generate_schema
+from kanade_bot.utils.schema import (
+    AttrDocModel,
+    BaseAgentConfig,
+    ConfigRegistry,
+    ProviderConfig,
+    generate_schema,
+)
 
 require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import (
@@ -46,6 +52,7 @@ class PromptSectionConfig(AttrDocModel):
 DEFAULT_PROMPT_SECTIONS = [
     PromptSectionConfig(file="sandbox.md", when="sandbox_enabled"),
     PromptSectionConfig(file="sandbox_python.md", when="python_env_available"),
+    PromptSectionConfig(file="memes.md", when="memes_enabled"),
     PromptSectionConfig(file="group_chat.md", when="is_group"),
 ]
 
@@ -277,8 +284,80 @@ class ImageCaptionConfig(BaseAgentConfig):
 
     @property
     def system_prompt_file_path(self) -> Path:
-        """系统提示词文件的路径"""
+        """系统提示词文件路径"""
         return get_plugin_config_file(self.system_prompt_file)
+
+
+class StickerTaggerConfig(BaseAgentConfig):
+    """表情包视觉打标模型配置"""
+
+    system_prompt_file: str = "StickerTagging.md"
+    """系统提示词文件名"""
+
+    @property
+    def system_prompt_file_path(self) -> Path:
+        """系统提示词文件路径"""
+        return get_plugin_config_file(self.system_prompt_file)
+
+
+class StickerEmbeddingConfig(AttrDocModel):
+    """表情包 embedding 模型配置"""
+
+    model: str = ""
+    """embedding 模型 ID，留空视为未启用"""
+
+    provider: ProviderConfig | None = None
+    """embedding API 提供商配置，None 时使用 OpenAI 官方端点"""
+
+
+class StickerMemeConfig(AttrDocModel):
+    """表情包语义检索配置
+
+    基于向量检索的表情包系统：图片由视觉模型自动打标，
+    LLM 以 `{{表情: 描述}}` 占位符引用，投递时按语义相似度加权随机选图。
+    """
+
+    enabled: bool = False
+    """是否启用表情包语义检索；未启用时占位符将被静默丢弃"""
+
+    memes_dir: str = "memes/"
+    """表情包存储目录名"""
+
+    tagger: StickerTaggerConfig | None = None
+    """视觉打标模型配置，None 时无法自动打标"""
+
+    embedding: StickerEmbeddingConfig = StickerEmbeddingConfig()
+    """embedding 模型配置"""
+
+    topk: PositiveInt = 5
+    """检索候选数：TopK 内按相似度 softmax 加权随机抽取"""
+
+    min_similarity: float = 0.3
+    """最低余弦相似度，低于该值的候选不参与抽取"""
+
+    softmax_scale: float = 55.0
+    """相似度 softmax 温度系数，越大越偏向最高分"""
+
+    index_file: str = "memes_index.json"
+    """索引元数据文件名（json）"""
+
+    matrix_file: str = "memes_index.npy"
+    """向量矩阵文件名（npy）"""
+
+    @property
+    def memes_dir_path(self) -> Path:
+        """表情包存储目录路径"""
+        return get_plugin_data_file(self.memes_dir)
+
+    @property
+    def index_file_path(self) -> Path:
+        """索引元数据文件路径"""
+        return get_plugin_data_file(self.index_file)
+
+    @property
+    def matrix_file_path(self) -> Path:
+        """向量矩阵文件路径"""
+        return get_plugin_data_file(self.matrix_file)
 
 
 class RAGConfig(AttrDocModel):
@@ -342,20 +421,25 @@ class ScopedConfig(AttrDocModel):
     """会话历史存储配置"""
     compaction: CompactionConfig = CompactionConfig()
     """会话压缩配置"""
-    scheduled_task: ScheduledTaskConfig = ScheduledTaskConfig()
-    """Agent定时任务配置"""
     memory: MemoryConfig = MemoryConfig()
     """持久化记忆配置"""
 
+    scheduled_task: ScheduledTaskConfig = ScheduledTaskConfig()
+    """Agent定时任务配置"""
     sandbox: SandboxConfig = SandboxConfig()
     """mirage沙箱配置"""
+
+    sticker_meme: StickerMemeConfig = StickerMemeConfig()
+    """表情包语义检索配置"""
     image_caption: ImageCaptionConfig | None = None
     """图片转述模型配置，如果为None则不启用图片转述。
 
     不启用且主模型不支持图片输入，则无法处理图片消息。
     """
+
     rag: RAGConfig = RAGConfig()
     tts: TTSConfig = TTSConfig()
+
     billing: TokenBillingConfig = TokenBillingConfig()
     """按Token计费的费率配置"""
 
@@ -363,8 +447,6 @@ class ScopedConfig(AttrDocModel):
     """聊天配置文件名"""
     fail_image_file: str = "chat_fail.jpg"
     """聊天失败时发送的图片名，不存在则返回默认的文本消息"""
-    memes_dir: str = "memes/"
-    """表情包存储目录名"""
 
     @property
     def configs_file_path(self) -> Path:
@@ -373,10 +455,6 @@ class ScopedConfig(AttrDocModel):
     @property
     def fail_image_file_path(self) -> Path:
         return get_plugin_config_file(self.fail_image_file)
-
-    @property
-    def memes_dir_path(self) -> Path:
-        return get_plugin_data_file(self.memes_dir)
 
 
 class Config(BaseModel):
@@ -421,14 +499,6 @@ class ChatConfigs(AttrDocModel):
 
     console: ChatConfig = ChatConfig()
     onebot: ChatConfig = ChatConfig()
-
-    memes: dict[str, str | None] = {}
-    """表情包列表
-
-    每个表情包为一个字典，key为表情包名称，value为表情包描述。
-
-    每个表情包在`CHAT_MEMES_PATH`目录下有一个同名子目录，存放该表情包的图片。
-    """
 
     def get_by_platform(self, platform: PlatformType):
         if platform == "console":

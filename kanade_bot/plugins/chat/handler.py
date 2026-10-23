@@ -1,8 +1,7 @@
-import shutil
-import uuid
 from datetime import datetime
 from pathlib import Path
 
+import magic
 from nonebot import logger, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console.event import MessageEvent as ConsoleMessageEvent
@@ -14,14 +13,14 @@ from nonebot.params import CommandArg
 
 from kanade_bot.utils.common import get_platform_type
 from kanade_bot.utils.onebot11 import get_image_path
-from kanade_bot.utils.parse import build_sender_info, parse_arg_message, parse_message_for_ai
+from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
 from .agent.manager import chat_manager
 from .agent.schedule import scheduled_task_manager
+from .agent.vision import get_image_tags
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
 from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
-from .config import cfg, chat_configs
 from .matcher import (
     add_meme,
     chat,
@@ -35,8 +34,12 @@ from .matcher import (
     chat_task_list,
     chat_unban,
     chat_workspace_clear,
+    del_meme,
     list_memes,
+    retag_meme,
 )
+from .meme_index import dedupe_tags, parse_tags
+from .meme_service import get_memes
 
 require("crystal")
 from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
@@ -263,50 +266,94 @@ async def handle_chat_unban(event: Event, arg_msg: Message = CommandArg()):
 
 @list_memes.handle()
 async def handle_list_memes():
-    if not chat_configs.instance.memes:
+    memes = get_memes()
+    if memes is None:
+        await list_memes.finish("表情包功能未启用")
+    if not memes.records:
         await list_memes.finish("当前没有表情包")
 
-    meme_list = "\n".join(
-        f"{name}: {description}" for name, description in chat_configs.instance.memes.items()
-    )
-    await list_memes.finish(f"当前表情包列表：\n{meme_list}")
+    lines = []
+    for r in memes.records:
+        tag_text = " ".join(r.tags) if r.tags else "（待打标）"
+        lines.append(f"#{r.id} {r.file}: {tag_text}")
+    await list_memes.finish("当前表情包列表：\n" + "\n".join(lines))
+
+
+async def _get_reply_image(bot: OneBot, event: OneBotMessageEvent) -> Path | None:
+    """取引用消息中的第一张图片的本地缓存路径"""
+    if not event.reply:
+        return None
+    for segment in event.reply.message:
+        if segment.type == "image":
+            return await get_image_path(bot, segment)
+    return None
 
 
 @add_meme.handle()
 async def handle_add_meme(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
-    args = parse_arg_message(arg_msg.extract_plain_text(), {"name": str, "description": str})
-    name: str | None = args.get("name") or None
-    if not name:
-        await add_meme.finish("请输入表情包名称")
-    description = args.get("description") or None
+    memes = get_memes()
+    if memes is None:
+        await add_meme.finish("表情包功能未启用")
 
-    # 获取引用图片的第一张
-    if not event.reply:
-        await add_meme.finish()
-
-    local_path: Path | None = None
-    for segment in event.reply.message:
-        if segment.type == "image":
-            local_path = await get_image_path(bot, segment)
-            break
+    local_path = await _get_reply_image(bot, event)
     if not local_path:
-        await add_meme.finish()
+        await add_meme.finish("请引用一张图片使用此命令")
 
-    # 确保表情包目录存在
-    meme_path = cfg.memes_dir_path / name
-    meme_path.mkdir(parents=True, exist_ok=True)
-    # 保存图片到表情包目录
-    image_path = meme_path / f"{uuid.uuid4()}.png"
-    shutil.copy(local_path, image_path)
+    # 命令参数作为人工补充标签，与视觉打标结果合并
+    extra_tags = parse_tags(arg_msg.extract_plain_text())
+    data = local_path.read_bytes()
+    mime_type = magic.from_buffer(data[:64], mime=True)
 
-    # 将表情包信息添加（或更新）到配置中
-    memes = chat_configs.instance.memes
-    # 如果表情包名称不存在，或新描述不为空，则更新配置文件
-    if name not in memes or description:
-        memes[name] = description
-        # 添加系统通知
-        session_info = await extract_session_info(event, bot)
-        session_id = session_info.session_id
-        await chat_manager.get_session(session_id).add_system_notification("表情包已更新")
+    await add_meme.send("正在识别表情包…")
+    tags = await get_image_tags(data, mime_type)
+    if tags is None:
+        rec = await memes.add_image(local_path, extra_tags)
+        if extra_tags:
+            await add_meme.finish(f"打标失败，已用补充标签收录为 #{rec.id}")
+        await add_meme.finish(f"打标失败，已收录为 #{rec.id}（待打标），请用「改标」命令补充标签")
 
-    await add_meme.finish(f"已添加表情包 {name}")
+    rec = await memes.add_image(local_path, dedupe_tags(tags + extra_tags))
+    # 通知会话内 Agent 新表情包已收录
+    session_info = await extract_session_info(event, bot)
+    await chat_manager.get_session(session_info.session_id).add_system_notification(
+        f"新表情包已收录：{' '.join(rec.tags)}"
+    )
+    await add_meme.finish(f"已收录表情包 #{rec.id}，标签：{' '.join(rec.tags)}")
+
+
+@retag_meme.handle()
+async def handle_retag_meme(arg_msg: Message = CommandArg()):
+    memes = get_memes()
+    if memes is None:
+        await retag_meme.finish("表情包功能未启用")
+
+    parts = arg_msg.extract_plain_text().split(maxsplit=1)
+    if len(parts) < 2 or not parts[0].strip().lstrip("#").isdigit():
+        await retag_meme.finish(
+            "用法：改标 <序号> <标签…>（序号见「表情包列表」，空格分隔多个标签）"
+        )
+
+    rec_id = int(parts[0].strip().lstrip("#"))
+    tags = parse_tags(parts[1])
+    if not tags:
+        await retag_meme.finish("标签不能为空")
+
+    rec = await memes.retag(rec_id, tags)
+    if rec is None:
+        await retag_meme.finish(f"不存在 #{rec_id}，请用「表情包列表」查询序号")
+    await retag_meme.finish(f"已更新 #{rec_id} 标签：{' '.join(rec.tags)}")
+
+
+@del_meme.handle()
+async def handle_del_meme(arg_msg: Message = CommandArg()):
+    memes = get_memes()
+    if memes is None:
+        await del_meme.finish("表情包功能未启用")
+
+    arg = arg_msg.extract_plain_text().strip().lstrip("#")
+    if not arg.isdigit():
+        await del_meme.finish("用法：删除表情 <序号>（序号见「表情包列表」）")
+
+    if memes.remove(int(arg)):
+        await del_meme.finish(f"已删除表情包 #{arg}")
+    await del_meme.finish(f"不存在 #{arg}，请用「表情包列表」查询序号")

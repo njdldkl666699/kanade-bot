@@ -26,29 +26,52 @@ chat:
     trigger_fraction: 0.7
     keep_pairs: 3
     min_clear_tokens: 2000
+    summary_target_fraction: 0.8
+    summary_model: null
+    summary_keep_messages: 20
+    summary_keep_user_messages: true
+    summary_prompt_file: CompactionSummary.md
+    online_valve_fraction: 0.92
   memory:
     max_records_per_scope: 256
+  scheduled_task:
+    retry_limit: 2
+    retry_delay_minutes: 5
   sandbox:
     enabled: false
+  sticker_meme:
+    enabled: false
+    topk: 5
+    min_similarity: 0.3
+    softmax_scale: 55.0
+  # image_caption:
+  #   system_prompt_file: ImageCaption.md
   rag:
     enabled: false
     query_n_results: 3
     distance_threshold: 0.65
-    db_dir: rag_db/
-    collection_name: kanade_wiki_collection
     document_file: kanade_wiki.json
-  tts:
-    base_url: "http://localhost:39212"
+  configs_file: chat_configs.json
+  fail_image_file: chat_fail.jpg
+
+crystal:
+  config_file: crystal_config.json
 
 gacha:
+  config_file: gacha_config.json
   show_trained: true
 
 harvest:
+  config_file: harvest_config.json
+  result_template_file: harvest_result_template.html
+  results_template_file: harvest_results_template.html
   daily_power: 10
   power_crystal_cost: 10
 
 fun:
+  ciallo_image_file: 宵崎奏Ciallo.webp
   plus_one_threshold: 4
+  duanzi_list_file: duanzi.json
 
 gallery:
   send_pic_limit: 10
@@ -58,6 +81,7 @@ help:
   welcome_image_file: welcome.gif
 
 music:
+  playlist_file: lx_list
   playlist_link: "https://blog.njdldkl666699.dpdns.org/playlists/"
   audio_page_size: 10
   lyric_default_length: 4
@@ -70,6 +94,9 @@ summary:
   max_size: 2048
 
 tool:
+  fallback_icon_file: grass_block.png
+  template_file: mcstatus_template.html
+  preset_reaction_config_file: preset_reaction_config.json
   image_provider: agnes
   agnes_base_url: https://api.agnes-ai.cn/v1
 
@@ -84,6 +111,10 @@ mindle:
   max_attempts: 10
   crystal_bonus: 25
   hinted_crystal_bonus: 10
+  background_image: background.png
+  lang_file: zh_cn.json
+  render_items_dir: items/
+  recipes_dir: recipe/
 
 handle:
   strict_mode: true
@@ -100,12 +131,15 @@ ps_test_sites:
   - name: "百度"
     url: "https://www.baidu.com"
 
+github_type: 0
 whateat_cd: 0
-
 wordcloud_background_color: white
 
 generate_schemas: false
 schema_output_dir: ./schemas
+
+print_kanade_banner: true
+print_pydantic_ai_banner: true
 
 watchdog:
   github_repo: njdldkl666699/kanade-bot
