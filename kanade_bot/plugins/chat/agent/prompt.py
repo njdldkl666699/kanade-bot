@@ -2,7 +2,6 @@ import platform
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
 from functools import cache
 from pathlib import Path
 
@@ -23,15 +22,6 @@ PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 FALSE_VALUES = frozenset({"", "false", "0", "no", "off", "none", "null"})
 """`when` 判定为假时的取值"""
-
-WEEKDAY_NAMES = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
-"""`weekday` 的取值表"""
-
-
-def current_time_line() -> str:
-    """当前时间的单行表述"""
-    now = datetime.now().astimezone()
-    return f"$ 现在是 {now:%Y-%m-%d %H:%M:%S}，{WEEKDAY_NAMES[now.weekday()]}"
 
 
 def _bool_str(value: bool) -> str:

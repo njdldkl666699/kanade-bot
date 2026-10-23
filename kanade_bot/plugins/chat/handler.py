@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotGroupMessageE
 from nonebot.adapters.onebot.v11 import MessageEvent as OneBotMessageEvent
 from nonebot.params import CommandArg
 
-from kanade_bot.utils.common import get_platform_type
+from kanade_bot.utils.common import asia_shanghai_now_str, get_platform_type
 from kanade_bot.utils.onebot11 import get_image_path
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
@@ -201,7 +201,7 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     # 添加消息到会话缓冲区，不需要图片
     message_str, _ = await parse_message_for_ai(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        message_str = f"{user_info}：{message_str}"
+        message_str = f"[{asia_shanghai_now_str()}] {user_info}：{message_str}"
     await chat_manager.get_session(session_id).add_message(message_str)
 
 

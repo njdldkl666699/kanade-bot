@@ -50,7 +50,6 @@ from .compaction import (
 )
 from .deps import ChatDeps
 from .memory import MemoryContext
-from .prompt import current_time_line
 from .sandbox import SandboxSession
 from .vision import get_image_caption
 
@@ -167,29 +166,25 @@ def _build_send_prompt(
     prompt_parts: list[str] = []
 
     if rag_docs:
-        prompt_parts.append("\n$ 检索到可能相关的文档：")
+        prompt_parts.append("$ 检索到可能相关的文档：")
         prompt_parts.extend(rag_docs)
     if messages:
-        prompt_parts.append("\n$ 下面是之前的消息缓冲区中的消息：")
+        prompt_parts.append("$ 下面是之前的消息缓冲区中的消息：")
         prompt_parts.extend(messages)
     if reply_text:
-        prompt_parts.append("\n$ 用户引用了之前的消息：")
+        prompt_parts.append("$ 用户引用了之前的消息：")
         prompt_parts.append(reply_text)
 
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
         prompt = f"{user_info}：{prompt}"
     if prompt:
-        prompt_parts.append("\n$ 下面是这次用户对你的消息：")
+        prompt_parts.append("$ 下面是这次用户对你的消息：")
         prompt_parts.append(prompt)
 
-    prompt_parts.append(current_time_line())
-
     if system_notification:
-        prompt_parts.append("<system_notification>")
-        prompt_parts.append(system_notification)
-        prompt_parts.append("</system_notification>")
+        prompt_parts.append(f"<system_notification>\n{system_notification}\n</system_notification>")
 
-    return "\n".join(prompt_parts).strip()
+    return "\n\n".join(prompt_parts).strip()
 
 
 async def _stage_images_to_sandbox(

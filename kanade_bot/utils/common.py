@@ -33,6 +33,11 @@ def asia_shanghai_now() -> datetime:
     return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
+def asia_shanghai_now_str() -> str:
+    """获取当前的上海时间字符串"""
+    return asia_shanghai_now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 @lru_cache(maxsize=1)
 def get_project_version() -> str:
     """获取项目版本号"""

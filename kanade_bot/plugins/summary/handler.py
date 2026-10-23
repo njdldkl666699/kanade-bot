@@ -17,7 +17,7 @@ from nonechat.model import Channel
 from pydantic_ai.usage import RunUsage
 
 from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
-from kanade_bot.utils.common import asia_shanghai_now, get_platform_type
+from kanade_bot.utils.common import asia_shanghai_now, asia_shanghai_now_str, get_platform_type
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
@@ -44,7 +44,7 @@ async def record_recv_msg(event: OneBotMessageEvent | ConsoleMessageEvent):
     message_str, _ = await parse_message_for_ai(event)
     session_info = extract_session_info_sync(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        message_str = f"$ {user_info}：{message_str}"
+        message_str = f"[{asia_shanghai_now_str()}] {user_info}：{message_str}"
 
     summarizer.add_message(session_info.session_id, message_str)
 
@@ -75,7 +75,7 @@ async def record_send_msg(
             session_id = f"qq-private-{data['user_id']}"
 
         message: str | OneBotMessage = data["message"]
-        message_str = f"$ {cfg.bot_name} ："
+        message_str = f"[{asia_shanghai_now_str()}] {cfg.bot_name} ："
         if isinstance(message, OneBotMessage):
             message_str = message_str + message.to_rich_text()
         else:
@@ -93,7 +93,7 @@ async def record_send_msg(
 
         elements: NoneChatConsoleMessage = data["content"]
         console_message = ConsoleMessage.from_console_message(elements)
-        message_str = f"$ {cfg.bot_name} : {console_message}"
+        message_str = f"[{asia_shanghai_now_str()}] {cfg.bot_name} : {console_message}"
     else:
         return
 
