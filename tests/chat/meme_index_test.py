@@ -312,3 +312,39 @@ def test_custom_matrix_path(tmp_path):
 
     derived = MemesIndex(memes_dir, index_path, FakeEmbedding())
     assert derived.matrix_path == index_path.with_suffix(".npy")
+
+
+def test_adopt_file_and_unindexed_dangling(tmp_path):
+    """adopt_file 收录目录内已有文件（不复制）；unindexed/dangling 目录扫描"""
+    memes_dir = tmp_path / "memes"
+    memes_dir.mkdir()
+    index = MemesIndex(memes_dir, tmp_path / "i.json", FakeEmbedding())
+
+    async def _run():
+        manual = make_image(memes_dir, "manual.png")
+        adopted = await index.adopt_file(manual, ["开心"])
+        return manual, adopted
+
+    manual, adopted = asyncio.run(_run())
+    assert adopted.file == "manual.png", "保留原文件名"
+    assert list(memes_dir.iterdir()) == [manual], "不应产生副本"
+    assert asyncio.run(index.select("开心")) is not None
+    assert index.unindexed_files() == [], "已收录文件不再被视为未索引"
+
+    # 未索引文件被发现；非图片扩展名被忽略
+    extra = make_image(memes_dir, "extra.gif")
+    ignored = memes_dir / "note.txt"
+    ignored.write_text("x")
+    assert index.unindexed_files() == [extra]
+
+    # 同名重复收录抛错
+    try:
+        asyncio.run(index.adopt_file(manual, ["重复"]))
+        raise AssertionError("应抛 ValueError")
+    except ValueError:
+        pass
+
+    # 文件被手动删除 → 悬空记录
+    manual.unlink()
+    dangling = index.dangling_records()
+    assert [r.id for r in dangling] == [adopted.id]

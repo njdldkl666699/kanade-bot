@@ -155,3 +155,12 @@ del_meme = on_command(
     block=True,
 )
 register_matcher(del_meme, "删除表情")
+
+scan_memes = on_command(
+    "扫描表情",
+    aliases={"scan_memes", "scanmemes"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(scan_memes, "扫描表情")

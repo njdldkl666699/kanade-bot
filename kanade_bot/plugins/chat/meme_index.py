@@ -217,17 +217,25 @@ class MemesIndex:
     # ---------- 写操作 ----------
 
     async def add_image(self, image_path: Path, tags: list[str]) -> MemeRecord:
-        """收录一张图片：复制进 memes_dir，打向量并写索引
+        """收录一张外部图片：以 uuid 命名复制进 memes_dir 后登记索引
 
         tags 为空时以 needs_tag 状态入库（不参与检索）。
         """
-        tags = dedupe_tags(tags)
         self.memes_dir.mkdir(parents=True, exist_ok=True)
         dest = self.memes_dir / f"{uuid.uuid4().hex}{image_path.suffix.lower()}"
         if image_path.resolve() != dest.resolve():
             shutil.copy(image_path, dest)
+        return await self.adopt_file(dest, tags)
 
-        rec = MemeRecord(id=0, file=dest.name, tags=tags, needs_tag=not tags)
+    async def adopt_file(self, path: Path, tags: list[str]) -> MemeRecord:
+        """收录 memes_dir 内已存在的文件（不复制，保留原文件名）
+
+        同名记录已存在时抛 ValueError。
+        """
+        if any(r.file == path.name for r in self._records):
+            raise ValueError(f"文件已入索引：{path.name}")
+        tags = dedupe_tags(tags)
+        rec = MemeRecord(id=0, file=path.name, tags=tags, needs_tag=not tags)
         if tags:
             rec.embedding = (await self.embedding.embed([rec.tag_text]))[0]
 
@@ -238,6 +246,21 @@ class MemesIndex:
             self._write_meta()
             self.save()
         return rec
+
+    def unindexed_files(self) -> list[Path]:
+        """memes_dir 中未被索引的图片文件"""
+        if not self.memes_dir.is_dir():
+            return []
+        indexed = {r.file for r in self._records}
+        return sorted(
+            p
+            for p in self.memes_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTS and p.name not in indexed
+        )
+
+    def dangling_records(self) -> list[MemeRecord]:
+        """索引中文件已不存在的悬空记录（如被手动删除）"""
+        return [r for r in self._records if not self.file_path(r).is_file()]
 
     async def retag(self, rec_id: int, tags: list[str]) -> MemeRecord | None:
         """更新记录标签并重算向量"""

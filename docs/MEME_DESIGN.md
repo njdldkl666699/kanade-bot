@@ -55,6 +55,7 @@ json 中的每条记录包含 `id`（自增，供命令引用）、`file`、`tag
 | `表情包列表`            | `list_memes` `listmemes` | -          | 列出序号、文件名与标签               |
 | `改标 <序号> <标签…>`   | `retag_meme` `retagmeme` | SUPERUSER  | 更新标签并重算向量                   |
 | `删除表情 <序号>`       | `del_meme` `delmeme`     | SUPERUSER  | 删除记录与图片文件                   |
+| `扫描表情`              | `scan_memes` `scanmemes` | SUPERUSER  | 收录手动放入目录的图片并清理悬空记录 |
 
 ## 模块组织
 

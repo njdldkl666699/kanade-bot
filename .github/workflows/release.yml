@@ -44,7 +44,9 @@ jobs:
           )"
 
           previous_version=""
-          if [[ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
+          # BEFORE_SHA 为空时（手动触发）不能进入此分支：
+          # ":pyproject.toml" 是合法 rev 语法（索引中的文件），会误取到当前版本
+          if [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
             && git cat-file -e "$BEFORE_SHA:pyproject.toml" 2>/dev/null; then
             previous_version="$(
               git show "$BEFORE_SHA:pyproject.toml" | python3 -c \

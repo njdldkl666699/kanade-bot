@@ -37,6 +37,7 @@ from .matcher import (
     del_meme,
     list_memes,
     retag_meme,
+    scan_memes,
 )
 from .meme_index import dedupe_tags, parse_tags
 from .meme_service import get_memes
@@ -357,3 +358,45 @@ async def handle_del_meme(arg_msg: Message = CommandArg()):
     if memes.remove(int(arg)):
         await del_meme.finish(f"已删除表情包 #{arg}")
     await del_meme.finish(f"不存在 #{arg}，请用「表情包列表」查询序号")
+
+
+@scan_memes.handle()
+async def handle_scan_memes():
+    memes = get_memes()
+    if memes is None:
+        await scan_memes.finish("表情包功能未启用")
+
+    # 清理悬空记录（索引中的文件已被手动删除）
+    dangling = memes.dangling_records()
+    for r in dangling:
+        memes.remove(r.id)
+
+    pending = memes.unindexed_files()
+    if not pending:
+        summary = f"没有需要收录的表情包（索引共 {len(memes.records)} 条）"
+        if dangling:
+            summary += f"，已清理悬空记录 {len(dangling)} 条"
+        await scan_memes.finish(summary)
+
+    await scan_memes.send(f"发现 {len(pending)} 张未收录图片，开始打标…")
+    tagged = 0
+    failed = 0
+    for path in pending:
+        data = path.read_bytes()
+        mime_type = magic.from_buffer(data[:64], mime=True)
+        tags = await get_image_tags(data, mime_type)
+        try:
+            await memes.adopt_file(path, tags or [])
+        except ValueError:
+            continue
+        if tags:
+            tagged += 1
+        else:
+            failed += 1
+
+    summary = f"扫描完成：新收录 {tagged} 张"
+    if failed:
+        summary += f"（{failed} 张打标失败待「改标」补标）"
+    if dangling:
+        summary += f"，清理悬空记录 {len(dangling)} 条"
+    await scan_memes.finish(summary)
