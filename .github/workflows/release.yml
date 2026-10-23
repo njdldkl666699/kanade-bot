@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - pyproject.toml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -29,6 +30,7 @@ jobs:
         id: version
         env:
           BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +50,17 @@ jobs:
               git show "$BEFORE_SHA:pyproject.toml" | python3 -c \
                 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])'
             )"
+          fi
+
+          # 手动触发时 github.event.before 为空，改为与最新 Release 标签的版本比较
+          if [[ -z "$previous_version" && "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name' 2>/dev/null || true)"
+            if [[ -n "$latest_tag" ]] && git cat-file -e "$latest_tag:pyproject.toml" 2>/dev/null; then
+              previous_version="$(
+                git show "$latest_tag:pyproject.toml" | python3 -c \
+                  'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])'
+              )"
+            fi
           fi
 
           if ! git check-ref-format "refs/tags/$current_version"; then
