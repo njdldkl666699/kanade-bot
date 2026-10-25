@@ -69,6 +69,8 @@ async def get_image_path(bot: Bot, image_segment: MessageSegment) -> Path:
     file: str = image_segment.data["file"]
     r = await bot.get_image(file=file)
     r_file = r["file"]
+    if r_file.startswith("file://"):
+        return Path.from_uri(r_file)
     if not r_file.startswith(("http://", "https://")):
         return Path(r_file)
 
