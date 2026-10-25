@@ -139,7 +139,7 @@ async def send_message_in_chunks(
                         segments,
                         content_long=len(content) > 600 or len(content.splitlines()) > 20,
                         content_format=guess_format(content),
-                        first_reply=True,
+                        first_reply=isinstance(event, OneBotGroupMessageEvent),
                     )
                 else:
                     await matcher.send(content)

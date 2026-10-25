@@ -208,51 +208,30 @@ async def parse_onebot_message_for_ai(
 
         return "\n".join(text_parts), attachments
 
-    # 处理普通消息，解析其中的图片附件
-    last_image_index = -1
-    for i, segment in enumerate(message):
-        if segment.type != "image":
-            continue
+    # 逐段处理消息：图片解析为附件并留下占位文本，其余消息段按类型格式化为文字
+    for segment in message:
+        if segment.type == "image":
+            file: str = segment.data["file"]
+            attachment: ImageInput | None = None
+            if bot:
+                try:
+                    local_path = await get_image_path(bot, segment)
+                except Exception as e:
+                    logger.warning("获取图片 {} 失败: {}", file, e)
+                    local_path = None
+                # 文件不存在或内容为空时都不构造附件，仅保留文本占位
+                if local_path and local_path.is_file() and (raw := local_path.read_bytes()):
+                    attachment = ImageInput(
+                        name=file or "image.png",
+                        data=base64.b64encode(raw).decode(),
+                        mime_type=magic.from_buffer(raw, mime=True),
+                    )
+            if attachment:
+                attachments.append(attachment)
+            text_parts.append(f"[图片：{file}]")
 
-        file: str = segment.data["file"]
-        attachment: ImageInput
-        if bot:
-            local_path = await get_image_path(bot, segment)
-            if local_path and local_path.is_file():
-                raw = local_path.read_bytes()
-                attachment = ImageInput(
-                    name=file or "image.png",
-                    data=base64.b64encode(raw).decode(),
-                    mime_type=magic.from_buffer(raw, mime=True),
-                )
-            else:
-                # 下载失败，仅保留名称占位
-                attachment = ImageInput(name=file or "image.png")
-        else:
-            # 没有bot实例，仅保留图片名称
-            attachment = ImageInput(name=file or "image.png")
-
-        # 把前半段内容转为文字
-        splitted_segments = message[:i]
-        if splitted_segments:
-            text_parts.append(splitted_segments.to_rich_text().strip())
-
-        # 添加图片附件
-        last_image_index = i
-        attachments.append(attachment)
-        text_parts.append(f"[图片：{file}]")
-
-    # 添加最后剩余的文本内容，没有图片则直接转换整个消息为文本
-    # == -1 : 整个消息段列表都不是图片
-    # == len(message) - 1 : 最后一个是图片消息段
-    # 但这些边缘情况都可以通过切片自动处理，所以直接切最后一个图片消息段的下一个位置到末尾即可
-    remaining_segments = message[last_image_index + 1 :]
-    if not remaining_segments:
-        return "\n".join(text_parts), attachments
-
-    for segment in remaining_segments:
         # 在这里可以对非文本消息段进行各种格式化处理以保留更多信息
-        if segment.type == "at":
+        elif segment.type == "at":
             qq: str = segment.data["qq"]
             if qq == "all":
                 text_parts.append("@全体成员 ")
@@ -279,7 +258,9 @@ async def parse_onebot_message_for_ai(
             description = QQ_EMOJI_INDEXES.get(id, id)
             text_parts.append(f"[表情 {description}]")
         else:
-            text_parts.append(segment.to_rich_text(truncate=None).strip())
+            # 空文本段（如 reply 段等）不产生空行
+            if rich_text := segment.to_rich_text(truncate=None).strip():
+                text_parts.append(rich_text)
 
     return "\n".join(text_parts), attachments
 
