@@ -51,6 +51,15 @@ chat:
     query_n_results: 3
     distance_threshold: 0.65
     document_file: kanade_wiki.json
+  auto_reply:
+    enabled: false
+    gate:
+      system_prompt_file: ReplyGate.md
+    time_windows: []
+    backoff_start: 3
+    backoff_base: 30
+    backoff_cap: 1800
+    gate_timeout: 30
   configs_file: chat_configs.json
   fail_image_file: chat_fail.jpg
 

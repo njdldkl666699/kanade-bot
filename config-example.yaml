@@ -59,6 +59,14 @@ chat:
     openai_model: BAAI/bge-m3
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
+  auto_reply:
+    enabled: true
+    gate:
+      <<: *sensenova-6-8-flash-lite
+    time_windows:
+      - { start: "00:00", end: "07:00", probability: 0.0 } # 深夜免打扰
+      - { start: "09:00", end: "12:00", weekdays_only: true, probability: 0.3 }
+      - { start: "14:00", end: "18:00", weekdays_only: true, probability: 0.3 }
   billing: &billing
     peak_input_per_1k: 6
     peak_output_per_1k: 24

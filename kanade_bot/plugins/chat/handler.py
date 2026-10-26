@@ -16,13 +16,17 @@ from kanade_bot.utils.onebot11 import get_image_path
 from kanade_bot.utils.parse import build_sender_info, parse_message_for_ai
 from kanade_bot.utils.session import extract_session_info, extract_session_info_sync
 
+from .agent.auto_reply import auto_reply_runtime, set_group_enabled
 from .agent.manager import chat_manager
 from .agent.schedule import scheduled_task_manager
 from .agent.vision import get_image_tags
 from .ban import add_to_ban_list, parse_ban_args, remove_from_ban_list
-from .chat import send_message_in_chunks, should_auto_reply, should_reply_event
+from .chat import send_message_in_chunks, should_reply_event
+from .config import cfg
 from .matcher import (
     add_meme,
+    auto_reply_disable,
+    auto_reply_enable,
     chat,
     chat_ban,
     chat_compact,
@@ -34,6 +38,7 @@ from .matcher import (
     chat_task_list,
     chat_unban,
     chat_workspace_clear,
+    decision_stats,
     del_meme,
     list_memes,
     retag_meme,
@@ -44,6 +49,15 @@ from .meme_service import get_memes
 
 require("crystal")
 from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
+
+
+def _group_id_of(event: Event) -> str | None:
+    """从群消息事件提取群 ID；非群消息返回 None"""
+    if isinstance(event, ConsolePublicMessageEvent):
+        return event.channel.id
+    if isinstance(event, OneBotGroupMessageEvent):
+        return str(event.group_id)
+    return None
 
 
 @chat.handle()
@@ -60,11 +74,58 @@ async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent)
     await send_message_in_chunks(chat, bot, event)
 
 
+@auto_reply_enable.handle()
+async def handle_auto_reply_enable(event: Event):
+    """在当前群启用主动回复（SUPERUSER）"""
+    if (group_id := _group_id_of(event)) is None:
+        await auto_reply_enable.finish("请在群聊中使用本命令")
+    set_group_enabled(group_id, get_platform_type(event), True)
+    message = f"已启用群 {group_id} 的主动回复"
+    if not cfg.auto_reply.enabled:
+        message += "\n注意：全局开关 chat.auto_reply.enabled 未开启，请先在配置文件中启用"
+    await auto_reply_enable.finish(message)
+
+
+@auto_reply_disable.handle()
+async def handle_auto_reply_disable(event: Event):
+    """在当前群禁用主动回复（SUPERUSER）"""
+    if (group_id := _group_id_of(event)) is None:
+        await auto_reply_disable.finish("请在群聊中使用本命令")
+    set_group_enabled(group_id, get_platform_type(event), False)
+    await auto_reply_disable.finish(f"已禁用群 {group_id} 的主动回复")
+
+
+@chat_monitor.handle()
+async def handle_chat_monitor(bot: Bot, event: Event):
+    session_info = await extract_session_info(event, bot)
+    session_id = session_info.session_id
+    platform = get_platform_type(event)
+
+    group_id = _group_id_of(event)
+
+    # 添加消息到会话缓冲区，不需要图片
+    message_str, _ = await parse_message_for_ai(event)
+    if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+        message_str = f"[{asia_shanghai_now_str()}] {user_info}：{message_str}"
+    await chat_manager.get_session(session_id).add_message(message_str)
+
+    # 主动回复流水线：消息 append 决策历史 + 防抖观察
+    if group_id and session_info.group_name and auto_reply_runtime.is_enabled(group_id, platform):
+        await auto_reply_runtime.on_group_message(
+            session_id,
+            group_id,
+            message_str,
+            author=session_info.user_id,
+            bot=bot,
+            session_info=session_info,
+        )
+
+
 @chat_reset.handle()
 async def handle_chat_reset(event: Event):
     session_info = extract_session_info_sync(event)
     await chat_manager.get_session(session_info.session_id).reset()
-    await chat_reset.finish("会话已重置（工作区文件保留，可用 /清理工作区 删除）")
+    await chat_reset.finish("会话已重置")
 
 
 @chat_workspace_clear.handle()
@@ -183,27 +244,15 @@ async def handle_chat_stats(event: Event):
     await chat_stats.finish("\n".join(lines))
 
 
-@chat_monitor.handle()
-async def handle_chat_monitor(bot: Bot, event: Event):
-    session_info = await extract_session_info(event, bot)
-    session_id = session_info.session_id
-    platform = get_platform_type(event)
-
-    if isinstance(event, ConsolePublicMessageEvent):
-        group_id = event.channel.id
-    elif isinstance(event, OneBotGroupMessageEvent):
-        group_id = str(event.group_id)
-    else:
-        return
-
-    if session_info.group_name and should_auto_reply(group_id, platform, session_id):
-        await send_message_in_chunks(chat, bot, event, auto_reply=True)
-
-    # 添加消息到会话缓冲区，不需要图片
-    message_str, _ = await parse_message_for_ai(event)
-    if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        message_str = f"[{asia_shanghai_now_str()}] {user_info}：{message_str}"
-    await chat_manager.get_session(session_id).add_message(message_str)
+@decision_stats.handle()
+async def handle_decision_stats(event: Event):
+    """输出当前会话的决策器统计"""
+    session_info = extract_session_info_sync(event)
+    group_label = session_info.group_id or session_info.session_id
+    text = await auto_reply_runtime.format_stats(session_info.session_id, group_label)
+    if text is None:
+        await decision_stats.finish("当前会话未进入主动回复流水线（未启用或启动后尚无消息观察）")
+    await decision_stats.finish(text)
 
 
 @chat_task_list.handle()

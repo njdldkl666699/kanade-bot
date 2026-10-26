@@ -10,6 +10,7 @@ import base64
 import mimetypes
 import uuid
 from collections import deque
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -256,7 +257,7 @@ class ChatSession:
     def __init__(self, session_id: str, *, manager: ChatSessionManager):
         self.session_id = session_id
         self._mgr = manager
-        """所属共享运行时（ChatSessionManager）"""
+        """所属共享运行时"""
 
         self.lock = asyncio.Lock()
         """会话锁：串行化同一会话的轮次运行与状态修改"""
@@ -274,10 +275,17 @@ class ChatSession:
         """最近发送者的记忆作用域上下文"""
 
         self._cache_read_total: int = 0
-        """会话级缓存命中 token 累计（内存态、不持久化，重启后重新累计）"""
+        """会话级缓存命中 token 累计"""
 
         self._input_total: int = 0
-        """会话级输入 token 累计（内存态、不持久化，重启后重新累计）"""
+        """会话级输入 token 累计"""
+
+        self.on_buffer_consumed: Callable[[str], None] | None = None
+        """buffer 被轮次消费后的回调，函数参数为 session_id，None 表示未启用
+
+        主动回复运行时注入：被动回复消费 buffer 后重置防抖批次；
+        同步轻操作，在会话锁内调用。reset 丢弃 buffer 不回调。
+        """
 
     # ===== 缓冲区与通知 =====
 
@@ -520,6 +528,8 @@ class ChatSession:
                     logger.warning(f"会话{session_id}轮末压缩失败（不影响会话状态）：{e}")
                 # 清空消息缓冲区
                 self.buffer.clear()
+                if (callback := self.on_buffer_consumed) is not None:
+                    callback(session_id)
 
     # ===== 管理操作 =====
 

@@ -133,6 +133,76 @@
       "title": "AgentConfig",
       "type": "object"
     },
+    "AutoReplyConfig": {
+      "description": "主动回复配置\n\n仅群聊生效\n\n是否回复由 LLM 决策节点结合群聊内容判定；\n\n上下文压缩复用 `compaction` 摘要档配置。",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "总开关",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "enabled_groups": {
+          "default": [],
+          "description": "启用主动回复的群ID",
+          "items": {
+            "type": "string"
+          },
+          "title": "Enabled Groups",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "gate": {
+          "$ref": "#/$defs/ReplyGateConfig",
+          "default": {
+            "model": "",
+            "provider": null,
+            "reasoning_effort": null,
+            "max_output_tokens": null,
+            "context_window": null,
+            "vision": false,
+            "mcp_servers": null,
+            "system_prompt_file": "ReplyGate.md"
+          },
+          "description": "决策节点模型配置，model留空回退主模型"
+        },
+        "time_windows": {
+          "default": [],
+          "description": "时段概率表：默认为空（任何时段每批必送）；多个窗口命中时取最先声明者，都不命中时概率为 1.0",
+          "items": {
+            "$ref": "#/$defs/TimeWindow"
+          },
+          "title": "Time Windows",
+          "type": "array"
+        },
+        "backoff_start": {
+          "default": 2,
+          "description": "连续决策不回 N 次后开始退避",
+          "title": "Backoff Start",
+          "type": "integer"
+        },
+        "backoff_base": {
+          "default": 60.0,
+          "description": "退避基准秒：延迟 = base × 2^(count - start)",
+          "title": "Backoff Base",
+          "type": "number"
+        },
+        "backoff_cap": {
+          "default": 1800.0,
+          "description": "退避上限秒",
+          "title": "Backoff Cap",
+          "type": "number"
+        },
+        "gate_timeout": {
+          "default": 30.0,
+          "description": "决策调用超时（秒），超时按不回复处理且不计退避",
+          "title": "Gate Timeout",
+          "type": "number"
+        }
+      },
+      "title": "AutoReplyConfig",
+      "type": "object"
+    },
     "ChatPromptConfig": {
       "description": "聊天Agent的模块化系统提示词配置",
       "properties": {
@@ -801,6 +871,107 @@
       "title": "RAGConfig",
       "type": "object"
     },
+    "ReplyGateConfig": {
+      "description": "主动回复决策节点模型配置",
+      "properties": {
+        "model": {
+          "default": "",
+          "description": "模型ID",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型提供商配置，如果为None则使用openai官方端点"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "推理努力程度，仅对支持的模型生效",
+          "title": "Reasoning Effort"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "模型单次响应的最大输出token数",
+          "title": "Max Output Tokens"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "上下文窗口",
+          "title": "Context Window"
+        },
+        "vision": {
+          "default": false,
+          "description": "模型是否支持图片（视觉）输入",
+          "title": "Vision",
+          "type": "boolean"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/MCPServerConfig"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP服务器配置，键为服务器名称",
+          "title": "Mcp Servers"
+        },
+        "system_prompt_file": {
+          "default": "ReplyGate.md",
+          "description": "插话决策系统提示词文件名，缺失或为空时回退内置默认",
+          "title": "System Prompt File",
+          "type": "string"
+        }
+      },
+      "title": "ReplyGateConfig",
+      "type": "object"
+    },
     "SandboxConfig": {
       "description": "mirage沙箱配置",
       "properties": {
@@ -1210,6 +1381,43 @@
       "title": "TestSiteCfg",
       "type": "object"
     },
+    "TimeWindow": {
+      "description": "主动回复时段概率窗口",
+      "properties": {
+        "start": {
+          "description": "起始时间 HH:MM（含）",
+          "pattern": "^\\d{1,2}:\\d{2}(:\\d{1,2})?$",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "description": "结束时间 HH:MM（不含），支持跨零点（如 23:00 → 07:00）",
+          "pattern": "^\\d{1,2}:\\d{2}(:\\d{1,2})?$",
+          "title": "End",
+          "type": "string"
+        },
+        "weekdays_only": {
+          "default": false,
+          "description": "仅工作日生效（周一至周五，剔除法定节假日）",
+          "title": "Weekdays Only",
+          "type": "boolean"
+        },
+        "probability": {
+          "default": 1.0,
+          "description": "该时段每批送决策的概率；0 = 关闭主动回复，1 = 每批必送",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Probability",
+          "type": "number"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeWindow",
+      "type": "object"
+    },
     "TokenBillingConfig": {
       "description": "按Token计费配置（单位：水晶/千token）",
       "properties": {
@@ -1461,6 +1669,29 @@
             "model": null,
             "voice": null
           }
+        },
+        "auto_reply": {
+          "$ref": "#/$defs/AutoReplyConfig",
+          "default": {
+            "enabled": false,
+            "enabled_groups": [],
+            "gate": {
+              "context_window": null,
+              "max_output_tokens": null,
+              "mcp_servers": null,
+              "model": "",
+              "provider": null,
+              "reasoning_effort": null,
+              "system_prompt_file": "ReplyGate.md",
+              "vision": false
+            },
+            "time_windows": [],
+            "backoff_start": 2,
+            "backoff_base": 60.0,
+            "backoff_cap": 1800.0,
+            "gate_timeout": 30.0
+          },
+          "description": "主动回复配置"
         },
         "billing": {
           "$ref": "#/$defs/TokenBillingConfig",
@@ -2349,6 +2580,25 @@
           "base_url": null,
           "model": null,
           "voice": null
+        },
+        "auto_reply": {
+          "backoff_base": 60.0,
+          "backoff_cap": 1800.0,
+          "backoff_start": 2,
+          "enabled": false,
+          "enabled_groups": [],
+          "gate": {
+            "context_window": null,
+            "max_output_tokens": null,
+            "mcp_servers": null,
+            "model": "",
+            "provider": null,
+            "reasoning_effort": null,
+            "system_prompt_file": "ReplyGate.md",
+            "vision": false
+          },
+          "gate_timeout": 30.0,
+          "time_windows": []
         },
         "billing": {
           "min_cost": 1,

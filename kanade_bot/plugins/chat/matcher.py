@@ -81,6 +81,14 @@ chat_stats = on_command(
 )
 register_matcher(chat_stats, "会话统计")
 
+decision_stats = on_command(
+    "决策统计",
+    aliases={"decision_stats", "decisionstats"},
+    priority=2,
+    block=True,
+)
+register_matcher(decision_stats, "决策统计")
+
 ### 定时任务
 
 chat_task_list = on_command(
@@ -118,6 +126,26 @@ chat_unban = on_command(
     block=True,
 )
 register_matcher(chat_unban, "聊天解除拉黑")
+
+### 主动回复
+
+auto_reply_enable = on_command(
+    "启用主动回复",
+    aliases={"auto_reply_enable", "autoreplyenable"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(auto_reply_enable, "启用主动回复")
+
+auto_reply_disable = on_command(
+    "禁用主动回复",
+    aliases={"auto_reply_disable", "autoreplydisable"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(auto_reply_disable, "禁用主动回复")
 
 ### 表情包
 

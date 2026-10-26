@@ -20,6 +20,27 @@ type UsageCallback = Callable[[RunUsage, bool], None]
 """轮次结束回调：`(累计usage, 是否有文本产出)`，供按Token计费的调用方扣费"""
 
 
+def is_non_workday(at: datetime | None = None) -> bool:
+    """判断北京时间 `at` 是否为非工作日（周六日或法定节假日）
+
+    调休上班的周六日仍视为非工作日。
+    """
+    if at is None:
+        at = asia_shanghai_now()
+
+    if at.weekday() >= 5:
+        return True
+
+    if _is_holiday is not None:
+        try:
+            return _is_holiday(at.date())
+        except NotImplementedError:
+            # 日期超出 chinese-calendar 支持的年份范围：退化为仅按周末判定
+            pass
+
+    return False
+
+
 def is_peak_hours(at: datetime | None = None) -> bool:
     """判断北京时间 `at` 是否处于高峰时段
 
@@ -31,16 +52,8 @@ def is_peak_hours(at: datetime | None = None) -> bool:
     if at is None:
         at = asia_shanghai_now()
 
-    if at.weekday() >= 5:
+    if is_non_workday(at):
         return False
-
-    if _is_holiday is not None:
-        try:
-            if _is_holiday(at.date()):
-                return False
-        except NotImplementedError:
-            # 日期超出 chinese-calendar 支持的年份范围：退化为仅按周末判定
-            pass
 
     current = at.time()
     return any(start <= current < end for start, end in PEAK_TIME_RANGES)

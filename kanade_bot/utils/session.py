@@ -18,7 +18,7 @@ class SessionInfo(BaseModel):
     """消息平台类型"""
     nickname: str | None = None
     """用户昵称"""
-    user_id: str | None = None
+    user_id: str = ""
     """用户ID"""
     group_name: str | None = None
     """群聊名称"""

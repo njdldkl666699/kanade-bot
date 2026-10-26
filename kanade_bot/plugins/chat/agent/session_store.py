@@ -19,11 +19,29 @@ from ..config import CompactionConfig
 from .compaction import CompactionMark, _messages_fingerprint, apply_strategy, build_clear_mark
 from .message_blobs import BlobWrite, externalize_messages, rehydrate_messages
 
+
+@dataclass
+class GateHistorySnapshot:
+    """决策消息历史的生效序列快照（重启加载结果）"""
+
+    rows: list[tuple[int, str, str]]
+    """生效行 `(id, role, content)`，当前摘要锚点行（若有）在最前"""
+
+    watermark: int
+    """生效水位线：普通行（kind='msg'）的起始行号；之前的行保留可回溯但不参与请求"""
+
+    anchor_at: float | None
+    """当前生效摘要锚点的生成时间；无锚点时为 None"""
+
+    total_rows: int
+    """全量行数（含水位线之前与旧锚点，统计观测用）"""
+
+
 _BLOB_CACHE_MAX_BYTES = 128 * 1024 * 1024
 """单会话 blob LRU 的内存预算（bytes）"""
 
 _SAFE_CONV_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-"""会话 ID 可直接作为文件名时的形态（QQ 群/私聊会话 ID 均满足）"""
+"""会话 ID 可直接作为文件名时的形态"""
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -49,6 +67,20 @@ CREATE TABLE IF NOT EXISTS blobs (
     mime TEXT NOT NULL,
     data BLOB NOT NULL,
     created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gate_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL DEFAULT 'msg',
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gate_messages_id ON gate_messages(id);
+
+CREATE TABLE IF NOT EXISTS gate_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -327,6 +359,101 @@ class SessionStore:
             conn.commit()
         db.invalidate_restore_cache()
 
+    # ===== 决策消息历史（主动回复） =====
+
+    async def append_gate_messages(
+        self, conv_id: str, entries: Sequence[tuple[str, str, str]]
+    ) -> list[int]:
+        """决策消息历史全量 append；截断不删行，只推进水位线
+
+        :param entries: `(kind, role, content)` 列表；kind 为 'msg'（普通行）
+            或 'anchor'（摘要锚点行，role 恒为 'user'）
+        :returns: 新写入的行 id 列表（与 entries 等长、顺序一致）
+        """
+        return await asyncio.to_thread(self._append_gate_sync, conv_id, list(entries))
+
+    def _append_gate_sync(self, conv_id: str, entries: list[tuple[str, str, str]]) -> list[int]:
+        db = self._conv_db(conv_id)
+        db.ensure()
+        new_rows: list[int] = []
+        now = time.time()
+        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
+            for kind, role, content in entries:
+                cursor = conn.execute(
+                    "INSERT INTO gate_messages (kind, role, content, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (kind, role, content, now),
+                )
+                new_rows.append(cursor.lastrowid or 0)
+            conn.commit()
+        return new_rows
+
+    async def load_gate_history(self, conv_id: str) -> GateHistorySnapshot:
+        """加载决策消息历史的生效序列：最新锚点行 + 水位线之后的普通行
+
+        水位线之前的全量行保留在库中可回溯，不参与请求——重启后请求前缀
+        与关机前完全一致，前缀缓存跨重启命中。
+        """
+        return await asyncio.to_thread(self._load_gate_sync, conv_id)
+
+    def _load_gate_sync(self, conv_id: str) -> GateHistorySnapshot:
+        db = self._conv_db(conv_id)
+        db.ensure()
+        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
+            watermark_row = conn.execute(
+                "SELECT value FROM gate_state WHERE key = 'watermark'"
+            ).fetchone()
+            watermark = int(watermark_row[0]) if watermark_row else 0
+
+            total = conn.execute("SELECT COUNT(*) FROM gate_messages").fetchone()[0]
+
+            anchor = conn.execute(
+                "SELECT id, content, created_at FROM gate_messages "
+                "WHERE kind = 'anchor' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+
+            msg_rows = conn.execute(
+                "SELECT id, role, content FROM gate_messages "
+                "WHERE kind = 'msg' AND id >= ? ORDER BY id",
+                (watermark,),
+            ).fetchall()
+
+        rows: list[tuple[int, str, str]] = []
+        anchor_at: float | None = None
+        if anchor is not None:
+            rows.append((anchor[0], "user", anchor[1]))
+            anchor_at = anchor[2]
+        rows.extend(msg_rows)
+        return GateHistorySnapshot(
+            rows=rows, watermark=watermark, anchor_at=anchor_at, total_rows=total
+        )
+
+    async def get_gate_state(self, conv_id: str, key: str) -> str | None:
+        """读决策会话状态 kv；无该键时返回 None"""
+        return await asyncio.to_thread(self._get_gate_state_sync, conv_id, key)
+
+    def _get_gate_state_sync(self, conv_id: str, key: str) -> str | None:
+        db = self._conv_db(conv_id)
+        db.ensure()
+        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
+            row = conn.execute("SELECT value FROM gate_state WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    async def set_gate_state(self, conv_id: str, key: str, value: str) -> None:
+        """写决策会话状态 kv（水位线、上次发言时间戳等，UPSERT 语义）"""
+        await asyncio.to_thread(self._set_gate_state_sync, conv_id, key, value)
+
+    def _set_gate_state_sync(self, conv_id: str, key: str, value: str) -> None:
+        db = self._conv_db(conv_id)
+        db.ensure()
+        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
+            conn.execute(
+                "INSERT INTO gate_state (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            conn.commit()
+
     # ===== 恢复 =====
 
     async def restore(self, conv_id: str, *, params: CompactionConfig | None = None):
@@ -391,6 +518,8 @@ class SessionStore:
             conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM compaction_marks")
             conn.execute("DELETE FROM blobs")
+            conn.execute("DELETE FROM gate_messages")
+            conn.execute("DELETE FROM gate_state")
             conn.commit()
         db.clear_blob_cache()
         db.invalidate_restore_cache()

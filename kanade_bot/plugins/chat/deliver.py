@@ -7,6 +7,7 @@ import re
 from collections.abc import Awaitable, Callable
 
 from nonebot import logger, require
+from nonebot.adapters import Bot
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from nonebot.adapters.onebot.v11 import Message as OneBotMessage
@@ -228,17 +229,21 @@ async def send_console_proactive(bot: ConsoleBot, session_info: SessionInfo, con
         )
 
 
-async def send_proactive(bot: OneBot | ConsoleBot, session_info: SessionInfo, content: str):
+async def send_proactive(bot: Bot, session_info: SessionInfo, content: str):
     """把一段助手回复主动发送到会话，按Bot类型分发到对应适配器"""
     if isinstance(bot, ConsoleBot):
         await send_console_proactive(bot, session_info, content)
-    else:
+    elif isinstance(bot, OneBot):
         await send_onebot_proactive(bot, session_info, content)
+    else:
+        raise TypeError(f"主动发送不支持该适配器的 Bot 类型：{type(bot).__name__}")
 
 
-async def send_text_proactive(bot: OneBot | ConsoleBot, session_info: SessionInfo, text: str):
+async def send_text_proactive(bot: Bot, session_info: SessionInfo, text: str):
     """把一段纯文本主动发送到会话，按Bot类型分发到对应适配器"""
     if isinstance(bot, ConsoleBot):
         await send_console_proactive(bot, session_info, text)
-    else:
+    elif isinstance(bot, OneBot):
         await send_text_onebot_proactive(bot, session_info, text)
+    else:
+        raise TypeError(f"主动发送不支持该适配器的 Bot 类型：{type(bot).__name__}")

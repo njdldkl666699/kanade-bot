@@ -1,24 +1,5 @@
 {
   "$defs": {
-    "AutoReplyConfig": {
-      "description": "主动回复配置\n\n该配置用于设置在群聊中达到一定消息量后自动回复的行为，包括触发阈值和回复概率\n\n达到触发阈值后，机器人会触发一次抽取自动回复的行为，根据设定的概率决定是否进行回复，\n如果抽中，则清空上下文并回复一条消息，未抽中，则下次收到消息再次抽取。\n\n主动回复消息不受用户黑名单限制，但是受群聊黑名单限制",
-      "properties": {
-        "threshold": {
-          "default": 0,
-          "description": "自动回复的消息阈值，单位为条，小于等于0时不触发",
-          "title": "Threshold",
-          "type": "integer"
-        },
-        "probability": {
-          "default": 1.0,
-          "description": "达到阈值后自动回复的概率，取值范围为0.0到1.0",
-          "title": "Probability",
-          "type": "number"
-        }
-      },
-      "title": "AutoReplyConfig",
-      "type": "object"
-    },
     "ChatConfig": {
       "description": "聊天配置",
       "properties": {
@@ -42,14 +23,15 @@
           "type": "array",
           "uniqueItems": true
         },
-        "auto_reply_group_config": {
-          "additionalProperties": {
-            "$ref": "#/$defs/AutoReplyConfig"
+        "auto_reply_enabled_groups": {
+          "default": [],
+          "description": "启用主动回复的群ID列表（`/启用主动回复` 命令维护）",
+          "items": {
+            "type": "string"
           },
-          "default": {},
-          "description": "主动回复配置，键为群ID，值为AutoReplyConfig对象",
-          "title": "Auto Reply Group Config",
-          "type": "object"
+          "title": "Auto Reply Enabled Groups",
+          "type": "array",
+          "uniqueItems": true
         }
       },
       "title": "ChatConfig",
@@ -63,7 +45,7 @@
       "default": {
         "banned_users": [],
         "banned_groups": [],
-        "auto_reply_group_config": {}
+        "auto_reply_enabled_groups": []
       }
     },
     "onebot": {
@@ -71,7 +53,7 @@
       "default": {
         "banned_users": [],
         "banned_groups": [],
-        "auto_reply_group_config": {}
+        "auto_reply_enabled_groups": []
       }
     }
   },

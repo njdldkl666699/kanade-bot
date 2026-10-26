@@ -1,4 +1,3 @@
-import random
 from contextlib import aclosing
 from pathlib import Path
 from typing import cast
@@ -15,7 +14,7 @@ from nonebot.matcher import Matcher
 from pydantic_ai.usage import RunUsage
 
 from kanade_bot.utils.billing import compute_token_cost, is_peak_hours
-from kanade_bot.utils.common import PlatformType, asia_shanghai_now, get_platform_type
+from kanade_bot.utils.common import asia_shanghai_now, get_platform_type
 from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme
 from kanade_bot.utils.parse import (
     TextFormat,
@@ -23,12 +22,13 @@ from kanade_bot.utils.parse import (
     parse_message_for_ai,
     parse_onebot_message_for_ai,
 )
-from kanade_bot.utils.session import extract_session_info
+from kanade_bot.utils.session import SessionInfo, extract_session_info
 
+from .agent.auto_reply import auto_reply_runtime
 from .agent.manager import chat_manager
 from .ban import is_banned
-from .config import cfg, chat_configs
-from .deliver import parse_message_segments, send_segments
+from .config import cfg
+from .deliver import parse_message_segments, send_proactive, send_segments
 
 require("crystal")
 from kanade_bot.plugins.crystal import consume_crystal
@@ -75,7 +75,6 @@ async def send_message_in_chunks(
     matcher: type[Matcher],
     bot: Bot,
     event: Event,
-    auto_reply: bool = False,
 ):
     message = event.get_message()
     onebot = bot if isinstance(bot, OneBot) else None
@@ -98,9 +97,9 @@ async def send_message_in_chunks(
     def _bill_usage(usage: RunUsage, produced: bool) -> None:
         """轮次正常结束时按实际usage计费（扣费允许至负数）
 
-        有文本产出且非主动回复才扣费；峰谷按本轮用户消息时间判定。
+        有文本产出才扣费；峰谷按本轮用户消息时间判定。
         """
-        if not produced or auto_reply:
+        if not produced:
             return
         cost = compute_token_cost(usage, cfg.billing, peak=is_peak_hours(turn_start))
         consume_crystal(get_platform_type(event), event.get_user_id(), cost)
@@ -143,6 +142,8 @@ async def send_message_in_chunks(
                     )
                 else:
                     await matcher.send(content)
+                # bot 发言 append 进主动回复决策历史
+                await auto_reply_runtime.on_bot_message(session_info.session_id, content)
     except Exception as e:
         logger.exception("发送消息时发生错误: {}", e)
         # await _send_fail_message(matcher)
@@ -156,8 +157,12 @@ async def send_message_in_chunks(
 def should_reply_event(event: Event):
     """确定是否应该回复事件
 
-    用户或群聊在聊天黑名单中->不回复
-    群聊中引用了自己的消息，但是没有@ -> 不回复（修改adapter-onebot实现）
+    不回复情况：
+
+    - 用户或群聊在聊天黑名单中
+    - 修改adapter-onebot实现
+      - 群聊中引用了Bot的消息，但是没有@Bot或以Bot名称开头
+      - 私聊中没有以Bot名称开头
     """
     # 确定平台类型
     platform = get_platform_type(event)
@@ -179,23 +184,30 @@ def should_reply_event(event: Event):
     return not (user_id and is_banned(user_id, ban_type, platform))
 
 
-def should_auto_reply(group_id: str, platform: PlatformType, session_id: str):
-    if is_banned(group_id, "group", platform):
-        return False
+AUTO_REPLY_NOTIFICATION = "你刚刚在旁观群聊，现在决定主动插话。请自然地接话，简短即可。"
+"""主动回复轮的插话场景说明"""
 
-    group_config = chat_configs.instance.get_by_platform(platform).auto_reply_group_config
 
-    # 无配置项，默认不自动回复
-    if group_id not in group_config:
-        return False
-    auto_reply_config = group_config[group_id]
+async def send_auto_reply(bot: Bot, session_info: SessionInfo) -> None:
+    """主动回复执行"""
+    session = chat_manager.get_session(session_info.session_id)
+    if not session.buffer:
+        # 被动轮恰好先消费了 buffer：无新内容可说，直接放弃
+        logger.info(f"主动回复执行时 buffer 已空，跳过会话{session_info.session_id}")
+        return
 
-    size = len(chat_manager.get_session(session_id).buffer)
-    threshold = auto_reply_config.threshold
-    # 阈值小于等于0，或当前消息数小于阈值，不触发自动回复
-    if threshold <= 0 or size < threshold:
-        return False
-
-    # 达到阈值，按照概率决定是否自动回复
-    # 生成一个0.0到1.0之间的随机数，如果小于配置的概率，则触发自动回复
-    return random.random() < auto_reply_config.probability
+    async with aclosing(
+        session.send_and_wait(
+            session_info,
+            "",
+            bot_id=bot.self_id,
+            timeout=600,
+            system_notification=AUTO_REPLY_NOTIFICATION,
+        )
+    ) as contents:
+        async for content in contents:
+            if content := content.strip():
+                await send_proactive(bot, session_info, content)
+                await auto_reply_runtime.on_bot_message(
+                    session_info.session_id, content, proactive=True
+                )
