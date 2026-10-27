@@ -11,7 +11,7 @@ from pydantic_ai import InstructionPart
 from kanade_bot.utils.parse import build_sender_info
 
 from ..config import ChatPromptConfig, ScopedConfig, cfg
-from ..meme_service import memes_available
+from ..memes import memes_available
 from .deps import ChatDeps
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")

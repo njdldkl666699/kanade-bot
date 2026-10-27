@@ -79,16 +79,14 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage, UsageLimits
 from pydantic_ai_harness.compaction import compact_now
 
-from kanade_bot.plugins.chat.agent import compaction as compaction_mod
-from kanade_bot.plugins.chat.agent import session as session_mod
-from kanade_bot.plugins.chat.agent import session_store as store_mod
+from kanade_bot.plugins.chat.agent import history as compaction_mod
+from kanade_bot.plugins.chat.agent.history.store import SessionStore
 from kanade_bot.plugins.chat.agent.session import ChatSession
+from kanade_bot.plugins.chat.agent.session import stats as session_mod
 from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
 from kanade_bot.utils import pai_runtime
 from kanade_bot.utils.schema import BaseAgentConfig, ProviderConfig
 from kanade_bot.utils.session import SessionInfo
-
-SessionStore = store_mod.SessionStore
 
 
 class RequestBudgetTest(unittest.IsolatedAsyncioTestCase):
@@ -573,7 +571,7 @@ class RestoreCacheTest(unittest.IsolatedAsyncioTestCase):
         await self.store.append("c1", history)
 
         first = await self.store.restore("c1", params=TEST_PARAMS)
-        db = self.store._conv_db("c1")
+        db = self.store.registry.get("c1")
         self.assertIsNotNone(db._restore_cache, "restore 后应写入缓存")
         second = await self.store.restore("c1", params=TEST_PARAMS)
         self.assertEqual(fp(first), fp(second))
@@ -588,7 +586,7 @@ class RestoreCacheTest(unittest.IsolatedAsyncioTestCase):
         other = CompactionParams(keep_pairs=TEST_PARAMS.keep_pairs + 7)
 
         await self.store.restore("c1", params=TEST_PARAMS)
-        db = self.store._conv_db("c1")
+        db = self.store.registry.get("c1")
         cached = db._restore_cache
         await self.store.restore("c1", params=other)
         self.assertIsNot(db._restore_cache, cached, "参数不同不得命中旧缓存")
@@ -724,7 +722,7 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
             compaction_mod.CompactionMark(
                 strategy="summarizing",
                 params=TEST_PARAMS.model_dump(),
-                result=compaction_mod._messages_fingerprint(snapshot),
+                result=compaction_mod.compaction.messages_fingerprint(snapshot),
                 fingerprint=TEST_PARAMS.fingerprint(),
                 applied_at=0.0,
             ),
@@ -930,19 +928,40 @@ class SummaryKeepUserMessagesTest(unittest.IsolatedAsyncioTestCase):
     默认 `preserve_first_user_message=True`，keep_messages=0 压缩后历史只剩
     「摘要 + 会话第一条用户消息」，模型复读两天前的首条消息并按其内嵌
     时间戳错判时间（半夜回复「…喵喵。」「现在已经快到中午了呢」）。
+
+    harness 现行语义（与早期断言的差异）：
+
+    - `keep_messages` 的 0 也保留最新一条（工具配对安全截止），产物不再是
+      「仅摘要一条」，而是「摘要 + 尾部工具配对」；
+    - `keep_user_messages` 的保留物是带 `kept-user-message` metadata 的
+      `TextContent` 副本（非原样 `str` content）。
     """
 
     async def _compact(self, history, params):
         summary_model, _ = _make_model([resp_text("这是摘要")])
         return await compact_now(compaction_mod.build_summary(params), history, model=summary_model)
 
+    def _user_texts(self, compacted) -> list[str]:
+        """产物中的用户消息文本（兼容 TextContent 副本形态）"""
+        texts: list[str] = []
+        for m in compacted:
+            for p in getattr(m, "parts", []):
+                if not isinstance(p, UserPromptPart):
+                    continue
+                if isinstance(p.content, str):
+                    texts.append(p.content)
+                else:
+                    texts.append("".join(getattr(x, "content", "") for x in p.content))
+        return texts
+
     async def test_no_first_user_message_resurrection(self):
-        """事故回归：keep_messages=0 时产物仅剩摘要，任何用户消息不得复活"""
+        """事故回归：keep_messages=0 时任何用户消息不得复活（含首条 oldq0）"""
         compacted = await self._compact(
             make_history(3),
             CompactionParams(summary_keep_messages=0, summary_keep_user_messages=False),
         )
-        self.assertEqual(len(compacted), 1, "keep_messages=0 应只保留摘要一条")
+        # 摘要 + 最新一轮的工具配对尾部（响应与工具结果），无用户消息
+        self.assertEqual(len(compacted), 3, "keep_messages=0 = 摘要 + 安全截止尾部")
         self.assertEqual(compaction_mod.extract_summary(compacted), "这是摘要")
         self.assertFalse(
             any(isinstance(p, UserPromptPart) for m in compacted for p in getattr(m, "parts", [])),
@@ -955,23 +974,20 @@ class SummaryKeepUserMessagesTest(unittest.IsolatedAsyncioTestCase):
             make_history(3),
             CompactionParams(summary_keep_messages=0, summary_keep_user_messages=True),
         )
-        self.assertEqual(len(compacted), 1)
+        # 与 keep_user_messages=False 的产物完全一致：预算 0 不保留任何用户消息副本
+        self.assertEqual(len(compacted), 3)
+        self.assertEqual(self._user_texts(compacted), [])
 
     async def test_keeps_recent_user_messages_within_budget(self):
-        """保留用户消息：被摘要范围内最近 N 条用户消息原样保留"""
+        """保留用户消息：被摘要范围内最近 N 条用户消息以副本形态保留"""
         history = make_history(6)  # 18 条：u0..u5 共 6 条用户消息
         compacted = await self._compact(
             history,
             CompactionParams(summary_keep_messages=4, summary_keep_user_messages=True),
         )
-        user_texts = [
-            p.content
-            for m in compacted
-            for p in getattr(m, "parts", [])
-            if isinstance(p, UserPromptPart)
-        ]
+        user_texts = self._user_texts(compacted)
         # 被摘要范围内的用户消息优先占满全部 4 个名额 → 原始尾部被挤空，
-        # 产物 = 摘要 + 最近的 q1..q4（upstream 耦合预算语义）
+        # 产物 = 摘要 + 最近的 q1..q4 副本 + 尾部安全截止（upstream 耦合预算语义）
         self.assertEqual(user_texts, ["oldq1", "oldq2", "oldq3", "oldq4"])
 
 
@@ -1283,7 +1299,7 @@ class SessionCacheStatsTest(unittest.IsolatedAsyncioTestCase):
 
 
 class WorkspaceTreeTest(unittest.TestCase):
-    """`_list_workspace_files`：tree 风格渲染 + 限深限量"""
+    """`list_workspace_files`：tree 风格渲染 + 限深限量"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -1297,7 +1313,7 @@ class WorkspaceTreeTest(unittest.TestCase):
         (self.root / "assets" / "a.jpg").write_bytes(b"x")
         (self.root / "main.py").write_text("print()")
 
-        lines = session_mod._list_workspace_files(self.root)
+        lines = session_mod.list_workspace_files(self.root)
         self.assertEqual(
             lines,
             [
@@ -1318,7 +1334,7 @@ class WorkspaceTreeTest(unittest.TestCase):
         (self.root / "nested" / "images").mkdir()
         (self.root / "nested" / "images" / "keep.txt").write_text("x")
 
-        lines = session_mod._list_workspace_files(self.root)
+        lines = session_mod.list_workspace_files(self.root)
         self.assertEqual(
             lines,
             ["└ nested/", "  └ images/", "    └ keep.txt (1 B)"],
@@ -1334,7 +1350,7 @@ class WorkspaceTreeTest(unittest.TestCase):
         (self.root / "sub" / ".secret").write_text("x")
         (self.root / "sub" / "visible.txt").write_text("x")
 
-        lines = session_mod._list_workspace_files(self.root)
+        lines = session_mod.list_workspace_files(self.root)
         self.assertEqual(lines, ["└ sub/", "  └ visible.txt (1 B)"])
 
     def test_entry_limit_keeps_marker(self):
@@ -1342,7 +1358,7 @@ class WorkspaceTreeTest(unittest.TestCase):
         for i in range(15):
             (self.root / f"f{i:02d}.txt").write_text("x")
 
-        lines = session_mod._list_workspace_files(self.root)
+        lines = session_mod.list_workspace_files(self.root)
         self.assertEqual(len(lines), session_mod.MAX_WORKSPACE_ENTRIES + 1)
         self.assertEqual(lines[-1], "…")
 
@@ -1352,15 +1368,15 @@ class WorkspaceTreeTest(unittest.TestCase):
         deep.mkdir(parents=True)
         (deep / "hidden.txt").write_text("x")
 
-        lines = session_mod._list_workspace_files(self.root)
+        lines = session_mod.list_workspace_files(self.root)
         # d1/d2 均为独子：延续前缀全为空格，无 │ 竖线
         self.assertIn("    └ d3/", lines)
         self.assertNotIn("hidden.txt", "\n".join(lines))
 
     def test_empty_or_missing_root(self):
         """根目录不存在/为空时返回空列表"""
-        self.assertEqual(session_mod._list_workspace_files(self.root), [])
-        self.assertEqual(session_mod._list_workspace_files(self.root / "missing"), [])
+        self.assertEqual(session_mod.list_workspace_files(self.root), [])
+        self.assertEqual(session_mod.list_workspace_files(self.root / "missing"), [])
 
 
 if __name__ == "__main__":

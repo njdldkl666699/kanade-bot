@@ -1,11 +1,4 @@
-"""主动回复运行时编排：防抖 → 退避 → 时段概率闸 → LLM 决策 → 回复执行
-
-全部状态为 session 级（群与群互不影响）：防抖批次、退避计数、统计计数器、
-进行中的决策任务为内存态（重启从零）；决策消息历史持久化 per-session
-SQLite（重启经水位线恢复，前缀缓存跨重启命中）。
-
-循环依赖注意：本模块对 manager/chat 的引用一律函数内延迟导入。
-"""
+"""主动回复运行时编排：防抖 → 退避 → 时段概率闸 → LLM 决策 → 回复执行"""
 
 import asyncio
 import random
@@ -20,18 +13,15 @@ from nonebot.adapters import Bot
 from kanade_bot.utils.common import PlatformType, asia_shanghai_now, asia_shanghai_now_str
 from kanade_bot.utils.session import SessionInfo
 
-from ..ban import is_banned
-from ..config import cfg, chat_configs
+from ...config import cfg, chat_configs
+from ...util import is_banned
+from ..manager import chat_manager
+from ..prompt import _bot_name
 from .debounce import MessageDebouncer
-from .prompt import _bot_name
-from .reply_gate import (
-    GateMeta,
-    SessionGateHistory,
-    describe_window,
-    format_duration,
-    gate_limit_tokens,
-    window_probability,
-)
+from .executor import send_auto_reply
+from .gate import gate_limit_tokens
+from .gate_history import GateMeta, SessionGateHistory, format_duration
+from .windows import describe_window, window_probability
 
 
 @dataclass
@@ -134,12 +124,10 @@ class AutoReplyRuntime:
     async def _ensure_state(self, session_id: str, group_id: str) -> SessionGateState:
         state = self._states.get(session_id)
         if state is None:
-            from .manager import chat_manager
-
             state = SessionGateState(
                 session_id=session_id,
                 group_id=group_id,
-                history=SessionGateHistory(chat_manager.store, session_id),
+                history=SessionGateHistory(chat_manager.gate_store, session_id),
             )
             state.load_task = asyncio.create_task(self._restore_state(state))
             self._states[session_id] = state
@@ -201,7 +189,7 @@ class AutoReplyRuntime:
         if state is None:
             return
         try:
-            # 与 buffer 消息（handler.py）同用分钟精度，保持决策历史内时间格式一致
+            # 与 buffer 消息（handler 侧）同用分钟精度，保持决策历史内时间格式一致
             text = f"[{asia_shanghai_now_str('%Y-%m-%d %H:%M')}] {_bot_name()}：{content}"
             await state.history.append("user", text)
             now = time.time()
@@ -361,14 +349,16 @@ class AutoReplyRuntime:
 
         :param reason: 决策器判定理由，随系统通知注入主 Agent 提示词
         """
-        from ..chat import send_auto_reply
-
         bot, session_info = state.bot, state.session_info
         if bot is None or session_info is None:
             logger.warning(f"主动回复执行缺少 bot 或会话信息，放弃 {session_id}")
             return
+
+        async def _record(content: str) -> None:
+            await auto_reply_runtime.on_bot_message(session_id, content, proactive=True)
+
         try:
-            await send_auto_reply(bot, session_info, reason=reason)
+            await send_auto_reply(bot, session_info, reason=reason, on_content=_record)
         except Exception as e:
             logger.opt(exception=e).warning(f"主动回复执行失败 {session_id}")
 

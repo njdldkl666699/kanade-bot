@@ -29,7 +29,7 @@ json 中的每条记录包含 `id`（自增，供命令引用）、`file`、`tag
 
 收录入口是 `添加表情` 命令（引用一张图片），流程：取引用图片 → 复制进扁平目录（uuid 重命名）→ 视觉模型打标 → 标签拼接文本调 embedding API → 写入索引。命令参数作为人工补充标签与自动打标结果合并。
 
-打标模型由 `chat.sticker_meme.tagger` 独立配置（`StickerTaggerConfig`，继承通用 agent 配置并附带 `system_prompt_file` 提示词文件，与图片转述 `chat.image_caption` 互不依赖），使用 pydantic-ai Agent + BinaryContent。提示词文件默认 `config/chat/StickerTagging.md`，缺失时回退 `meme_index.py` 内置默认。提示词要求输出 5~10 个中文标签，覆盖画面主体、情绪、动作、图内文字的语义、适用场景五个维度；标签定位是"检索关键词"，即群友想发这张图时会用的口语化说法。输出解析宽容提取首个 JSON 数组，失败重试一次。
+打标模型由 `chat.sticker_meme.tagger` 独立配置（`StickerTaggerConfig`，继承通用 agent 配置并附带 `system_prompt_file` 提示词文件，与图片转述 `chat.image_caption` 互不依赖），使用 pydantic-ai Agent + BinaryContent。提示词文件默认 `config/chat/StickerTagging.md`，缺失时回退 `memes/index.py` 内置默认。提示词要求输出 5~10 个中文标签，覆盖画面主体、情绪、动作、图内文字的语义、适用场景五个维度；标签定位是"检索关键词"，即群友想发这张图时会用的口语化说法。输出解析宽容提取首个 JSON 数组，失败重试一次。
 
 打标始终失败时图片以 `needs_tag` 状态入库（保留人工补充标签，若有），不参与检索，事后用 `改标` 命令补标。
 
@@ -59,7 +59,7 @@ json 中的每条记录包含 `id`（自增，供命令引用）、`file`、`tag
 
 ## 模块组织
 
-核心 `kanade_bot/plugins/chat/meme_index.py` 是纯逻辑模块：只依赖 numpy 与 openai，不依赖 nonebot。运行时由 `chat/meme_service.py` 在启动时按配置装配实例（`get_memes()` 获取，未启用返回 None），模型不符或行数不符时自动触发重建。
+核心 `kanade_bot/plugins/chat/memes/index.py` 是纯逻辑模块：只依赖 numpy 与 openai，不依赖 nonebot。运行时由 `chat/memes/__init__.py` 在启动时按配置装配实例（`get_memes()` 获取，未启用返回 None），模型不符或行数不符时自动触发重建。
 
 由于 `chat/__init__.py` 的导入链依赖已初始化的 nonebot，独立脚本与测试无法直接按包名导入该模块；`scripts/migrate_memes.py` 与 `tests/chat/meme_index_test.py` 使用 `importlib` 按文件路径 spec 加载，并预注册 `sys.modules` 使后续导入命中缓存而不触发包初始化（与 `test_prompt_sections.py` 的做法一致）。
 

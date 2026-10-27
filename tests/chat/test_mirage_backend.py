@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-SANDBOX_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/sandbox.py"
+AGENT_DIR = REPO_ROOT / "kanade_bot/plugins/chat/agent"
 
 HAVE_SANDLOCK = shutil.which("sandlock") is not None
 HAVE_UV = shutil.which("uv") is not None
@@ -49,10 +49,15 @@ def host_read(path: Path) -> str | None:
 
 
 def _load_sandbox_module(workspace_root: Path | None = None):
-    """把 sandbox.py 加载成 kchat.agent.sandbox，注入可控的 cfg"""
+    """把 sandbox 包加载成 kchat.agent.sandbox，注入可控的 cfg
+
+    sandbox 已拆为子包：假包 `kchat.agent` 的 `__path__` 指向真实 agent 目录，
+    使 `kchat.agent.sandbox` 解析到真实子包（包内相对导入随之生效），
+    `..config` 仍解析到下面的桩。
+    """
     for name in ("kchat", "kchat.agent"):
         mod = types.ModuleType(name)
-        mod.__path__ = []  # type: ignore[attr-defined]
+        mod.__path__ = [str(AGENT_DIR)] if name == "kchat.agent" else []  # type: ignore[attr-defined]
         sys.modules[name] = mod
 
     class FakeSandboxConfig:
@@ -71,17 +76,19 @@ def _load_sandbox_module(workspace_root: Path | None = None):
     cfg_module.cfg = types.SimpleNamespace(sandbox=FakeSandboxConfig())  # type: ignore[attr-defined]
     sys.modules["kchat.config"] = cfg_module
 
-    spec = importlib.util.spec_from_file_location("kchat.agent.sandbox", SANDBOX_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["kchat.agent.sandbox"] = module
-    spec.loader.exec_module(module)
-    return module
+    # 弹出已加载的 sandbox 包及子模块：包内 `from ...config import cfg` 在
+    # 首次 import 时绑定，缓存会导致后续调用仍引用上一次注入的 cfg 桩
+    for name in list(sys.modules):
+        if name == "kchat.agent.sandbox" or name.startswith("kchat.agent.sandbox."):
+            del sys.modules[name]
+    return importlib.import_module("kchat.agent.sandbox")
 
 
 def _make_manager(module, root: Path):
     """构造一个不注册 nonebot 生命周期钩子的 SandboxManager"""
-    module.get_driver = lambda: types.SimpleNamespace(  # type: ignore[attr-defined]
+    # SandboxManager 定义在 sandbox.manager 子模块，get_driver 按其定义模块解析
+    manager_mod = sys.modules["kchat.agent.sandbox.manager"]
+    manager_mod.get_driver = lambda: types.SimpleNamespace(  # type: ignore[attr-defined]
         on_startup=lambda fn: None, on_shutdown=lambda fn: None
     )
     return module.SandboxManager()
@@ -95,14 +102,15 @@ class BackendIdentityTest(unittest.TestCase):
         """`KanadeWorkspace` 必须是官方 `MirageWorkspaceBackend` 的真子类（而非重写协议）"""
         import asyncio
 
+        from mirage import DiskVFS, MountMode, Workspace
         from mirage.agents.pydantic_ai import MirageWorkspaceBackend
 
         module = _load_sandbox_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
-            ws = module.Workspace(
-                {str(root): (module.DiskVFS(str(root)), module.MountMode.EXEC)},
-                mode=module.MountMode.EXEC,
+            ws = Workspace(
+                {str(root): (DiskVFS(str(root)), MountMode.EXEC)},
+                mode=MountMode.EXEC,
             )
             ws.create_session("test")
             try:

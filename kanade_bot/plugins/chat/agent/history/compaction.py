@@ -1,175 +1,44 @@
-"""会话压缩：分层策略、token 估算与请求预算"""
+"""会话压缩：分层策略构造、压缩事件 mark 与轮末压缩落库"""
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from copy import copy
 from dataclasses import dataclass, field
-from math import ceil
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from nonebot import logger
 from pydantic_ai import (
-    BinaryContent,
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
     ModelRequestContext,
-    ModelResponse,
     ModelSettings,
     RunContext,
     SystemPromptPart,
-    UserPromptPart,
 )
 from pydantic_ai.capabilities import AbstractCapability
-from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import ClearToolResults, SummarizingCompaction, TieredCompaction
 from pydantic_ai_harness.compaction import compact_now, estimate_context_tokens
 
 from kanade_bot.utils.session import SessionInfo
 
-from ..config import CompactionConfig
-from .message_blobs import blob_marker_messages
+from ...config import CompactionConfig
+from .blobs import blob_marker_messages
+from .budget import (
+    MIN_OUTPUT_TOKENS,
+    ContextBudgetError,
+    context_safety_margin,
+    estimate_request_tokens,
+)
 
 if TYPE_CHECKING:
-    # 仅类型标注使用；运行时导入会造成 compaction 和 session_store 循环导入
-    from .session_store import SessionStore
+    # 仅类型标注使用；运行时导入会造成 compaction 和 store 循环导入
+    from .store import SessionStore
 
 type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
-
-MIN_OUTPUT_TOKENS = 4096
-"""保留给正常回答的最小输出预算"""
-
-MIN_SAFETY_MARGIN_TOKENS = 8192
-"""输入估算之外的最小安全余量"""
-
-IMAGE_TOKEN_ESTIMATE = 1024
-"""DeepSeek视觉模型单张图片的保守token上限"""
-
-
-class ContextBudgetError(RuntimeError):
-    """请求在本地预算检查阶段已无法安全发送"""
-
-
-def context_safety_margin(context_window: int) -> int:
-    """为估算误差和工具 schema 预留的安全余量"""
-
-    return max(MIN_SAFETY_MARGIN_TOKENS, ceil(context_window * 0.05))
-
-
-def _image_content_count(messages: list[ModelMessage], start: int = 0) -> int:
-    """统计 usage anchor 之后的图片数量"""
-    total = 0
-    for message in messages[start:]:
-        for part in getattr(message, "parts", ()):
-            if not isinstance(part, UserPromptPart):
-                continue
-            content = part.content if not isinstance(part.content, str) else [part.content]
-            total += sum(1 for item in content if isinstance(item, BinaryContent) and item.is_image)
-    return total
-
-
-def estimate_request_tokens(
-    messages: list[ModelMessage],
-    request_parameters: ModelRequestParameters | None = None,
-    *,
-    image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE,
-) -> int:
-    """估算即将发送的输入 tokens（harness 通用估算 + anchor 后图片按张补计）"""
-
-    estimated = estimate_context_tokens(messages, model_request_parameters=request_parameters)
-    anchor = -1
-    for index in range(len(messages) - 1, -1, -1):
-        message = messages[index]
-        if isinstance(message, ModelResponse) and message.usage.input_tokens > 0:
-            anchor = index
-            break
-    return estimated + _image_content_count(messages, anchor + 1) * image_tokens_per_image
-
-
-def summary_model_settings(
-    params: CompactionConfig,
-    base: ModelSettings | None,
-    output_upper_tokens: int | None,
-) -> ModelSettings | Callable[[RunContext[Any]], ModelSettings] | None:
-    """为摘要请求继承主模型设置，并为摘要输出保留上下文空间。"""
-    settings = ModelSettings(base or {})
-    window = params.context_window
-    if window is None or (base is None and output_upper_tokens is None):
-        return settings or None
-
-    def resolve(ctx: RunContext[Any]) -> ModelSettings:
-        resolved = ModelSettings(settings)
-        estimated = estimate_request_tokens(list(ctx.messages))
-        available = window - estimated - context_safety_margin(window)
-        if available < MIN_OUTPUT_TOKENS:
-            raise ContextBudgetError(
-                f"摘要上下文预算不足：估算输入 {estimated} tokens，窗口 {window}，"
-                f"无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
-            )
-        resolved["max_tokens"] = min(output_upper_tokens or available, available)
-        return resolved
-
-    return resolve
-
-
-@dataclass
-class RequestBudgetCapability(AbstractCapability[Any]):
-    """在压缩后的请求上重新计算输出预算，并阻止必然越界的请求。"""
-
-    context_window: int | None
-    output_upper_tokens: int | None
-    image_tokens_per_image: int = IMAGE_TOKEN_ESTIMATE
-
-    def get_model_settings(self):
-        def resolve(ctx: RunContext[Any]) -> ModelSettings:
-            settings = copy(ctx.model_settings) or ModelSettings()
-            configured = self.output_upper_tokens or settings.get("max_tokens")
-            if self.context_window is None:
-                return {"max_tokens": configured} if configured else {}
-            estimated = estimate_request_tokens(
-                list(ctx.messages), image_tokens_per_image=self.image_tokens_per_image
-            )
-            available = self.context_window - estimated - context_safety_margin(self.context_window)
-            requested = configured if isinstance(configured, int) else available
-            return {"max_tokens": max(0, min(requested, available))}
-
-        return resolve
-
-    async def before_model_request(
-        self,
-        ctx: RunContext[Any],
-        request_context: ModelRequestContext,
-    ) -> ModelRequestContext:
-        window = self.context_window or request_context.model.context_window
-        if window is None:
-            return request_context
-
-        estimated = estimate_request_tokens(
-            request_context.messages,
-            request_context.model_request_parameters,
-            image_tokens_per_image=self.image_tokens_per_image,
-        )
-        available = window - estimated - context_safety_margin(window)
-        if available < MIN_OUTPUT_TOKENS:
-            raise ContextBudgetError(
-                f"上下文预算不足：估算输入 {estimated} tokens，窗口 {window}，"
-                f"安全余量 {context_safety_margin(window)}，无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
-            )
-
-        # 拷贝后修改
-        settings = ModelSettings(request_context.model_settings or {})
-        configured = self.output_upper_tokens or settings.get("max_tokens")
-        effective = min(configured or available, available)
-        if effective < MIN_OUTPUT_TOKENS:
-            raise ContextBudgetError(
-                f"上下文预算不足：可用输出 {effective} tokens，低于最小预算 {MIN_OUTPUT_TOKENS}"
-            )
-        settings["max_tokens"] = effective
-        request_context.model_settings = settings
-        return request_context
 
 
 @dataclass
@@ -234,6 +103,32 @@ def _summary_prompt_template(params: CompactionConfig) -> str | None:
         logger.warning(f"摘要档提示词模板非法（{e}），已回退 harness 默认：{path}")
         return None
     return template
+
+
+def summary_model_settings(
+    params: CompactionConfig,
+    base: ModelSettings | None,
+    output_upper_tokens: int | None,
+) -> ModelSettings | Callable[[RunContext[Any]], ModelSettings] | None:
+    """为摘要请求继承主模型设置，并为摘要输出保留上下文空间。"""
+    settings = ModelSettings(base or {})
+    window = params.context_window
+    if window is None or (base is None and output_upper_tokens is None):
+        return settings or None
+
+    def resolve(ctx: RunContext[Any]) -> ModelSettings:
+        resolved = ModelSettings(settings)
+        estimated = estimate_request_tokens(list(ctx.messages))
+        available = window - estimated - context_safety_margin(window)
+        if available < MIN_OUTPUT_TOKENS:
+            raise ContextBudgetError(
+                f"摘要上下文预算不足：估算输入 {estimated} tokens，窗口 {window}，"
+                f"无法保留至少 {MIN_OUTPUT_TOKENS} tokens 输出"
+            )
+        resolved["max_tokens"] = min(output_upper_tokens or available, available)
+        return resolved
+
+    return resolve
 
 
 def build_summary(
@@ -307,7 +202,7 @@ async def apply_strategy(
     return await compact_now(strategy, messages, model=model if model is not None else TestModel())
 
 
-def _messages_fingerprint(messages: list[ModelMessage]) -> bytes:
+def messages_fingerprint(messages: list[ModelMessage]) -> bytes:
     """消息列表指纹（blob 标记形态序列化，见 SESSION_STORE_DESIGN.md §5）"""
     return ModelMessagesTypeAdapter.dump_json(blob_marker_messages(messages))
 
@@ -350,7 +245,7 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
         session_id = _session_id_of(ctx)
         before = list(ctx.messages)
         result = await self.strategy.before_model_request(ctx, request_context)
-        if session_id is not None and _messages_fingerprint(before) != _messages_fingerprint(
+        if session_id is not None and messages_fingerprint(before) != messages_fingerprint(
             list(ctx.messages)
         ):
             self.events.setdefault(session_id, []).append(
@@ -367,7 +262,7 @@ def _common_prefix_len(a: list[ModelMessage], b: list[ModelMessage]) -> int:
     """两个消息列表的逐字节公共前缀长度"""
     n = min(len(a), len(b))
     for i in range(n):
-        if _messages_fingerprint([a[i]]) != _messages_fingerprint([b[i]]):
+        if messages_fingerprint([a[i]]) != messages_fingerprint([b[i]]):
             return i
     return n
 
@@ -412,8 +307,8 @@ async def persist_run(
     if not rewritten and len(events) == 1:
         # 自验证：零成本档重放能复现快照则只存参数（零额外存储）
         candidate = build_clear_mark(capability.params)
-        if _messages_fingerprint(await apply_strategy(events[0].pre, candidate)) == (
-            _messages_fingerprint(snapshot)
+        if messages_fingerprint(await apply_strategy(events[0].pre, candidate)) == (
+            messages_fingerprint(snapshot)
         ):
             mark = candidate
     mark.up_to_seq = await store.count(session_id) - 1
@@ -469,13 +364,13 @@ async def compact_between_turns(
         return None
 
     compacted = await compact_now(strategy, messages, model=model, conversation_id=session_id)
-    if compacted is messages or _messages_fingerprint(compacted) == _messages_fingerprint(messages):
+    if compacted is messages or messages_fingerprint(compacted) == messages_fingerprint(messages):
         return None
 
     # mark 类型自验证（与 persist_run 同一判定）
     mark: CompactionMark = build_summary_mark(params, compacted)
-    if _messages_fingerprint(await apply_strategy(messages, build_clear_mark(params))) == (
-        _messages_fingerprint(compacted)
+    if messages_fingerprint(await apply_strategy(messages, build_clear_mark(params))) == (
+        messages_fingerprint(compacted)
     ):
         mark = build_clear_mark(params)
     total = await store.count(session_id)

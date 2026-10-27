@@ -1,6 +1,6 @@
 # 沙箱设计（Sandbox）
 
-> 实现位置：`kanade_bot/plugins/chat/agent/sandbox.py`
+> 实现位置：`kanade_bot/plugins/chat/agent/sandbox/`
 > 为聊天 Agent 提供文件与 shell 能力，并把执行边界从宿主进程隔离开。
 
 ## 1. 目标与选型

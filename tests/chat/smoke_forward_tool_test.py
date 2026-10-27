@@ -19,7 +19,7 @@ init_nonebot(env=_env, **_configs)
 register_adapters_and_load_plugins()
 
 from nonebot.adapters.onebot.v11 import Bot as OneBot
-from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
+from nonebot.adapters.onebot.v11 import MessageSegment
 
 from kanade_bot.utils.parse import format_forward_message_for_ai
 
@@ -84,7 +84,7 @@ async def main():
     assert text == text2
 
     # 3) 工具侧标记容错与空内容检测
-    from kanade_bot.plugins.chat.agent.tool import _FORWARD_MARKER_RE
+    from kanade_bot.plugins.chat.agent.tools.messaging import _FORWARD_MARKER_RE
 
     m = _FORWARD_MARKER_RE.fullmatch("[forward:id=fwd123]".strip())
     assert m and m.group(1) == "fwd123"

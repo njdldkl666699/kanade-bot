@@ -1956,7 +1956,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "6.4.1"
+version = "6.5.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anyconfig" },

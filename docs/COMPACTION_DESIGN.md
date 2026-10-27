@@ -1,6 +1,6 @@
 # 会话压缩设计（Compaction）
 
-> 实现位置：`kanade_bot/plugins/chat/agent/compaction.py`
+> 实现位置：`kanade_bot/plugins/chat/agent/history/compaction.py`
 > 本文只讲压缩策略、触发时机、token 估算与预算控制；压缩事件在数据库中的存储与恢复重放见 `SESSION_STORE_DESIGN.md`。
 
 ## 1. 职责与不变式

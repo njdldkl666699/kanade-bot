@@ -1,31 +1,22 @@
-"""单会话运行时对象：消息缓冲区、通知槽、流中断与 Agent 轮次编排
-
-每个聊天会话一个 `ChatSession` 实例，设计见 docs/AGENT_DESIGN.md §4「会话对象模型」。
-"""
+"""单会话运行时对象：消息缓冲区、通知槽、流中断与 Agent 轮次编排"""
 
 from __future__ import annotations
 
 import asyncio
-import base64
-import mimetypes
-import uuid
 from collections import deque
 from collections.abc import Callable
-from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 from pydantic_ai import (
     AgentRunEvents,
-    BinaryContent,
     FunctionToolCallEvent,
     ModelMessage,
     ModelResponse,
     PartEndEvent,
     RunUsage,
     TextPart,
-    ToolReturnPart,
     UsageLimits,
     UserContent,
 )
@@ -38,24 +29,24 @@ from pydantic_ai_harness.compaction import (
 
 from kanade_bot.utils.billing import UsageCallback
 from kanade_bot.utils.pai_runtime import CONTINUE_PROMPT
-from kanade_bot.utils.parse import ImageInput, build_sender_info
+from kanade_bot.utils.parse import ImageInput
 from kanade_bot.utils.session import SessionInfo
 
-from ..config import cfg
-from .compaction import (
+from ...config import cfg
+from ..deps import ChatDeps
+from ..history import (
     build_summary,
     build_summary_mark,
     compact_between_turns,
     extract_summary,
     persist_run,
 )
-from .deps import ChatDeps
-from .memory import MemoryContext
-from .sandbox import SandboxSession
-from .vision import get_image_caption
+from ..memory import MemoryContext
+from .input_build import build_send_prompt, build_user_content, stage_images_to_sandbox
+from .stats import count_emptied_messages, list_workspace_files
 
 if TYPE_CHECKING:
-    from .manager import ChatSessionManager
+    from ..manager import ChatSessionManager
 
 EMPTY_RESPONSE_MAX_RETRIES = 2
 """空响应（一轮请求无文本输出且无工具调用）的最大重发次数"""
@@ -72,183 +63,12 @@ MAX_CONTINUATIONS = 5
 COMPACT_LOCK_TIMEOUT = 3
 """手动压缩等待会话锁的超时秒数，超时视为会话正在处理中"""
 
-MAX_WORKSPACE_ENTRIES = 10
-"""会话统计最多展示的工作区条目数"""
-
-WORKSPACE_WALK_DEPTH = 3
-"""会话统计遍历工作区的最大目录深度"""
-
-EXCLUDED_WORKSPACE_DIRS = frozenset({"images", "rendered"})
-"""会话统计整目录排除的顶层目录：工具暂存/生成内容（用户图片暂存、HTML渲染输出）"""
-
-CLEARED_TOOL_RESULT_PLACEHOLDER = "[tool result cleared]"
-"""零成本档压缩后的工具结果占位文本（`pydantic_ai_harness` 默认值）"""
-
-
-def _count_emptied_messages(messages: list[ModelMessage]) -> int:
-    """统计被零成本档清空的「空壳」消息条数（全部 part 均为清除占位）"""
-    count = 0
-    for m in messages:
-        parts = getattr(m, "parts", ())
-        if parts and all(
-            isinstance(part, ToolReturnPart) and part.content == CLEARED_TOOL_RESULT_PLACEHOLDER
-            for part in parts
-        ):
-            count += 1
-    return count
-
 
 class EmptyResponseError(RuntimeError):
     """重发耗尽后模型仍返回空响应
 
     抛出前已回退本轮写入的消息
     """
-
-
-def _format_size(size: int) -> str:
-    """字节数转人类可读文本"""
-    value = float(size)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
-            return f"{int(value)} {unit}" if unit == "B" else f"{value:.1f} {unit}"
-        value /= 1024
-    return f"{value:.1f} GB"
-
-
-def _list_workspace_files(root: Path) -> list[str]:
-    """以 tree 风格列出工作区条目（限深限量），返回带树形连接符的文本行"""
-    entries: list[str] = []
-    truncated = False
-
-    def walk(directory: Path, prefix: str, depth: int) -> None:
-        nonlocal truncated
-        if truncated or depth >= WORKSPACE_WALK_DEPTH:
-            return
-        try:
-            children = sorted(directory.iterdir(), key=lambda p: p.name)
-        except OSError:
-            return
-        # `.` 开头的隐藏条目默认不展示（同 tree 无 -a，如沙箱的 .venv/.home）
-        children = [p for p in children if not p.name.startswith(".")]
-        if depth == 0:
-            children = [p for p in children if p.name not in EXCLUDED_WORKSPACE_DIRS]
-        for i, path in enumerate(children):
-            last = i == len(children) - 1
-            connector = "└ " if last else "├ "
-            if path.is_dir():
-                entries.append(f"{prefix}{connector}{path.name}/")
-            else:
-                try:
-                    size = path.stat().st_size
-                except OSError:
-                    size = 0
-                entries.append(f"{prefix}{connector}{path.name} ({_format_size(size)})")
-            if len(entries) >= MAX_WORKSPACE_ENTRIES:
-                truncated = True
-                entries.append("…")
-                return
-            if path.is_dir():
-                walk(path, prefix + ("  " if last else "│ "), depth + 1)
-
-    walk(root, "", 0)
-    return entries
-
-
-def _build_send_prompt(
-    session_info: SessionInfo,
-    prompt: str,
-    *,
-    rag_docs: list[str] | None = None,
-    messages: deque[str] | None = None,
-    reply_text: str | None = None,
-    system_notification: str | None = None,
-) -> str:
-    """构建发送给模型的完整提示词"""
-    prompt_parts: list[str] = []
-
-    if rag_docs:
-        prompt_parts.append("$ 检索到可能相关的文档：")
-        prompt_parts.extend(rag_docs)
-    if messages:
-        prompt_parts.append("$ 下面是之前的消息缓冲区中的消息：")
-        prompt_parts.extend(messages)
-    if reply_text:
-        prompt_parts.append("$ 用户引用了之前的消息：")
-        prompt_parts.append(reply_text)
-
-    if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        prompt = f"{user_info}：{prompt}"
-    if prompt:
-        prompt_parts.append("$ 下面是这次用户对你的消息：")
-        prompt_parts.append(prompt)
-
-    if system_notification:
-        prompt_parts.append(f"<system_notification>\n{system_notification}\n</system_notification>")
-
-    return "\n\n".join(prompt_parts).strip()
-
-
-async def _stage_images_to_sandbox(
-    sandbox: SandboxSession, images: list[ImageInput] | None
-) -> list[str]:
-    """把本轮用户图片写入沙箱工作区 images/ 目录，返回相对路径列表"""
-    staged: list[str] = []
-    for image in images or []:
-        if not image.data:
-            continue
-        data = base64.b64decode(image.data)
-        name = Path(image.name).name or "image"
-        if not Path(name).suffix and image.mime_type:
-            name += mimetypes.guess_extension(image.mime_type) or ".jpg"
-        target = Path("images") / name
-        try:
-            existing = (await sandbox.read(target)).read()
-        except FileNotFoundError:
-            existing = None
-        if existing == data:
-            staged.append(str(target))  # 同一张图重发，直接复用
-            continue
-        if existing is not None:
-            target = Path("images") / f"{uuid.uuid4().hex[:8]}_{name}"
-        try:
-            await sandbox.write(target, BytesIO(data))
-        except Exception as e:
-            logger.warning(f"暂存图片到沙箱工作区失败: {image.name}: {e}")
-            continue
-        staged.append(str(target))
-    return staged
-
-
-async def _build_user_content(
-    send_prompt: str, images: list[ImageInput] | None
-) -> list[UserContent]:
-    """构建本轮用户输入：文本 + 图片"""
-    content: list[UserContent] = []
-
-    if cfg.agent.vision:
-        content.append(send_prompt)
-        for image in images or []:
-            content.append(
-                BinaryContent(
-                    data=base64.b64decode(image.data or ""),
-                    media_type=image.mime_type or "image/jpeg",
-                )
-            )
-        return content
-
-    # 模型无视觉：转述
-    parts = [send_prompt]
-
-    for image in images or []:
-        # data为None表示图片内容获取失败，仅剩名称占位，无法转述
-        if cfg.image_caption and image.data and image.mime_type:
-            caption = await get_image_caption(image.data, image.mime_type)
-            if caption:
-                parts.append(f"\n$ 图片 {image.name} 的文字描述: \n{caption}")
-                continue
-        parts.append(f"\n$ 收到图片 {image.name}，但当前无法查看图片内容")
-    content.append("\n".join(parts))
-    return content
 
 
 class ChatSession:
@@ -357,7 +177,7 @@ class ChatSession:
                 logger.info("发送给模型的消息为空，未触发生成")
                 return
 
-            send_prompt = _build_send_prompt(
+            send_prompt = build_send_prompt(
                 session_info,
                 prompt,
                 rag_docs=rag_docs,
@@ -374,14 +194,14 @@ class ChatSession:
                 sandbox_session = await mgr.sandbox_manager.create(session_id)
                 sandbox_root = mgr.sandbox_manager.workspace_root(session_id)
                 # 用户图片写入沙箱工作区
-                staged_images = await _stage_images_to_sandbox(sandbox_session, images)
+                staged_images = await stage_images_to_sandbox(sandbox_session, images)
             if staged_images:
                 send_prompt += (
                     "\n\n$ 本轮用户发送的图片已保存到沙箱工作区"
                     "（工具可用这些相对路径访问）：\n" + "\n".join(f"- {p}" for p in staged_images)
                 )
 
-            user_content = await _build_user_content(send_prompt, images)
+            user_content = await build_user_content(send_prompt, images)
 
             deps = ChatDeps(
                 session_info=session_info,
@@ -650,7 +470,7 @@ class ChatSession:
                 "sent_messages": len(messages),
             }
             # 展示口径：剔除内容已全部清空的空壳消息（实际请求仍包含它们）
-            if emptied := _count_emptied_messages(messages):
+            if emptied := count_emptied_messages(messages):
                 stats["emptied_messages"] = emptied
 
             # 平均缓存命中率：会话级累计值（Token加权），内存态、重启后重新计算
@@ -670,7 +490,7 @@ class ChatSession:
                 }
 
             if mgr.sandbox_manager is not None:
-                stats["workspace_files"] = _list_workspace_files(
+                stats["workspace_files"] = list_workspace_files(
                     Path(mgr.sandbox_manager.workspace_root(self.session_id))
                 )
             return stats

@@ -19,15 +19,15 @@ from kanade_bot.utils.pai_runtime import (
 from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
-from .compaction import RequestBudgetCapability, build_compaction_capability
 from .deps import ChatDeps
+from .history import RequestBudgetCapability, SessionStore, build_compaction_capability
+from .history.gate_store import GateStore
 from .memory import MemoryStore
 from .prompt import ChatPrompt
 from .sandbox import SandboxManager, SandboxWorkspaceCapability
 from .schedule import scheduled_task_manager
 from .session import ChatSession
-from .session_store import SessionStore
-from .tool import build_tools
+from .tools import build_tools
 
 
 class ChatSessionManager:
@@ -36,6 +36,9 @@ class ChatSessionManager:
     def __init__(self):
         self.store = SessionStore(cfg.session.sessions_dir_path)
         """会话存储"""
+
+        self.gate_store = GateStore(self.store.registry)
+        """主动回复决策历史存储（与主会话消息同库）"""
 
         self.memory_store = MemoryStore(
             cfg.memory.database_file_path,

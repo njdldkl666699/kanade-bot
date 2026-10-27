@@ -7,7 +7,7 @@
    字体缓存无落点。`sandbox_runtime_config` 统一授权字体目录并注入
    `HOME`/`XDG_*`。
 2. **图片暂存**：用户发送/引用的图片缓存在宿主 `cache/auto_clear/`，
-   沙箱工作区读不到；`_stage_images_to_sandbox` 把它们写入工作区
+   沙箱工作区读不到；`stage_images_to_sandbox` 把它们写入工作区
    `images/`，工具才能按相对路径取用。
 3. （需要 sandlock + uv 的端到端用例验证真实受限进程内的字体可读性
    与缓存可写性。）
@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-SANDBOX_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/sandbox.py"
+AGENT_DIR = REPO_ROOT / "kanade_bot/plugins/chat/agent"
 MANAGER_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/manager.py"
 SESSION_PATH = REPO_ROOT / "kanade_bot/plugins/chat/agent/session.py"
 
@@ -54,10 +54,15 @@ class FakeSandboxConfig:
 
 
 def _seed_fake_packages():
-    """建立 kchat 假包链与 kchat.config 桩（无条件覆盖，避免跨文件污染）"""
+    """建立 kchat 假包链与 kchat.config 桩（无条件覆盖，避免跨文件污染）
+
+    `kchat.agent` 的 `__path__` 指向真实 agent 目录：sandbox 已拆为子包，
+    `kchat.agent.sandbox` 经路径解析到真实子包；已注册的桩在 sys.modules
+    优先命中，不受路径影响。
+    """
     for name in ("kchat", "kchat.agent"):
         mod = types.ModuleType(name)
-        mod.__path__ = []  # type: ignore[attr-defined]
+        mod.__path__ = [str(AGENT_DIR)] if name == "kchat.agent" else []  # type: ignore[attr-defined]
         sys.modules[name] = mod
 
     cfg_module = types.ModuleType("kchat.config")
@@ -70,19 +75,19 @@ def _seed_fake_packages():
 
 
 def _load_sandbox_module(workspace_root: Path | None = None):
-    """把 sandbox.py 加载成 kchat.agent.sandbox，注入可控的 cfg"""
+    """把 sandbox 包加载成 kchat.agent.sandbox，注入可控的 cfg"""
     _seed_fake_packages()
     if workspace_root is not None:
         sys.modules["kchat.config"].cfg.sandbox.workspace_dir_path = (  # type: ignore[attr-defined]
             workspace_root
         )
 
-    spec = importlib.util.spec_from_file_location("kchat.agent.sandbox", SANDBOX_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["kchat.agent.sandbox"] = module
-    spec.loader.exec_module(module)
-    return module
+    # 弹出已加载的 sandbox 包及子模块：包内 `from ...config import cfg` 在
+    # 首次 import 时绑定，缓存会导致后续调用仍引用上一次注入的 cfg 桩
+    for name in list(sys.modules):
+        if name == "kchat.agent.sandbox" or name.startswith("kchat.agent.sandbox."):
+            del sys.modules[name]
+    return importlib.import_module("kchat.agent.sandbox")
 
 
 def _load_manager_module():
@@ -116,6 +121,12 @@ def _load_manager_module():
         def __init__(self, *args, **kwargs):
             pass
 
+    class _StoreStub:
+        """SessionStore 桩：manager 构造 GateStore 时会取 registry 属性"""
+
+        def __init__(self, *args, **kwargs):
+            self.registry = object()
+
     class _Prompt:
         static_instructions: list = []
 
@@ -126,9 +137,9 @@ def _load_manager_module():
         return None
 
     stub(
-        "kchat.agent.compaction",
-        RecordingCompaction=_Obj,
+        "kchat.agent.history",
         RequestBudgetCapability=_Obj,
+        SessionStore=_StoreStub,
         build_compaction_capability=lambda *a, **k: _Obj(),
         build_summary=lambda *a, **k: _Obj(),
         build_summary_mark=lambda *a, **k: _Obj(),
@@ -136,17 +147,17 @@ def _load_manager_module():
         compact_between_turns=_noop,
         persist_run=_noop,
     )
+    stub("kchat.agent.history.gate_store", GateStore=_Obj)
     stub("kchat.agent.deps", ChatDeps=_Obj)
-    stub("kchat.agent.image_caption", get_image_caption=_noop)
     stub("kchat.agent.memory", MemoryContext=_Obj, MemoryStore=_Obj)
     stub("kchat.agent.prompt", ChatPrompt=_Prompt, current_time_line=lambda: "")
+    stub("kchat.agent.vision", get_image_caption=_noop)
 
     class _ScheduledTaskManager:
         def bind_session_waker(self, waker): ...
 
     stub("kchat.agent.schedule", scheduled_task_manager=_ScheduledTaskManager())
-    stub("kchat.agent.session_store", SessionStore=_Obj)
-    stub("kchat.agent.tool", build_tools=list)
+    stub("kchat.agent.tools", build_tools=list)
     stub("kanade_bot.utils.parse", ImageInput=_Obj, build_sender_info=lambda *a, **k: "")
     stub("kanade_bot.utils.session", SessionInfo=_Obj)
     stub("kanade_bot.utils.billing", UsageCallback=_Obj)
@@ -172,6 +183,10 @@ def _load_manager_module():
     orig_get_driver = nonebot.get_driver
     nonebot.get_driver = lambda: fake_driver  # type: ignore[assignment]
     sandbox_mod.get_driver = lambda: fake_driver  # type: ignore[assignment]
+    # SandboxManager 定义在 sandbox.manager 子模块，get_driver 按其定义模块解析
+    sys.modules["kchat.agent.sandbox.manager"].get_driver = (  # type: ignore[attr-defined]
+        lambda: fake_driver
+    )
     try:
         spec = importlib.util.spec_from_file_location("kchat.agent.manager", MANAGER_PATH)
         assert spec is not None and spec.loader is not None
@@ -184,18 +199,22 @@ def _load_manager_module():
 
 
 def _load_session_module():
-    """把 session.py 加载成 kchat.agent.session（依赖与 manager 同一套桩）"""
-    spec = importlib.util.spec_from_file_location("kchat.agent.session", SESSION_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["kchat.agent.session"] = module
-    spec.loader.exec_module(module)
-    return module
+    """把 session 包加载进假包链（依赖与 manager 同一套桩），返回 input_build 模块
+
+    session 已拆为子包：经 `kchat.agent.__path__` 解析到真实包；
+    弹出缓存确保包内 `...config` 重新绑定到本次注入的桩。
+    """
+    for name in list(sys.modules):
+        if name == "kchat.agent.session" or name.startswith("kchat.agent.session."):
+            del sys.modules[name]
+    importlib.import_module("kchat.agent.session")
+    return sys.modules["kchat.agent.session.input_build"]
 
 
 def _make_manager(module, root: Path):
     """构造一个不注册 nonebot 生命周期钩子的 SandboxManager"""
-    module.get_driver = lambda: types.SimpleNamespace(  # type: ignore[attr-defined]
+    manager_mod = sys.modules["kchat.agent.sandbox.manager"]
+    manager_mod.get_driver = lambda: types.SimpleNamespace(  # type: ignore[attr-defined]
         on_startup=lambda fn: None, on_shutdown=lambda fn: None
     )
     return module.SandboxManager()
@@ -240,7 +259,7 @@ class RuntimeConfigTest(unittest.TestCase):
 
     def test_resolve_font_dirs_only_existing(self):
         """字体目录解析只保留宿主上真实存在的路径"""
-        dirs = self.module._resolve_font_dirs()
+        dirs = self.module.resolve_font_dirs()
         for d in dirs:
             self.assertTrue(Path(d).is_dir(), d)
 
@@ -270,10 +289,10 @@ class StageImagesTest(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         _load_manager_module()
-        cls.session_mod = sys.modules["kchat.agent.session"]
+        cls.session_mod = sys.modules["kchat.agent.session.input_build"]
 
     async def stage(self, sandbox, images):
-        return await self.session_mod._stage_images_to_sandbox(sandbox, images)
+        return await self.session_mod.stage_images_to_sandbox(sandbox, images)
 
     async def test_new_image_written(self):
         sandbox = FakeSandbox()

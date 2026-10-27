@@ -18,15 +18,15 @@ _env, _configs = load_configs(Path("."))
 init_nonebot(env=_env, **_configs)
 register_adapters_and_load_plugins()
 
-from kanade_bot.plugins.chat.agent import reply_gate as rg
-from kanade_bot.plugins.chat.agent.debounce import MessageDebouncer
-from kanade_bot.plugins.chat.agent.session_store import SessionStore
+from kanade_bot.plugins.chat.agent import proactive as rg
+from kanade_bot.plugins.chat.agent.history import GateStore, SessionStore
+from kanade_bot.plugins.chat.agent.proactive.debounce import MessageDebouncer
 
 TZ = ZoneInfo("Asia/Shanghai")
 
 
 def test_debouncer():
-    from kanade_bot.plugins.chat.agent.debounce import (
+    from kanade_bot.plugins.chat.agent.proactive.debounce import (
         BATCH_MAX_WAIT,
         NEW_AUTHOR_WAIT,
         OPEN_ACTIVE_WAIT,
@@ -117,6 +117,8 @@ def test_time_windows():
 async def test_store_roundtrip():
     with tempfile.TemporaryDirectory() as td:
         store = SessionStore(Path(td))
+        # gate 表操作已从 SessionStore 独立为 GateStore（同库共享 registry）
+        store = GateStore(store.registry)
         ids = await store.append_gate_messages(
             "s1",
             [
@@ -154,7 +156,7 @@ async def test_store_roundtrip():
 def test_plugin_load():
     import nonebot
 
-    from kanade_bot.plugins.chat.agent.reply_gate import (
+    from kanade_bot.plugins.chat.agent.proactive.gate import (
         GATE_SYSTEM_PROMPT,
         _substitute_bot_name,
         gate_system_prompt,
@@ -175,7 +177,10 @@ def test_plugin_load():
 
 def test_auto_reply_notification():
     """决策理由注入系统通知：无理由仅场景说明，有理由附加在后"""
-    from kanade_bot.plugins.chat.chat import AUTO_REPLY_NOTIFICATION, build_auto_reply_notification
+    from kanade_bot.plugins.chat.agent.proactive import (
+        AUTO_REPLY_NOTIFICATION,
+        build_auto_reply_notification,
+    )
 
     assert build_auto_reply_notification(None) == AUTO_REPLY_NOTIFICATION
     assert build_auto_reply_notification("") == AUTO_REPLY_NOTIFICATION
@@ -189,10 +194,9 @@ async def test_runtime_orchestration():
     """编排层端到端（mock 决策 LLM）：防抖到期 → 概率闸 → 决策 → 退避 → 回调重置"""
     from pydantic_ai import RunUsage
 
-    from kanade_bot.plugins.chat.agent.auto_reply import auto_reply_runtime
-    from kanade_bot.plugins.chat.agent.reply_gate import (
+    from kanade_bot.plugins.chat.agent.proactive import ReplyDecision, auto_reply_runtime
+    from kanade_bot.plugins.chat.agent.proactive.gate_history import (
         GateOutcome,
-        ReplyDecision,
         SessionGateHistory,
     )
     from kanade_bot.utils.session import SessionInfo
@@ -240,7 +244,10 @@ async def test_runtime_orchestration():
                 session_info=info,
             )
             # 开批等待随防抖常量（首条安静/后续活跃），留 0.6s 余量；mock 决策秒回
-            from kanade_bot.plugins.chat.agent.debounce import OPEN_ACTIVE_WAIT, OPEN_QUIET_WAIT
+            from kanade_bot.plugins.chat.agent.proactive.debounce import (
+                OPEN_ACTIVE_WAIT,
+                OPEN_QUIET_WAIT,
+            )
 
             wait = OPEN_QUIET_WAIT if round_no == 1 else OPEN_ACTIVE_WAIT
             await asyncio.sleep(wait + 0.6)
@@ -286,7 +293,7 @@ async def test_runtime_orchestration():
             bot=FakeBot(),
             session_info=info,
         )
-        from kanade_bot.plugins.chat.agent.debounce import OPEN_ACTIVE_WAIT
+        from kanade_bot.plugins.chat.agent.proactive.debounce import OPEN_ACTIVE_WAIT
 
         await asyncio.sleep(OPEN_ACTIVE_WAIT + 0.6)
         assert calls["n"] == start + 1
@@ -327,7 +334,7 @@ async def test_runtime_orchestration():
 
 def test_set_group_enabled():
     """运行时启用/禁用切换：改写 chat_configs 并立即生效（save 落盘打桩）"""
-    from kanade_bot.plugins.chat.agent.auto_reply import auto_reply_runtime, set_group_enabled
+    from kanade_bot.plugins.chat.agent.proactive import auto_reply_runtime, set_group_enabled
     from kanade_bot.plugins.chat.config import chat_configs
 
     cfg = rg.cfg.auto_reply

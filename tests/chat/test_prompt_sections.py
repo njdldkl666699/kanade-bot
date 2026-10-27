@@ -43,9 +43,9 @@ def _load_prompt_module():
     cfg_module.ScopedConfig = object  # type: ignore[attr-defined]
     sys.modules["kchat.config"] = cfg_module
 
-    meme_mod = types.ModuleType("kchat.meme_service")
+    meme_mod = types.ModuleType("kchat.memes")
     meme_mod.memes_available = lambda: False  # type: ignore[attr-defined]
-    sys.modules["kchat.meme_service"] = meme_mod
+    sys.modules["kchat.memes"] = meme_mod
 
     spec = importlib.util.spec_from_file_location("kchat.agent.prompt", PROMPT_PATH)
     assert spec is not None and spec.loader is not None

@@ -82,7 +82,7 @@ def _load_schedule_module():
         "kchat.agent",
         "kchat.agent.schedule",
         "kchat.config",
-        "kchat.ban",
+        "kchat.util",
         "kchat.deliver",
         "kanade_bot",
         "kanade_bot.utils",
@@ -160,9 +160,10 @@ def _load_schedule_module():
     sys.modules["kchat.config"] = cfg_module
 
     # _execute 内延迟导入的模块
-    ban_mod = types.ModuleType("kchat.ban")
-    ban_mod.is_banned = lambda *a, **k: False
-    sys.modules["kchat.ban"] = ban_mod
+    util_mod = types.ModuleType("kchat.util")
+    util_mod.is_banned = lambda *a, **k: False
+    util_mod.make_turn_biller = lambda *a, **k: lambda usage, produced: None
+    sys.modules["kchat.util"] = util_mod
 
     deliver_mod = types.ModuleType("kchat.deliver")
 

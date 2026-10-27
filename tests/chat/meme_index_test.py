@@ -12,28 +12,47 @@ import asyncio
 import importlib.util
 import json
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-_SPEC = importlib.util.spec_from_file_location(
-    "chat_meme_index",
-    Path(__file__).parents[2] / "kanade_bot" / "plugins" / "chat" / "meme_index.py",
-)
-assert _SPEC is not None and _SPEC.loader is not None
-_meme_index = importlib.util.module_from_spec(_SPEC)
-sys.modules["chat_meme_index"] = _meme_index
-_SPEC.loader.exec_module(_meme_index)
+CHAT_DIR = Path(__file__).parents[2] / "kanade_bot" / "plugins" / "chat"
 
-from chat_meme_index import (
-    EmbeddingClient,
-    MemeRecord,
-    MemesIndex,
-    dedupe_tags,
-    parse_model_tags,
-    parse_tags,
-)
+# 假包链加载（与 test_sandbox_fonts 同一套路）：`kchat.memes` 经 __path__ 解析到
+# 真实 memes 包但不执行其 __init__（装配依赖 nonebot driver/config）；
+# index/tagging 的相对导入（.embedding / ..config）分别落到真实子模块与下面的桩。
+_kchat = types.ModuleType("kchat")
+_kchat.__path__ = [str(CHAT_DIR)]  # type: ignore[attr-defined]
+sys.modules["kchat"] = _kchat
+
+_config_mod = types.ModuleType("kchat.config")
+_config_mod.cfg = types.SimpleNamespace(sticker_meme=types.SimpleNamespace(tagger=None))  # type: ignore[attr-defined]
+sys.modules["kchat.config"] = _config_mod
+
+_memes_pkg = types.ModuleType("kchat.memes")
+_memes_pkg.__path__ = [str(CHAT_DIR / "memes")]  # type: ignore[attr-defined]
+sys.modules["kchat.memes"] = _memes_pkg
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(
+        f"kchat.memes.{name}", CHAT_DIR / "memes" / f"{name}.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[f"kchat.memes.{name}"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_load("index")
+_load("tagging")
+
+from kchat.memes.embedding import EmbeddingClient
+from kchat.memes.index import MemeRecord, MemesIndex, dedupe_tags, parse_tags
+from kchat.memes.tagging import parse_model_tags
 
 DIMS = 16
 

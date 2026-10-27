@@ -17,7 +17,7 @@ from kanade_bot.utils.onebot11 import OneBotMessageSegmentMeme, get_bot_info
 from kanade_bot.utils.parse import TextFormat, guess_format
 from kanade_bot.utils.session import SessionInfo
 
-from .meme_service import get_memes
+from .memes import get_memes
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import md_to_pic

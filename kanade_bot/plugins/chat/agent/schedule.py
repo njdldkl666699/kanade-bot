@@ -16,20 +16,19 @@ from nonebot import get_bot, get_driver, logger, require
 from nonebot.adapters.console.bot import Bot as ConsoleBot
 from nonebot.adapters.onebot.v11 import Bot as OneBot
 from pydantic import BaseModel
-from pydantic_ai import RunUsage
 
-from kanade_bot.utils.billing import UsageCallback, compute_token_cost, is_peak_hours
+from kanade_bot.utils.billing import UsageCallback
 from kanade_bot.utils.session import SessionInfo
 
-from ..ban import is_banned
 from ..config import cfg
 from ..deliver import send_proactive, send_text_proactive
+from ..util import is_banned, make_turn_biller
 
 require("nonebot_plugin_apscheduler")
 from nonebot_plugin_apscheduler import scheduler
 
 require("crystal")
-from kanade_bot.plugins.crystal import consume_crystal, get_crystal
+from kanade_bot.plugins.crystal import get_crystal
 
 TZ = ZoneInfo("Asia/Shanghai")
 """定时任务统一时区"""
@@ -381,20 +380,15 @@ class ScheduledTaskManager:
         )
 
         turn_start = _now()
-
-        def _bill(usage: RunUsage, produced: bool) -> None:
-            """主动唤醒的运行按实际usage扣创建者水晶，峰谷按触发时刻判定"""
-            if not produced or not platform or not creator:
-                return
-            cost = compute_token_cost(usage, cfg.billing, peak=is_peak_hours(turn_start))
-            consume_crystal(platform, creator, cost)
+        # 主动唤醒的运行按实际usage扣创建者水晶，峰谷按触发时刻判定
+        bill = make_turn_biller(platform, creator, turn_start)
 
         async with aclosing(
             waker(
                 info,
                 bot_id=task.bot_id,
                 timeout=PROACTIVE_RUN_TIMEOUT,
-                on_usage=_bill,
+                on_usage=bill,
                 system_notification=notification,
             )
         ) as contents:

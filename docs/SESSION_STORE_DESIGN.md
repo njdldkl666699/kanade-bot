@@ -1,6 +1,6 @@
 # 会话数据库设计（Session Store v2）
 
-> 实现位置：`kanade_bot/plugins/chat/agent/session_store.py`、`message_blobs.py`
+> 实现位置：`kanade_bot/plugins/chat/agent/history/store.py`、`history/blobs.py`
 > 版本：v6.0.3（2026-10-13 重构落地）
 
 ## 1. 概述

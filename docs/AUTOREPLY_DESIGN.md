@@ -88,7 +88,7 @@ bot 发言（被动/主动）→ 以 user 消息 append 进决策历史
 
 ## 1. 消息防抖（写死 natural 档）
 
-`agent/debounce.py` 的 `MessageDebouncer`：纯内存状态机（不持久化、不用 asyncio 原语），
+`agent/proactive/debounce.py` 的 `MessageDebouncer`：纯内存状态机（不持久化、不用 asyncio 原语），
 只负责批次划分与到期时刻计算，到期唤醒由调用方（`AutoReplyRuntime`）安排；
 时间基准 `time.monotonic()`，参数写死不配置：
 
@@ -193,7 +193,7 @@ MaiBot idle backoff 的变体，计数源是**决策节点的输出**：
 
 ## 4. LLM 决策节点
 
-决策节点位于 `agent/reply_gate.py`。
+决策节点位于 `agent/proactive/gate.py`。
 
 ### 模型配置
 
@@ -259,7 +259,7 @@ pydantic-ai 实现：决策 Agent 每轮以 `message_history=决策消息历史`
 
 ### 持久化（session store 决策历史表）
 
-决策消息历史持久化到 per-session SQLite（与主历史同库，`session_store.py` 新表），**重启不再 miss**：
+决策消息历史持久化到 per-session SQLite（与主历史同库，`history/store.py` 新表），**重启不再 miss**：
 
 ```sql
 CREATE TABLE gate_messages (
@@ -449,7 +449,7 @@ class AutoReplyConfig(AttrDocModel):
 
 群的启用列表不在本配置，而是运行时配置 `ChatConfig.auto_reply_enabled_groups`
 （`chat_configs.json`，与黑名单同源、按平台隔离），由 `/启用主动回复` `/禁用主动回复`
-命令（SUPERUSER）维护：`set_group_enabled(group_id, platform, enabled)`（`auto_reply.py`）
+命令（SUPERUSER）维护：`set_group_enabled(group_id, platform, enabled)`（`proactive/runtime.py`）
 改写列表并 `save_to_file()` 持久化，重启保留；`is_enabled` 每次现读，切换立即生效。
 
 旧 per-group `AutoReplyConfig(threshold, probability)` 与
@@ -464,11 +464,11 @@ console/onebot 平台结构保持 `get_by_platform` 不变。迁移：`chat_conf
 
 | 文件 | 职责 |
 |---|---|
-| `agent/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
-| `agent/reply_gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 时段窗口匹配 / 尾部元信息构建 / 决策 Agent（进程级 lazy 单例）/ `SessionGateHistory`（内存+DB 同步、决策调用、截断+摘要锚点） |
-| `agent/auto_reply.py` | `AutoReplyRuntime`：per-session 状态（防抖定时、退避、防重入、计数器）、概率闸、决策编排、回复执行调度、`on_group_message` / `on_bot_message` / `on_buffer_consumed` 入口、统计输出；对 manager/chat 延迟导入 |
-| `agent/session_store.py` | `gate_messages` / `gate_state` 表：全量 append、水位线、锚点行、kv 读写 |
-| `agent/session.py` | `on_buffer_consumed` 回调属性：`send_and_wait` 轮末清 buffer 后触发（`reset` 丢弃不触发） |
+| `agent/proactive/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
+| `agent/proactive/gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 时段窗口匹配 / 尾部元信息构建 / 决策 Agent（进程级 lazy 单例）/ `SessionGateHistory`（内存+DB 同步、决策调用、截断+摘要锚点） |
+| `agent/proactive/runtime.py` | `AutoReplyRuntime`：per-session 状态（防抖定时、退避、防重入、计数器）、概率闸、决策编排、回复执行调度、`on_group_message` / `on_bot_message` / `on_buffer_consumed` 入口、统计输出；对 manager/chat 延迟导入 |
+| `agent/history/store.py` | `gate_messages` / `gate_state` 表：全量 append、水位线、锚点行、kv 读写 |
+| `agent/session/` | `on_buffer_consumed` 回调属性：`send_and_wait` 轮末清 buffer 后触发（`reset` 丢弃不触发） |
 | `chat.py` | `send_auto_reply`（流式主动发送 + 产出 append）；被动回复产出同样 append 进决策历史；旧 `should_auto_reply` 已删 |
 | `handler.py` | `handle_chat_monitor`：消息进 buffer → 启用群进入主动回复流水线；`handle_decision_stats`；`/启用主动回复` `/禁用主动回复` `/清空决策上下文`（SUPERUSER，运行时切换/维护） |
 | `matcher.py` | `决策统计`、`启用主动回复`、`禁用主动回复`、`清空决策上下文` 命令注册 |

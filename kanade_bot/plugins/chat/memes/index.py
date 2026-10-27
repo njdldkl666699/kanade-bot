@@ -12,34 +12,13 @@ from pathlib import Path
 
 import numpy as np
 from nonebot import logger
-from openai import AsyncOpenAI
 
-TAGGING_FALLBACK_PROMPT = """你是表情包标注助手。请查看这张表情包图片，为它生成用于语义检索的中文标签。
-
-标注要求：
-1. 输出一个 JSON 数组，包含 5~10 个简短的中文标签
-2. 覆盖以下维度（按图适用性取舍）：
-   - 画面主体：角色/人物/生物，如"猫猫"、"小女孩"、"熊猫头"
-   - 情绪状态：如"开心"、"无语"、"暴怒"、"委屈"
-   - 动作神态：如"手舞足蹈"、"探头偷看"、"瘫倒"
-   - 图内文字的语义：表达图内文字的含义或梗，而非抄录原文
-   - 适用场景：什么话题下会想发这张图，如"敷衍回复"、"阴阳怪气"、"庆祝"
-3. 标签是检索关键词：想象群友想发这张图时会怎么描述它，用大家会用的口语化说法
-4. 每个标签 2~6 个字
-5. 只输出 JSON 数组本身，不要输出任何其他内容
-
-输出示例：
-["猫猫", "开心", "手舞足蹈", "庆祝", "得意", "偷着乐"] 
-"""
+from .embedding import EmbeddingClient, normalize
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 """允许收录的图片扩展名"""
 
-EMBED_BATCH_SIZE = 50
-"""embedding API 单次请求的最大条数"""
-
 _TAG_SPLIT = re.compile(r"[\s,，;；|、]+")
-_JSON_ARRAY = re.compile(r"\[[^\[\]]*\]")
 
 
 def parse_tags(text: str) -> list[str]:
@@ -83,52 +62,6 @@ class MemeRecord:
     @property
     def tag_text(self) -> str:
         return " ".join(self.tags)
-
-
-class EmbeddingClient:
-    """OpenAI 兼容 embeddings 端点的最小封装"""
-
-    def __init__(self, model: str, base_url: str | None = None, api_key: str | None = None):
-        import os
-
-        self.model = model
-        self._client = AsyncOpenAI(
-            base_url=base_url,
-            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
-            max_retries=3,
-        )
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        resp = await self._client.embeddings.create(input=texts, model=self.model)
-        return [item.embedding for item in resp.data]
-
-    async def embed_batched(self, texts: list[str]) -> list[list[float]]:
-        """分批 embed，规避单次请求条数限制"""
-        out: list[list[float]] = []
-        for i in range(0, len(texts), EMBED_BATCH_SIZE):
-            out.extend(await self.embed(texts[i : i + EMBED_BATCH_SIZE]))
-        return out
-
-
-def _normalize(vec: list[float]) -> np.ndarray:
-    v = np.asarray(vec, dtype=np.float32)
-    n = float(np.linalg.norm(v))
-    return v / n if n > 0 else v
-
-
-def parse_model_tags(raw: str) -> list[str]:
-    """宽容解析打标模型的输出：提取首个 JSON 字符串数组；失败时按分隔符切分"""
-    text = str(raw or "").strip()
-    if match := _JSON_ARRAY.search(text):
-        try:
-            obj = json.loads(match.group(0))
-            if isinstance(obj, list):
-                return dedupe_tags([str(x) for x in obj if str(x).strip()])
-        except json.JSONDecodeError:
-            pass
-    return parse_tags(text)
 
 
 class MemesIndex:
@@ -187,7 +120,7 @@ class MemesIndex:
         except Exception:
             logger.exception("表情包查询向量生成失败：%s", query)
             return None
-        q = _normalize(q_raw)
+        q = normalize(q_raw)
         if q.shape[0] != self._matrix.shape[1]:
             logger.error(
                 "查询向量维度 %s 与索引维度 %s 不符（embedding 模型不一致？）",
@@ -415,9 +348,7 @@ class MemesIndex:
 
     def _row_of(self, rec: MemeRecord) -> np.ndarray:
         vec = (
-            _normalize(rec.embedding)
-            if rec.embedding
-            else np.zeros(max(self._dim(), 1), np.float32)
+            normalize(rec.embedding) if rec.embedding else np.zeros(max(self._dim(), 1), np.float32)
         )
         if self._dim() and vec.shape[0] != self._dim():
             raise ValueError(
@@ -445,7 +376,7 @@ class MemesIndex:
             logger.warning("索引中存在多种向量维度 %s，仅保留众数维度", dims)
         dim = dims.pop() if len(dims) == 1 else 0
         rows = [
-            _normalize(r.embedding)
+            normalize(r.embedding)
             if (r.embedding and len(r.embedding) == dim)
             else np.zeros(dim, np.float32)
             for r in self._records

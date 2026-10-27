@@ -1,9 +1,14 @@
-"""表情包索引装配：按配置构建 MemesIndex 实例并管理生命周期"""
+"""表情包语义检索子系统：索引装配与生命周期管理
+
+图片由视觉模型自动打标（tagging），LLM 以 `{{表情: 描述}}` 占位符引用，
+投递时按语义相似度加权随机选图（index）。
+"""
 
 from nonebot import get_driver, logger
 
-from .config import cfg
-from .meme_index import EmbeddingClient, MemesIndex
+from ..config import cfg
+from .embedding import EmbeddingClient
+from .index import MemesIndex
 
 _memes: MemesIndex | None = None
 
