@@ -58,7 +58,7 @@ chat:
     time_windows: []
     backoff_start: 3
     backoff_base: 30
-    backoff_cap: 1800
+    backoff_cap: 600
     gate_timeout: 30
   configs_file: chat_configs.json
   fail_image_file: chat_fail.jpg

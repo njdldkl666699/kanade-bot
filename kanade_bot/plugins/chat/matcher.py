@@ -147,6 +147,15 @@ auto_reply_disable = on_command(
 )
 register_matcher(auto_reply_disable, "禁用主动回复")
 
+decision_clear = on_command(
+    "清空决策上下文",
+    aliases={"清除决策上下文", "decision_clear", "decisionclear"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(decision_clear, "清空决策上下文")
+
 ### 表情包
 
 list_memes = on_command(

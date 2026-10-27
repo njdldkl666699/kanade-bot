@@ -142,16 +142,6 @@
           "title": "Enabled",
           "type": "boolean"
         },
-        "enabled_groups": {
-          "default": [],
-          "description": "启用主动回复的群ID",
-          "items": {
-            "type": "string"
-          },
-          "title": "Enabled Groups",
-          "type": "array",
-          "uniqueItems": true
-        },
         "gate": {
           "$ref": "#/$defs/ReplyGateConfig",
           "default": {
@@ -1674,7 +1664,6 @@
           "$ref": "#/$defs/AutoReplyConfig",
           "default": {
             "enabled": false,
-            "enabled_groups": [],
             "gate": {
               "context_window": null,
               "max_output_tokens": null,
@@ -2586,7 +2575,6 @@
           "backoff_cap": 1800.0,
           "backoff_start": 2,
           "enabled": false,
-          "enabled_groups": [],
           "gate": {
             "context_window": null,
             "max_output_tokens": null,

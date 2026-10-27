@@ -25,7 +25,7 @@
         },
         "auto_reply_enabled_groups": {
           "default": [],
-          "description": "启用主动回复的群ID列表（`/启用主动回复` 命令维护）",
+          "description": "启用主动回复的群ID列表",
           "items": {
             "type": "string"
           },

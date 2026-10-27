@@ -335,7 +335,7 @@ class AutoReplyRuntime:
         if decision.reply:
             state.backoff_count = 0
             state.counters.replies += 1
-            await self._execute_reply(session_id, state)
+            await self._execute_reply(session_id, state, reason=decision.reason)
         else:
             state.backoff_count += 1
             state.counters.silences += 1
@@ -353,8 +353,13 @@ class AutoReplyRuntime:
             silence_streak=state.backoff_count,
         )
 
-    async def _execute_reply(self, session_id: str, state: SessionGateState) -> None:
-        """决策通过后的回复执行：流式产出经 deliver 主动发回"""
+    async def _execute_reply(
+        self, session_id: str, state: SessionGateState, *, reason: str | None = None
+    ) -> None:
+        """决策通过后的回复执行：流式产出经 deliver 主动发回
+
+        :param reason: 决策器判定理由，随系统通知注入主 Agent 提示词
+        """
         from ..chat import send_auto_reply
 
         bot, session_info = state.bot, state.session_info
@@ -362,7 +367,7 @@ class AutoReplyRuntime:
             logger.warning(f"主动回复执行缺少 bot 或会话信息，放弃 {session_id}")
             return
         try:
-            await send_auto_reply(bot, session_info)
+            await send_auto_reply(bot, session_info, reason=reason)
         except Exception as e:
             logger.opt(exception=e).warning(f"主动回复执行失败 {session_id}")
 
@@ -380,6 +385,23 @@ class AutoReplyRuntime:
             state.timer.cancel()
             state.timer = None
         state.debouncer.consume()
+
+    # ===== 上下文清理 =====
+
+    async def clear_history(self, session_id: str) -> int | None:
+        """清空该会话的决策消息历史（内存生效序列 + DB 全量行）
+
+        未进入流水线的会话（未启用/私聊）返回 None；成功返回删除的 DB 行数。
+        时间戳元信息、统计计数、防抖/退避状态与主会话上下文均不受影响；
+        决策进行中调用安全，至多残留本轮判定的两条记录。
+        """
+        state = self._states.get(session_id)
+        if state is None:
+            return None
+        if state.load_task is not None:
+            await state.load_task
+            state.load_task = None
+        return await state.history.clear()
 
     # ===== 统计 =====
 

@@ -6,22 +6,22 @@
 from dataclasses import dataclass
 from time import monotonic
 
-QUIET_GAP = 30.0
+QUIET_GAP = 120.0
 """安静阈值：距上一条消息超过该秒数，视为群聊已安静"""
 
-OPEN_QUIET_WAIT = 4.0
+OPEN_QUIET_WAIT = 20.0
 """安静开批等待：安静后新批次的第一条消息，稍等确认没有后续"""
 
-OPEN_ACTIVE_WAIT = 7.0
+OPEN_ACTIVE_WAIT = 20.0
 """活跃开批等待：安静阈值内有过消息时，新批次首条后等更久（消息可能还在路上）"""
 
-SAME_AUTHOR_WAIT = 10.0
+SAME_AUTHOR_WAIT = 15.0
 """同人续发等待：批内同一位作者继续说话时，等他把话说完"""
 
-NEW_AUTHOR_WAIT = 10.0
+NEW_AUTHOR_WAIT = 15.0
 """换人续发等待：批内换人发言时更快收批（多人在场对话节奏快）"""
 
-BATCH_MAX_WAIT = 20.0
+BATCH_MAX_WAIT = 60.0
 """整批上限：防抖单批最长等待秒数，防止批次被无限拖长"""
 
 

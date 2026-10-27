@@ -354,8 +354,7 @@ async with aclosing(
         "",
         bot_id=bot.self_id,
         timeout=600,
-        system_notification="你刚刚在旁观群聊，现在决定主动插话。请自然地接话：简短、口语化、"
-        "只挑最值得回应的点，不要总结所有话题，不要提及任何系统提示。",
+        system_notification=build_auto_reply_notification(reason),
     )
 ) as contents:
     async for content in contents:
@@ -370,6 +369,10 @@ async with aclosing(
   「空内容保护」失效（notice 单独视为可运行内容），故在锁外先检查 buffer——被动轮恰好
   先消费则跳过本轮（见决策表），避免仅凭插话说明发起一轮生成；
 - `system_notification` 显式参数已有先例（`schedule.py`），不占用排队通知槽位；
+- **决策理由随通知注入**：决策器判定「回」的 `reason` 附加在插话场景说明之后
+  （`build_auto_reply_notification(reason)`，无理由时仅场景说明），主 Agent 接话时
+  可参考决策器视角；reason 经 `_gate_flow → _execute_reply → send_auto_reply`
+  传递；
 - 计费：`on_usage` 回调跳过（主动回复免费，延续现状）；发送链路复用 `deliver.py` 的
   分段/长文转图逻辑；
 - 执行异常由 `AutoReplyRuntime` 捕获记日志，不重试。
@@ -394,6 +397,17 @@ async with aclosing(
   计数器为内存态，重启清零；
 - 上限显示为「决策模型窗口 × `summary_target_fraction`」的实际生效值
   （未配置时回退 `trigger_fraction`）。
+
+### 清空决策上下文命令
+
+`清空决策上下文`（aliases：`清除决策上下文` / `decision_clear` / `decisionclear`，
+SUPERUSER）：清空当前会话的决策消息历史——DB `gate_messages` 全量删除、水位线
+kv 清零（`SessionGateHistory.clear()` → `store.clear_gate_history()`），内存生效
+序列同步清空，决策器从零开始重新旁观；返回删除行数。
+
+不在清理范围：时间戳元信息 kv（last_bot_at / last_proactive_at）、统计计数、防抖/
+退避状态、主会话上下文（连主上下文一起清用 `重置会话`，见 §7）。决策进行中调用
+安全（append 与 DELETE 无交错损坏），至多残留本轮判定的两条记录。
 
 ## 7. 与被动通道的交互
 
@@ -456,8 +470,8 @@ console/onebot 平台结构保持 `get_by_platform` 不变。迁移：`chat_conf
 | `agent/session_store.py` | `gate_messages` / `gate_state` 表：全量 append、水位线、锚点行、kv 读写 |
 | `agent/session.py` | `on_buffer_consumed` 回调属性：`send_and_wait` 轮末清 buffer 后触发（`reset` 丢弃不触发） |
 | `chat.py` | `send_auto_reply`（流式主动发送 + 产出 append）；被动回复产出同样 append 进决策历史；旧 `should_auto_reply` 已删 |
-| `handler.py` | `handle_chat_monitor`：消息进 buffer → 启用群进入主动回复流水线；`handle_decision_stats`；`/启用主动回复` `/禁用主动回复`（SUPERUSER，运行时切换） |
-| `matcher.py` | `决策统计`、`启用主动回复`、`禁用主动回复` 命令注册 |
+| `handler.py` | `handle_chat_monitor`：消息进 buffer → 启用群进入主动回复流水线；`handle_decision_stats`；`/启用主动回复` `/禁用主动回复` `/清空决策上下文`（SUPERUSER，运行时切换/维护） |
+| `matcher.py` | `决策统计`、`启用主动回复`、`禁用主动回复`、`清空决策上下文` 命令注册 |
 | `config.py` | `TimeWindow` / `ReplyGateConfig` / `AutoReplyConfig`（§8） |
 | `utils/billing.py` | `is_non_workday`：非工作日公共判定（峰谷与 `weekdays_only` 同源） |
 | `tests/nonebot/autoreply_smoke_test.py` | 冒烟：防抖断言、时段窗口、持久化往返、插件加载、编排端到端（mock 决策 LLM，含退避触发与统计输出） |

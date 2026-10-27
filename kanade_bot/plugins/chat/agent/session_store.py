@@ -454,6 +454,23 @@ class SessionStore:
             )
             conn.commit()
 
+    async def clear_gate_history(self, conv_id: str) -> int:
+        """清空决策消息历史：`gate_messages` 全量删除 + 水位线清零，返回删除行数
+
+        时间戳元信息 kv（last_bot_at / last_proactive_at）不属于上下文，保留；
+        后续 append 从新行号继续（自增不回卷）。
+        """
+        return await asyncio.to_thread(self._clear_gate_sync, conv_id)
+
+    def _clear_gate_sync(self, conv_id: str) -> int:
+        db = self._conv_db(conv_id)
+        db.ensure()
+        with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
+            deleted = conn.execute("DELETE FROM gate_messages").rowcount
+            conn.execute("DELETE FROM gate_state WHERE key = 'watermark'")
+            conn.commit()
+        return deleted
+
     # ===== 恢复 =====
 
     async def restore(self, conv_id: str, *, params: CompactionConfig | None = None):

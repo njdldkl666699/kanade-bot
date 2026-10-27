@@ -308,6 +308,18 @@ class SessionGateHistory:
                 f"水位线 {self.watermark}，全量 {snapshot.total_rows} 行"
             )
 
+    async def clear(self) -> int:
+        """清空决策历史：内存生效序列与 DB 全量行（含锚点行与水位线）
+
+        决策器从零开始重新旁观，新消息照常 append；时间戳元信息 kv
+        （last_bot_at 等）不在清理范围。返回删除的 DB 行数。
+        """
+        deleted = await self.store.clear_gate_history(self.session_id)
+        self.rows = []
+        self.watermark = 0
+        self.anchor_at = None
+        return deleted
+
     async def append(self, role: str, content: str) -> None:
         """追加一条普通行（群消息/判定/kanade 发言），内存与 DB 同步"""
         (row_id,) = await self.store.append_gate_messages(self.session_id, [("msg", role, content)])

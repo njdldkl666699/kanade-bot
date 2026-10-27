@@ -64,7 +64,7 @@ chat:
     gate:
       <<: *sensenova-6-8-flash-lite
     time_windows:
-      - { start: "00:00", end: "07:00", probability: 0.0 } # 深夜免打扰
+      - { start: "01:00", end: "07:00", probability: 0.0 } # 深夜免打扰
       - { start: "09:00", end: "12:00", weekdays_only: true, probability: 0.3 }
       - { start: "14:00", end: "18:00", weekdays_only: true, probability: 0.3 }
   billing: &billing

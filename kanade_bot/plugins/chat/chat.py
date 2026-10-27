@@ -188,8 +188,20 @@ AUTO_REPLY_NOTIFICATION = "你刚刚在旁观群聊，现在决定主动插话�
 """主动回复轮的插话场景说明"""
 
 
-async def send_auto_reply(bot: Bot, session_info: SessionInfo) -> None:
-    """主动回复执行"""
+def build_auto_reply_notification(reason: str | None = None) -> str:
+    """主动回复轮系统通知：插话场景说明 + 决策器判定理由（有则附加）"""
+    if not reason:
+        return AUTO_REPLY_NOTIFICATION
+    return f"{AUTO_REPLY_NOTIFICATION}\n决策器判定理由：{reason}"
+
+
+async def send_auto_reply(
+    bot: Bot, session_info: SessionInfo, *, reason: str | None = None
+) -> None:
+    """主动回复执行
+
+    :param reason: 决策器判定「回」的理由，随系统通知注入提示词供接话时参考
+    """
     session = chat_manager.get_session(session_info.session_id)
     if not session.buffer:
         # 被动轮恰好先消费了 buffer：无新内容可说，直接放弃
@@ -202,7 +214,7 @@ async def send_auto_reply(bot: Bot, session_info: SessionInfo) -> None:
             "",
             bot_id=bot.self_id,
             timeout=600,
-            system_notification=AUTO_REPLY_NOTIFICATION,
+            system_notification=build_auto_reply_notification(reason),
         )
     ) as contents:
         async for content in contents:

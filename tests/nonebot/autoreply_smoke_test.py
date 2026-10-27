@@ -46,10 +46,14 @@ def test_debouncer():
     d.observe("u2", now=t0 + 1.5)
     assert d.deadline() == t0 + 1.5 + NEW_AUTHOR_WAIT, "换人续发等待"
 
-    for i in range(200):
-        d.observe("u3", now=t0 + 2.0 + i * 0.1)
+    # 整批上限钳制：消息持续越过 first_at + BATCH_MAX_WAIT - SAME_AUTHOR_WAIT
+    # （此刻起 now + wait 才会触及上限），步长按常量推导不随调参失效
+    clamp_at = BATCH_MAX_WAIT - SAME_AUTHOR_WAIT
+    steps = 50
+    for i in range(steps):
+        d.observe("u3", now=t0 + 2.0 + i * (clamp_at / steps))
     assert d.deadline() == t0 + BATCH_MAX_WAIT, "整批上限钳制"
-    assert d.batch_size == 3 + 200
+    assert d.batch_size == 3 + steps
 
     d.consume()
     assert d.batch_size == 0 and d.deadline() is None
@@ -135,21 +139,50 @@ async def test_store_roundtrip():
 
         assert await store.get_gate_state("s1", "watermark") == "2"
         assert await store.get_gate_state("s1", "missing") is None
+
+        # 清空决策历史：全量行删除 + 水位线清零，时间戳元信息 kv 保留
+        await store.set_gate_state("s1", "last_bot_at", "1.5")
+        assert await store.clear_gate_history("s1") == 3
+        snap = await store.load_gate_history("s1")
+        assert snap.rows == [] and snap.watermark == 0 and snap.total_rows == 0
+        assert snap.anchor_at is None
+        assert await store.get_gate_state("s1", "watermark") is None
+        assert await store.get_gate_state("s1", "last_bot_at") == "1.5"
         print("store roundtrip OK")
 
 
 def test_plugin_load():
     import nonebot
 
-    from kanade_bot.plugins.chat.agent.reply_gate import gate_system_prompt
-    from kanade_bot.plugins.chat.matcher import decision_stats  # noqa: F401
+    from kanade_bot.plugins.chat.agent.reply_gate import (
+        GATE_SYSTEM_PROMPT,
+        _substitute_bot_name,
+        gate_system_prompt,
+    )
+    from kanade_bot.plugins.chat.matcher import decision_clear, decision_stats  # noqa: F401
 
     nonebot.get_driver().config.nickname = "宵崎奏"
     prompt = gate_system_prompt()
-    assert "reply=true" in prompt, "默认提示词文件（ReplyGate.md）应生效"
+    # 断言不依赖可编辑文案：与提示词文件（缺失/为空时内置回退）逐字节一致
+    path = rg.cfg.auto_reply.gate.system_prompt_file_path
+    source = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+    expected = source if source else GATE_SYSTEM_PROMPT
+    assert prompt == _substitute_bot_name(expected), "提示词文件（或内置回退）应生效"
     assert "{{ bot_name }}" not in prompt, "bot 名占位符应渲染（或文案未使用）"
 
     print("plugin load OK")
+
+
+def test_auto_reply_notification():
+    """决策理由注入系统通知：无理由仅场景说明，有理由附加在后"""
+    from kanade_bot.plugins.chat.chat import AUTO_REPLY_NOTIFICATION, build_auto_reply_notification
+
+    assert build_auto_reply_notification(None) == AUTO_REPLY_NOTIFICATION
+    assert build_auto_reply_notification("") == AUTO_REPLY_NOTIFICATION
+    composed = build_auto_reply_notification("有人直接叫了名字")
+    assert composed.startswith(AUTO_REPLY_NOTIFICATION)
+    assert "有人直接叫了名字" in composed
+    print("auto reply notification OK")
 
 
 async def test_runtime_orchestration():
@@ -185,6 +218,9 @@ async def test_runtime_orchestration():
     info = SessionInfo(session_id=sid, platform="onebot", group_id="42", user_id="u1")
     try:
         cfg.enabled = True
+        # 时段表临时清空：概率恒为 1.0，避免实盘时段表随运行时刻引入随机跳过
+        saved_windows = cfg.time_windows
+        cfg.time_windows = []
         # 启用群列表为运行时配置（chat_configs.json，按平台隔离）
         from kanade_bot.plugins.chat.config import chat_configs
 
@@ -259,6 +295,16 @@ async def test_runtime_orchestration():
         # buffer 空 → send_auto_reply 前置检查跳过：未实际发言，时间戳不更新
         assert state.last_proactive_at is None
         print("reply path OK")
+
+        # 清空决策上下文：DB 全量行删除、内存序列与水位线复位；未知会话返回 None
+        assert await auto_reply_runtime.clear_history("no-such-session") is None
+        deleted = await auto_reply_runtime.clear_history(sid)
+        assert deleted == start + 2, deleted  # 每条群消息一行（mock 决策不 append）
+        assert state.history.rows == [] and state.history.watermark == 0
+        snap = await state.history.store.load_gate_history(sid)
+        assert snap.rows == [] and snap.total_rows == 0
+        assert state.counters.replies == 1, "统计计数不受清空影响"
+        print("clear history OK")
         print("runtime orchestration OK")
     finally:
         state = auto_reply_runtime._states.pop(sid, None)
@@ -267,6 +313,7 @@ async def test_runtime_orchestration():
                 task.cancel()
         SessionGateHistory.decide = original_decide
         cfg.enabled = False
+        cfg.time_windows = saved_windows
         plat.auto_reply_enabled_groups = saved_groups
         # 清理测试会话库（_ensure_state 经 chat_manager.store 建的真实 SQLite）
         db_path = rg.cfg.session.sessions_dir_path / f"{sid}.sqlite3"
@@ -310,6 +357,7 @@ def main():
     test_time_windows()
     asyncio.run(test_store_roundtrip())
     test_plugin_load()
+    test_auto_reply_notification()
     test_set_group_enabled()
     asyncio.run(test_runtime_orchestration())
     print("SMOKE OK")
