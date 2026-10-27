@@ -33,9 +33,12 @@ def asia_shanghai_now() -> datetime:
     return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
-def asia_shanghai_now_str() -> str:
-    """获取当前的上海时间字符串"""
-    return asia_shanghai_now().strftime("%Y-%m-%d %H:%M:%S")
+def asia_shanghai_now_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """获取当前的上海时间字符串
+
+    :param fmt: strftime格式串，默认精确到秒
+    """
+    return asia_shanghai_now().strftime(fmt)
 
 
 @lru_cache(maxsize=1)

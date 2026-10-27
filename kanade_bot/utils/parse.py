@@ -175,13 +175,50 @@ async def get_forward_message_events(
     return fwd_id, fwd_msg_events
 
 
+async def format_forward_message_for_ai(
+    bot: OneBot,
+    fwd_segment: OneBotMessageSegment,
+    *,
+    fetch_images: bool = True,
+) -> tuple[str, list[ImageInput]]:
+    """把一条合并转发消息展开为AI可读文本
+
+    逐条复用 `parse_onebot_message_for_ai` 解析，附带发送者信息，嵌套转发递归展开。
+
+    :param fetch_images: 是否拉取子消息中的图片内容作为附件；False 时仅保留
+        `[图片：文件名]` 占位（供 agent 后续按文件名单独查看）
+    """
+    fwd_id, fwd_msg_events = await get_forward_message_events(bot, fwd_segment)
+
+    text_parts: list[str] = [f"<forward id={fwd_id}>"]
+    attachments: list[ImageInput] = []
+
+    for e in fwd_msg_events:
+        text, fwd_attachments = await parse_onebot_message_for_ai(e, bot, fetch_images=fetch_images)
+
+        # 附带发送者信息
+        session_info = await extract_session_info(e, bot)
+        if user_info := build_sender_info(session_info.nickname, session_info.user_id):
+            text = f"{user_info}：{text}"
+
+        text_parts.append(text)
+        attachments.extend(fwd_attachments)
+
+    text_parts.append("</forward>")
+
+    return "\n".join(text_parts), attachments
+
+
 async def parse_onebot_message_for_ai(
     event_or_reply: OneBotMessageEvent | Reply,
     bot: OneBot | None = None,
+    *,
+    fetch_images: bool = True,
 ) -> tuple[str, list[ImageInput]]:
     """解析OneBot消息，返回AI可读的文本和附件列表
 
     :param bot: 可选的OneBot实例，如果提供则可以解析转发消息中的发送者信息，并获取图片附件
+    :param fetch_images: 是否拉取图片内容作为附件；False 时仅保留 `[图片：文件名]` 占位
     """
     message = event_or_reply.message
     text_parts: list[str] = []
@@ -189,31 +226,14 @@ async def parse_onebot_message_for_ai(
 
     # 如果消息只有一个segment且是转发消息，直接解析转发消息中的内容
     if len(message) == 1 and message[0].type == "forward" and bot:
-        fwd_id, fwd_msg_events = await get_forward_message_events(bot, message[0])
-
-        text_parts.append(f"<forward id={fwd_id}>")
-
-        for e in fwd_msg_events:
-            text, fwd_attachments = await parse_onebot_message_for_ai(e, bot)
-
-            # 附带发送者信息
-            session_info = await extract_session_info(e, bot)
-            if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-                text = f"{user_info}：{text}"
-
-            text_parts.append(text)
-            attachments.extend(fwd_attachments)
-
-        text_parts.append("</forward>")
-
-        return "\n".join(text_parts), attachments
+        return await format_forward_message_for_ai(bot, message[0], fetch_images=fetch_images)
 
     # 逐段处理消息：图片解析为附件并留下占位文本，其余消息段按类型格式化为文字
     for segment in message:
         if segment.type == "image":
             file: str = segment.data["file"]
             attachment: ImageInput | None = None
-            if bot:
+            if bot and fetch_images:
                 try:
                     local_path = await get_image_path(bot, segment)
                 except Exception as e:

@@ -201,7 +201,8 @@ class AutoReplyRuntime:
         if state is None:
             return
         try:
-            text = f"[{asia_shanghai_now_str()}] {_bot_name()}：{content}"
+            # 与 buffer 消息（handler.py）同用分钟精度，保持决策历史内时间格式一致
+            text = f"[{asia_shanghai_now_str('%Y-%m-%d %H:%M')}] {_bot_name()}：{content}"
             await state.history.append("user", text)
             now = time.time()
             state.last_bot_at = now

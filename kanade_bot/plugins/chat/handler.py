@@ -107,7 +107,7 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     # 添加消息到会话缓冲区，不需要图片
     message_str, _ = await parse_message_for_ai(event)
     if user_info := build_sender_info(session_info.nickname, session_info.user_id):
-        message_str = f"[{asia_shanghai_now_str()}] {user_info}：{message_str}"
+        message_str = f"[{asia_shanghai_now_str('%Y-%m-%d %H:%M')}] {user_info}：{message_str}"
     await chat_manager.get_session(session_id).add_message(message_str)
 
     # 主动回复流水线：消息 append 决策历史 + 防抖观察

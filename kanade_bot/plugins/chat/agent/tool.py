@@ -1,4 +1,5 @@
 import base64
+import re
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -14,7 +15,8 @@ from pydantic import Field
 from pydantic_ai import BinaryContent, RunContext
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
+from kanade_bot.utils.onebot11 import get_image_path, upload_group_file, upload_private_file
+from kanade_bot.utils.parse import format_forward_message_for_ai
 
 from ..config import cfg
 from .deps import ChatDeps
@@ -29,6 +31,10 @@ from nonebot_plugin_htmlrender import html_to_pic
 def _get_sandbox(ctx: RunContext[ChatDeps]):
     """获取当前会话的沙箱，未启用时返回None"""
     return ctx.deps.sandbox
+
+
+_FORWARD_MARKER_RE = re.compile(r"\[forward:\s*id=([^\]\s]+)\s*\]")
+"""消息文本中合并转发标记 `[forward:id=xxx]` 的匹配模式"""
 
 
 async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> str | None:
@@ -56,51 +62,137 @@ async def _send_onebot_message(ctx: RunContext[ChatDeps], message: Message) -> s
     return None
 
 
-async def view_image(ctx: RunContext[ChatDeps], url: str) -> str | list[str | BinaryContent]:
+async def _load_qq_image(ctx: RunContext[ChatDeps], file: str) -> bytes | None:
+    """通过OneBot get_image接口拉取QQ消息中的图片内容，失败返回None"""
+    try:
+        bot = get_bot(ctx.deps.bot_id)
+    except (KeyError, ValueError):
+        logger.warning("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
+        return None
+    if not isinstance(bot, Bot):
+        return None
+    try:
+        # 复用get_image_path：兼容实现端返回本地路径或网络地址两种情况
+        path = await get_image_path(bot, MessageSegment("image", {"file": file}))
+    except Exception as e:
+        logger.warning("获取QQ图片 {} 失败: {}", file, e)
+        return None
+    if not path.is_file():
+        return None
+    return path.read_bytes()
+
+
+async def view_image(ctx: RunContext[ChatDeps], image: str) -> str | list[str | BinaryContent]:
     """查看一张图片，返回图片内容供视觉理解。
 
     Args:
-        url: 图片URL。支持http/https网络地址；启用沙箱时也支持沙箱工作区内的相对路径。
+        image: 图片来源，支持三种形式：
+            - QQ消息中的图片文件名：消息里 `[图片：xxx]` 方括号内的 xxx，
+              若启用沙箱，还会自动保存到沙箱工作区 images/；
+            - http/https 网络地址；
+            - 沙箱工作区内的相对路径（需启用沙箱）。
     """
-    logger.info("查看图片工具被调用，URL: {}", url)
-    scheme = urlparse(url).scheme
+    logger.info("查看图片工具被调用，来源: {}", image)
+    scheme = urlparse(image).scheme
+
+    raw: bytes | None = None
+    mime_type: str | None = None
+    saved_path: str | None = None
+    """本次运行新保存到沙箱工作区的相对路径（仅QQ图片拉取时）"""
 
     if scheme in ("http", "https"):
         try:
-            r = await HTTPX_CLIENT.get(url)
+            r = await HTTPX_CLIENT.get(image)
         except HTTPError as e:
             logger.exception("下载图片失败: {}", e)
             return f"无法查看图片，下载失败: {e}"
         if r.status_code != 200:
-            return f"无法查看图片，URL: {url}，状态码: {r.status_code}"
-        data = base64.b64encode(r.content).decode()
+            return f"无法查看图片，URL: {image}，状态码: {r.status_code}"
+        raw = r.content
         mime_type = r.headers.get("Content-Type", "application/octet-stream").split(";")[0]
 
     elif not scheme:
         sandbox = _get_sandbox(ctx)
-        if sandbox is None:
-            return f"仅支持http/https网络URL（未启用沙箱，不支持本地路径）: {url}"
-        try:
-            bytes_io = await sandbox.read(Path(url))
-        except FileNotFoundError:
-            return f"沙箱工作区中不存在该文件: {url}"
-        raw = bytes_io.read()
-        data = base64.b64encode(raw).decode()
+        if sandbox is not None:
+            try:
+                raw = (await sandbox.read(Path(image))).read()
+            except FileNotFoundError:
+                raw = None
+        if raw is None:
+            # 工作区没有该文件：按QQ消息图片名经 get_image 拉取
+            if (qq_raw := await _load_qq_image(ctx, image)) is None:
+                if sandbox is None:
+                    return f"未找到网络URL、沙箱工作区文件或QQ图片: {image}"
+                return f"沙箱工作区中不存在该文件，也不是可获取的QQ图片: {image}"
+            raw = qq_raw
+            name = Path(image).name or "image"
+            if sandbox is not None:
+                target = Path("images") / name
+                try:
+                    await sandbox.write(target, BytesIO(raw))
+                    saved_path = str(target)
+                except Exception as e:
+                    logger.warning("保存QQ图片到沙箱工作区失败: {}", e)
         mime_type = magic.from_buffer(raw[:64], mime=True)
 
     else:
-        return f"不支持的图片来源: {url}"
+        return f"不支持的图片来源: {image}"
+
+    if mime_type is None:
+        return f"无法查看图片: {image}"
+
+    data = base64.b64encode(raw).decode()
+    saved_note = f"（已保存到沙箱工作区 {saved_path}）" if saved_path else ""
 
     if not cfg.agent.vision:
         if not cfg.image_caption:
             return "当前模型不支持视觉输入，且未配置图片转述模型，无法查看图片。"
         caption = await get_image_caption(data, mime_type)
-        return caption or "无法获取图片内容的文字描述。"
+        if not caption:
+            return f"图片 {Path(image).name} 无法获取内容的文字描述。{saved_note}".strip()
+        return f"图片 {Path(image).name} 的文字描述{saved_note}：\n{caption}"
 
     return [
-        "图片查看结果",
-        BinaryContent(data=base64.b64decode(data), media_type=mime_type),
+        f"图片查看结果{saved_note}",
+        BinaryContent(data=raw, media_type=mime_type),
     ]
+
+
+async def get_forward_message(ctx: RunContext[ChatDeps], forward_id: str) -> str:
+    """获取一条合并转发消息的完整内容。
+
+    消息中的合并转发会显示为`[forward:id=xxx]`标记，传入其中的 id 即可递归展开全部子消息。
+    子消息中的图片仅显示`[图片：文件名]`占位。
+
+    Args:
+        forward_id: 转发消息id
+    """
+    # 容错：模型偶尔会把整个标记当 id 传入
+    if m := _FORWARD_MARKER_RE.fullmatch(forward_id.strip()):
+        forward_id = m.group(1)
+
+    try:
+        bot = get_bot(ctx.deps.bot_id)
+    except (KeyError, ValueError):
+        logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
+        return "无法获取Bot实例，无法获取转发消息。"
+    if not isinstance(bot, Bot):
+        return "当前平台不支持获取合并转发消息。"
+
+    logger.info("获取转发消息工具被调用，id: {}", forward_id)
+    try:
+        text, _ = await format_forward_message_for_ai(
+            bot,
+            MessageSegment("forward", {"id": forward_id}),
+            # 子消息图片不拉取字节，保留占位给 view_image 按需查看
+            fetch_images=False,
+        )
+    except Exception as e:
+        logger.exception("获取转发消息失败: {}", e)
+        return f"获取转发消息失败: {e}"
+    if text == f"<forward id={forward_id}>\n</forward>":
+        return f"未获取到转发消息 {forward_id} 的内容，消息可能已过期或不可用。"
+    return text
 
 
 async def save_memory(
@@ -482,6 +574,7 @@ def build_tools() -> list[Any]:
     """构建聊天Agent的静态工具列表"""
     return [
         view_image,
+        get_forward_message,
         save_memory,
         recall_memory,
         forget_memory,
