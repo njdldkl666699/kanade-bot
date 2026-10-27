@@ -56,6 +56,7 @@ chat:
     gate:
       system_prompt_file: ReplyGate.md
     time_windows: []
+    daily_reset_time: "04:00"
     backoff_start: 3
     backoff_base: 30
     backoff_cap: 600

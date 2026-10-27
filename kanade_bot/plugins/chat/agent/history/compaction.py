@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -21,7 +21,11 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import ClearToolResults, SummarizingCompaction, TieredCompaction
-from pydantic_ai_harness.compaction import compact_now, estimate_context_tokens
+from pydantic_ai_harness.compaction import (
+    compact_now,
+    estimate_context_tokens,
+    estimate_token_count,
+)
 
 from kanade_bot.utils.session import SessionInfo
 
@@ -323,6 +327,24 @@ async def persist_run(
         await store.append(session_id, tail)
 
 
+def estimate_post_compaction_tokens(
+    before: Sequence[ModelMessage],
+    after: Sequence[ModelMessage],
+    *,
+    baseline: int | None = None,
+) -> int:
+    """压缩后历史的上下文估算（复刻 TieredCompaction 升级循环的回收补偿）
+
+    ``estimate_context_tokens`` 锚定最近一次带 usage 的响应，而该响应位于摘要档
+    保留尾部内、其 usage 度量的是压缩前的请求——压缩改写对锚点不可见，直接对
+    压缩产物估算会得到与压缩前完全相同的数值。补偿方式与 harness 一致：锚定
+    基线减去启发式口径的回收量；指令/工具定义等固定开销不计入回收，偏保守。
+    """
+    base = estimate_context_tokens(before) if baseline is None else baseline
+    reclaimed = estimate_token_count(before) - estimate_token_count(after)
+    return max(base - reclaimed, 0)
+
+
 async def compact_between_turns(
     store: SessionStore,
     session_id: str,
@@ -376,16 +398,17 @@ async def compact_between_turns(
     total = await store.count(session_id)
     mark.up_to_seq = total - 1
     await store.add_compaction_mark(session_id, mark)
+    est_after = estimate_post_compaction_tokens(messages, compacted, baseline=est)
     logger.debug(
         f"会话{session_id}轮末压缩：策略={mark.strategy}，"
-        f"{len(messages)}条→{len(compacted)}条，估算{est}→{estimate_context_tokens(compacted)}tokens"
+        f"{len(messages)}条→{len(compacted)}条，估算{est}→{est_after}tokens"
     )
     return {
         "strategy": mark.strategy,
         "before": len(messages),
         "after": len(compacted),
         "tokens_before": est,
-        "tokens_after": estimate_context_tokens(compacted),
+        "tokens_after": est_after,
     }
 
 

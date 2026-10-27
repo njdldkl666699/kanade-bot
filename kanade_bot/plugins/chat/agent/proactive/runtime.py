@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from time import monotonic
 
-from nonebot import logger
+from nonebot import logger, require
 from nonebot.adapters import Bot
+
+require("nonebot_plugin_apscheduler")
+from nonebot_plugin_apscheduler import scheduler
 
 from kanade_bot.utils.common import PlatformType, asia_shanghai_now, asia_shanghai_now_str
 from kanade_bot.utils.session import SessionInfo
@@ -98,6 +101,15 @@ class AutoReplyRuntime:
 
     def __init__(self):
         self._states: dict[str, SessionGateState] = {}
+        # 每日定时清空决策上下文（时刻随配置，进程启动时读取，改动需重启生效）
+        reset = cfg.auto_reply.daily_reset_time
+        scheduler.add_job(
+            self._daily_reset,
+            "cron",
+            hour=reset.hour,
+            minute=reset.minute,
+            timezone="Asia/Shanghai",
+        )
 
     # ===== 启用判定 =====
 
@@ -142,7 +154,9 @@ class AutoReplyRuntime:
         """决策历史与元信息恢复（失败降级为空历史继续运行）"""
         session_id = state.session_id
         try:
-            await state.history.restore()
+            # 仅恢复当日上下文（自最近每日清空时刻起）：
+            # 更早的全量行留库可回溯，不进上下文（决策器上下文过长且无用）
+            await state.history.restore_today()
             store = state.history.store
             if (v := await store.get_gate_state(session_id, "last_bot_at")) is not None:
                 state.last_bot_at = float(v)
@@ -378,6 +392,17 @@ class AutoReplyRuntime:
         state.debouncer.consume()
 
     # ===== 上下文清理 =====
+
+    async def _daily_reset(self) -> None:
+        """每日定时清空：所有在线会话的决策上下文内存生效序列归零
+
+        DB 全量决策保留不删；未加载的会话无需处理（其恢复口径由
+        `restore_today` 的当日边界保证）。决策恰在进行中不受影响：
+        其固化行属清空后的新上下文。
+        """
+        for state in list(self._states.values()):
+            state.history.reset_context()
+        logger.info(f"每日决策上下文清空完成（{len(self._states)} 个在线会话）")
 
     async def clear_history(self, session_id: str) -> int | None:
         """清空该会话的决策消息历史（内存生效序列 + DB 全量行）

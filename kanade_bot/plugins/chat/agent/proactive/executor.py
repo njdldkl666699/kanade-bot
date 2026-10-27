@@ -40,6 +40,7 @@ async def send_auto_reply(
     session = chat_manager.get_session(session_info.session_id)
     if not session.buffer:
         # 被动轮恰好先消费了 buffer：无新内容可说，直接放弃
+        # （快速路径；真正开始轮次时还会在会话锁内复检，见 send_and_wait 的 require_buffer）
         logger.info(f"主动回复执行时 buffer 已空，跳过会话{session_info.session_id}")
         return
 
@@ -50,6 +51,7 @@ async def send_auto_reply(
             bot_id=bot.self_id,
             timeout=600,
             system_notification=build_auto_reply_notification(reason),
+            require_buffer=True,
         )
     ) as contents:
         async for content in contents:

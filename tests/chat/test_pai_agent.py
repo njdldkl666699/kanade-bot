@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sqlite3
@@ -18,10 +19,12 @@ import sys
 import tempfile
 import types
 import unittest
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager, closing
+from datetime import datetime, time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -61,6 +64,20 @@ import nonebot_plugin_localstore as _localstore
 
 _localstore._try_get_caller_plugin = lambda: nonebot.get_plugin("model_updater")  # type: ignore[assignment]
 
+# 主动回复包同理做壳：其 __init__ 导入 runtime → chat.util → require("crystal")，
+# 单测环境起不来。deliver / manager 重依赖一并桩掉，被测子模块按路径直接导入。
+_proactive_pkg = types.ModuleType("kanade_bot.plugins.chat.agent.proactive")
+_proactive_pkg.__path__ = [  # type: ignore[attr-defined]
+    str(REPO_ROOT / "kanade_bot" / "plugins" / "chat" / "agent" / "proactive")
+]
+sys.modules.setdefault("kanade_bot.plugins.chat.agent.proactive", _proactive_pkg)
+_deliver_stub = types.ModuleType("kanade_bot.plugins.chat.deliver")
+_deliver_stub.send_proactive = None  # type: ignore[attr-defined]
+sys.modules.setdefault("kanade_bot.plugins.chat.deliver", _deliver_stub)
+_manager_stub = types.ModuleType("kanade_bot.plugins.chat.agent.manager")
+_manager_stub.chat_manager = SimpleNamespace()  # type: ignore[attr-defined]
+sys.modules.setdefault("kanade_bot.plugins.chat.agent.manager", _manager_stub)
+
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import PrepareTools
 from pydantic_ai.messages import (
@@ -77,10 +94,19 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage, UsageLimits
-from pydantic_ai_harness.compaction import compact_now
+from pydantic_ai_harness.compaction import (
+    compact_now,
+    estimate_context_tokens,
+    estimate_token_count,
+)
 
 from kanade_bot.plugins.chat.agent import history as compaction_mod
 from kanade_bot.plugins.chat.agent.history.store import SessionStore
+from kanade_bot.plugins.chat.agent.proactive import executor as proactive_executor
+from kanade_bot.plugins.chat.agent.proactive.gate_history import (
+    SessionGateHistory,
+    daily_reset_boundary,
+)
 from kanade_bot.plugins.chat.agent.session import ChatSession
 from kanade_bot.plugins.chat.agent.session import stats as session_mod
 from kanade_bot.plugins.chat.config import CompactionConfig as CompactionParams
@@ -918,6 +944,69 @@ class ManualCompactionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(compaction_mod.extract_summary(result))
 
 
+# ===== 压缩后上下文估算（2026-10-27 生产事故修复） =====
+
+
+class PostCompactionEstimateTest(unittest.IsolatedAsyncioTestCase):
+    """压缩后估算：usage 锚点位于保留尾部内时，直接估算不体现回收（196558→196558 事故）"""
+
+    @staticmethod
+    def _anchored_history() -> list[ModelMessage]:
+        """真实形态历史：末轮响应携带 usage，其 input_tokens 覆盖全部前文"""
+        history = make_history(4)  # 12 条，响应均无 usage
+        history.append(ModelRequest(parts=[UserPromptPart(content="final q")]))
+        history.append(
+            ModelResponse(
+                parts=[TextPart(content="final a")],
+                usage=RequestUsage(input_tokens=90_000, output_tokens=500),
+                finish_reason="stop",
+            )
+        )
+        return history
+
+    async def test_summary_reclaim_reflected_in_post_estimate(self):
+        """摘要压缩后：锚定基线减去启发式口径的回收量（与 TieredCompaction 补偿一致）"""
+        history = self._anchored_history()
+        params = CompactionParams(summary_keep_messages=3)
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        compacted = await compact_now(
+            compaction_mod.build_summary(params),
+            history,
+            model=summary_model,
+            conversation_id="c1",
+        )
+        self.assertLess(len(compacted), len(history))
+
+        est_before = estimate_context_tokens(history)
+        self.assertEqual(est_before, 90_500, "锚点 = input+output，覆盖全部前文")
+        # 事故复现：锚点响应位于保留尾部内，其 usage 度量的是压缩前的请求，
+        # 压缩改写对锚点不可见 → 直接对产物估算与压缩前完全相同
+        self.assertEqual(estimate_context_tokens(compacted), est_before)
+
+        est_after = compaction_mod.estimate_post_compaction_tokens(history, compacted)
+        reclaimed = estimate_token_count(history) - estimate_token_count(compacted)
+        self.assertGreater(reclaimed, 0)
+        self.assertEqual(est_after, est_before - reclaimed)
+        self.assertLess(est_after, est_before)
+
+    async def test_without_anchor_equals_direct_estimate(self):
+        """无 usage 锚点（纯启发式）时：补偿估算 == 对产物的直接启发式估算"""
+        history = make_history(4)
+        params = CompactionParams(summary_keep_messages=3)
+        summary_model, _ = _make_model([resp_text("这是摘要")])
+        compacted = await compact_now(
+            compaction_mod.build_summary(params),
+            history,
+            model=summary_model,
+            conversation_id="c1",
+        )
+        self.assertLess(len(compacted), len(history))
+        self.assertEqual(
+            compaction_mod.estimate_post_compaction_tokens(history, compacted),
+            estimate_context_tokens(compacted),
+        )
+
+
 # ===== 摘要档用户消息保留（2026-10-09 生产事故修复） =====
 
 
@@ -1080,6 +1169,40 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
         restored = await SessionStore(self.db).restore("c1", params=params)
         compacted = ModelMessagesTypeAdapter.validate_json(marks[0].result)
         self.assertEqual(fp(restored), fp(compacted))
+
+    async def test_anchored_history_reports_reclaimed_estimate(self):
+        """锚点位于保留尾部内：tokens_after 须体现回收而非与压缩前相同（196558→196558 事故）"""
+        store = SessionStore(self.db)
+        history = make_history(4)
+        history.append(ModelRequest(parts=[UserPromptPart(content="final q")]))
+        history.append(
+            ModelResponse(
+                parts=[TextPart(content="final a")],
+                usage=RequestUsage(input_tokens=90_000, output_tokens=500),
+                finish_reason="stop",
+            )
+        )
+        await store.append("c1", history)
+        # 0.9×100_000=90_000 < 90_500 → 过闸；keep_pairs=3 保护后 3 对 →
+        # 清理档回收不足 → 升摘要档（锚点响应落在摘要档保留尾部内）
+        params = CompactionParams(
+            trigger_fraction=0.8,
+            context_window=100_000,
+            keep_pairs=3,
+            min_clear_tokens=1,
+            summary_target_fraction=0.9,
+            summary_keep_messages=2,
+        )
+        model, _ = _make_model([resp_text("这是摘要")])
+        info = await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
+        self.assertIsNotNone(info)
+        self.assertEqual(info["strategy"], "summarizing")
+        self.assertEqual(info["tokens_before"], 90_500)
+        self.assertLess(
+            info["tokens_after"],
+            info["tokens_before"],
+            "压缩后估算须体现回收，而非与压缩前相同",
+        )
 
 
 # ===== 在线应急阀 =====
@@ -1296,6 +1419,277 @@ class SessionCacheStatsTest(unittest.IsolatedAsyncioTestCase):
         stats = await session.stats()
         assert stats is not None
         self.assertNotIn("cache", stats)
+
+
+# ===== 主动回复防重判（2026-10-27 双回复竞态修复） =====
+
+
+class ProactiveBufferGuardTest(unittest.IsolatedAsyncioTestCase):
+    """`require_buffer`：主动回复轮在会话锁内复检 buffer，防被动轮消费后重复接话
+
+    生产竞态：主动回复执行器外层 buffer 检查通过后、真正取得会话锁前，被动轮
+    （to_me 触发）恰好消费了同一批消息——此时 system_notification 会使空内容轮
+    照常运行，模型对着空缓冲区再接一次话 → 对同一批消息连回两次。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    def _make_session(self, script: list[ModelResponse]) -> ChatSession:
+        """与 SessionCacheStatsTest 同构的最小 ChatSession（无沙箱/记忆/MCP）"""
+        model, _ = _make_model(script)
+        recorder = compaction_mod.build_compaction_capability(NOOP_PARAMS)
+        agent = Agent(model, capabilities=[recorder])
+        mgr = SimpleNamespace(
+            store=self.store,
+            agent=agent,
+            compaction=recorder,
+            compaction_params=NOOP_PARAMS,
+            model_settings={},
+            output_upper_tokens=None,
+            mcp_toolsets=[],
+            sandbox_manager=None,
+            memory_store=None,
+        )
+        return ChatSession("c1", manager=mgr)
+
+    async def _collect(self, gen) -> list[str]:
+        out: list[str] = []
+        async with aclosing(gen):
+            async for content in gen:
+                out.append(content)
+        return out
+
+    async def test_require_buffer_empty_aborts(self):
+        """锁内复检 buffer 为空 → 直接放弃：不调模型、不落库（被动轮已消费的场合）"""
+        session = self._make_session([resp_text("不应产生")])
+        out = await self._collect(
+            session.send_and_wait(
+                STATS_SESSION_INFO,
+                "",
+                bot_id="b1",
+                system_notification="你刚刚在旁观群聊，现在决定主动插话。",
+                require_buffer=True,
+            )
+        )
+        self.assertEqual(out, [])
+        self.assertEqual(await self.store.count("c1"), 0, "主动轮放弃时不应有任何消息落库")
+
+    async def test_notification_only_still_runs_without_flag(self):
+        """不设 require_buffer（定时任务唤醒语义）：通知单独可运行的行为保持不变"""
+        session = self._make_session([resp_text("定时任务产出")])
+        out = await self._collect(
+            session.send_and_wait(
+                STATS_SESSION_INFO,
+                "",
+                bot_id="b1",
+                system_notification="定时任务：提醒喝水",
+            )
+        )
+        self.assertEqual(out, ["定时任务产出"])
+
+    async def test_require_buffer_with_content_runs(self):
+        """buffer 有内容时 require_buffer 不影响正常接话"""
+        session = self._make_session([resp_text("主动接话")])
+        await session.add_message("[20:51] 区凶冈区：这段好难")
+        out = await self._collect(
+            session.send_and_wait(
+                STATS_SESSION_INFO,
+                "",
+                bot_id="b1",
+                system_notification="你刚刚在旁观群聊，现在决定主动插话。",
+                require_buffer=True,
+            )
+        )
+        self.assertEqual(out, ["主动接话"])
+        self.assertEqual(await self.store.count("c1"), 2, "缓冲消息与回复均落库")
+
+    async def test_race_passive_consumes_buffer_proactive_aborts(self):
+        """端到端竞态：主动轮阻塞在会话锁上时被动轮消费并回复了同一批消息 → 主动轮放弃"""
+        session = self._make_session([resp_text("被动回复")])
+        await session.add_message("[20:51] 区凶冈区：这段好难")
+
+        # 被动轮推进到首个产出：生成器悬停在 yield 上，仍持有会话锁、buffer 未清
+        passive = session.send_and_wait(STATS_SESSION_INFO, "妈妈帮我看看", bot_id="b1")
+        it = passive.__aiter__()
+        first = await it.__anext__()
+        self.assertEqual(first, "被动回复")
+        self.assertTrue(session.lock.locked(), "被动轮持有会话锁")
+        self.assertTrue(session.buffer, "前置检查视角：buffer 仍非空（竞态窗口）")
+
+        # 主动回复轮：外层检查时 buffer 非空，随后阻塞在会话锁上
+        proactive = asyncio.create_task(
+            self._collect(
+                session.send_and_wait(
+                    STATS_SESSION_INFO,
+                    "",
+                    bot_id="b1",
+                    system_notification="你刚刚在旁观群聊，现在决定主动插话。",
+                    require_buffer=True,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        self.assertFalse(proactive.done(), "主动轮应阻塞在会话锁上")
+
+        # 被动轮收尾：finally 清空 buffer、释放锁 → 主动轮取得锁后放弃接话
+        rest = [content async for content in it]
+        self.assertEqual(rest, [])
+        self.assertEqual(await proactive, [], "同一批消息已被被动轮回复，主动轮应放弃")
+        # 只有被动轮的消息落库（缓冲消息 + 回复）
+        self.assertEqual(await self.store.count("c1"), 2)
+
+    async def test_executor_wires_require_buffer(self):
+        """执行器接线：send_auto_reply 必须以 require_buffer=True 调用（防重判不失效）"""
+        recorded: dict = {}
+
+        def fake_send_and_wait(session_info, prompt, bot_id, **kwargs):
+            recorded.update(kwargs, prompt=prompt, bot_id=bot_id)
+
+            async def gen():
+                yield "主动接话"
+
+            return gen()
+
+        sent: list[str] = []
+
+        async def fake_send_proactive(bot, session_info, content):
+            sent.append(content)
+
+        on_content_records: list[str] = []
+
+        async def on_content(content):
+            on_content_records.append(content)
+
+        class FakeBot:
+            self_id = "b1"
+
+        fake_session = SimpleNamespace(
+            buffer=["[20:51] 区凶冈区：这段好难"],
+            send_and_wait=fake_send_and_wait,
+        )
+        with (
+            mock.patch.object(
+                proactive_executor,
+                "chat_manager",
+                SimpleNamespace(get_session=lambda sid: fake_session),
+            ),
+            mock.patch.object(proactive_executor, "send_proactive", fake_send_proactive),
+        ):
+            await proactive_executor.send_auto_reply(
+                FakeBot(), STATS_SESSION_INFO, reason="有自然接话点", on_content=on_content
+            )
+        self.assertTrue(recorded.get("require_buffer"), "主动回复必须传 require_buffer=True")
+        self.assertEqual(recorded.get("prompt"), "")
+        self.assertIn("有自然接话点", recorded.get("system_notification", ""))
+        self.assertEqual(sent, ["主动接话"])
+        self.assertEqual(on_content_records, ["主动接话"])
+
+
+# ===== 决策历史每日清空（2026-10-27） =====
+
+
+class GateDailyResetTest(unittest.IsolatedAsyncioTestCase):
+    """每日清空：内存上下文归零、DB 全量保留、重启仅恢复当日（以每日清空时刻为界）"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = compaction_mod.GateStore(
+            SessionStore(Path(self.tmp.name) / "sessions").registry
+        )
+
+    def _set_created_at(self, session_id: str, ts: float, *, row_id: int | None = None) -> None:
+        """直接改写行时间戳，模拟跨日写入"""
+        db = self.store.registry.get(session_id)
+        db.ensure()
+        with closing(sqlite3.connect(db.db_path)) as conn:
+            if row_id is None:
+                conn.execute("UPDATE gate_messages SET created_at = ?", (ts,))
+            else:
+                conn.execute("UPDATE gate_messages SET created_at = ? WHERE id = ?", (ts, row_id))
+            conn.commit()
+
+    def test_daily_reset_boundary(self):
+        """清空边界：默认 04:00，之前算昨日；恰在边界属当天；时刻随配置"""
+        tz = ZoneInfo("Asia/Shanghai")
+        self.assertEqual(
+            daily_reset_boundary(datetime(2026, 10, 27, 10, 0, tzinfo=tz)),
+            datetime(2026, 10, 27, 4, 0, tzinfo=tz),
+        )
+        self.assertEqual(
+            daily_reset_boundary(datetime(2026, 10, 27, 3, 59, 59, tzinfo=tz)),
+            datetime(2026, 10, 26, 4, 0, tzinfo=tz),
+        )
+        self.assertEqual(
+            daily_reset_boundary(datetime(2026, 10, 27, 4, 0, tzinfo=tz)),
+            datetime(2026, 10, 27, 4, 0, tzinfo=tz),
+        )
+        # 时刻可配置：改 00:00 后以午夜为界
+        from kanade_bot.plugins.chat.config import cfg as chat_cfg
+
+        saved = chat_cfg.auto_reply.daily_reset_time
+        chat_cfg.auto_reply.daily_reset_time = time(0, 0)
+        try:
+            self.assertEqual(
+                daily_reset_boundary(datetime(2026, 10, 27, 2, 30, tzinfo=tz)),
+                datetime(2026, 10, 27, 0, 0, tzinfo=tz),
+            )
+        finally:
+            chat_cfg.auto_reply.daily_reset_time = saved
+
+    async def test_restore_today_filters_old_rows_and_anchor(self):
+        """当日恢复：边界前的行与旧锚点不进上下文；当日新锚点正常加载；DB 全量保留"""
+        boundary = daily_reset_boundary().timestamp()
+        old_ids = await self.store.append_gate_messages(
+            "s1",
+            [("msg", "user", "昨日消息"), ("anchor", "user", "昨日锚点")],
+        )
+        for row_id in old_ids:
+            self._set_created_at("s1", boundary - 3600, row_id=row_id)
+        await self.store.append_gate_messages(
+            "s1", [("msg", "user", "今日消息"), ("msg", "assistant", '{"reply": false}')]
+        )
+
+        # 全量口径（since=None）：行为与旧版一致（锚点 + 全部普通行）
+        snap_all = await self.store.load_gate_history("s1")
+        self.assertEqual(len(snap_all.rows), 4)
+        # 当日口径：昨日行与旧锚点被过滤
+        snap_today = await self.store.load_gate_history("s1", since=boundary)
+        self.assertEqual([row[2] for row in snap_today.rows], ["今日消息", '{"reply": false}'])
+        self.assertEqual(snap_today.total_rows, 4, "DB 全量行保留不删")
+
+        history = SessionGateHistory(self.store, "s1")
+        await history.restore_today()
+        self.assertEqual([row.content for row in history.rows], ["今日消息", '{"reply": false}'])
+        self.assertIsNone(history.anchor_at)
+
+        # 当日生成的新锚点：正常加载并成为首行
+        await self.store.append_gate_messages("s1", [("anchor", "user", "今日新锚点")])
+        await history.restore_today()
+        self.assertEqual(history.rows[0].content, "今日新锚点")
+        self.assertIsNotNone(history.anchor_at)
+
+    async def test_reset_context_memory_only_db_kept(self):
+        """每日清空：内存生效序列与锚点态归零；DB 行保留，全量口径仍完整可恢复"""
+        history = SessionGateHistory(self.store, "s1")
+        await history.append("user", "消息1")
+        await history.append("assistant", '{"reply": false}')
+        await history.append("user", "消息2")
+        self.assertEqual(len(history.rows), 3)
+
+        history.reset_context()
+        self.assertEqual(history.rows, [])
+        self.assertIsNone(history.anchor_at)
+
+        # 行属昨日时：当日恢复为空（相当于错过的每日清空在恢复时补齐），全量恢复完整
+        self._set_created_at("s1", daily_reset_boundary().timestamp() - 3600)
+        await history.restore_today()
+        self.assertEqual(history.rows, [], "昨日行不进当日上下文")
+        await history.restore()
+        self.assertEqual(len(history.rows), 3, "全量口径：DB 行完整保留")
 
 
 class WorkspaceTreeTest(unittest.TestCase):

@@ -38,6 +38,7 @@ from ..history import (
     build_summary,
     build_summary_mark,
     compact_between_turns,
+    estimate_post_compaction_tokens,
     extract_summary,
     persist_run,
 )
@@ -144,6 +145,7 @@ class ChatSession:
         timeout: float = 60,
         on_usage: UsageCallback | None = None,
         system_notification: str | None = None,
+        require_buffer: bool = False,
     ):
         """发送消息到会话，每条助手消息一到达就实时yield其内容。
 
@@ -158,10 +160,20 @@ class ChatSession:
         timeout: 相邻流事件间的间隔超时，超时后取消运行并抛出TimeoutError
         on_usage: 轮次正常结束时回调；异常或中途取消时不回调
         system_notification: 显式注入本轮的系统通知；不消费排队通知槽位，且单独视为可运行内容
+        require_buffer: 取得会话锁后复检缓冲区，为空则直接放弃本轮（空生成器）。
+            主动回复执行器专用：外层的 buffer 非空检查与真正开始轮次之间，被动轮
+            （to_me 触发）可能恰好消费了同一批消息，此时无新内容可接话，放弃才能
+            避免对同一批消息连回两次。定时任务唤醒不设此项（通知本身即内容）。
         """
         mgr = self._mgr
         session_id = self.session_id
         async with self.lock:
+            if require_buffer and not self.buffer:
+                # 防重判（会话锁内）：前置检查时 buffer 非空，但等锁期间已被并发轮次
+                # 消费。继续接话会对同一批消息重复回复，直接放弃
+                logger.info(f"主动回复轮开始时缓冲区已被并发轮次消费，跳过会话{session_id}")
+                return
+
             # Group sessions are shared by members; switch the tool context to
             # the current sender while the per-session lock is held.
             memory_context = self.update_memory_context(session_info)
@@ -437,14 +449,15 @@ class ChatSession:
             mark = build_summary_mark(mgr.compaction_params, compacted)
             mark.up_to_seq = total - 1
             await mgr.store.add_compaction_mark(self.session_id, mark)
+            est = estimate_context_tokens(messages)
             logger.info(f"会话{self.session_id}手动压缩完成：{before}条 → {len(compacted)}条")
             return {
                 "compacted": True,
                 "total": total,
                 "before": before,
                 "after": len(compacted),
-                "tokens_before": estimate_context_tokens(messages),
-                "tokens_after": estimate_context_tokens(compacted),
+                "tokens_before": est,
+                "tokens_after": estimate_post_compaction_tokens(messages, compacted, baseline=est),
                 "summary": extract_summary(compacted),
             }
         finally:

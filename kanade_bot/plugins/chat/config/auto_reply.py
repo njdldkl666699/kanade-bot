@@ -64,6 +64,9 @@ class AutoReplyConfig(AttrDocModel):
     time_windows: list[TimeWindow] = []
     """时段概率表：默认为空（任何时段每批必送）；多个窗口命中时取最先声明者，都不命中时概率为 1.0"""
 
+    daily_reset_time: Annotated[time, WithJsonSchema(_TIME_OF_DAY_SCHEMA)] = time(4, 0)
+    """每日决策上下文清空时刻（Asia/Shanghai，进程启动时读取）：到点清空内存生效序列，DB 全量保留，重启仅恢复当日"""
+
     backoff_start: int = 2
     """连续决策不回 N 次后开始退避"""
 

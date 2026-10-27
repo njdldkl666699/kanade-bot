@@ -60,17 +60,23 @@ class GateStore:
             conn.commit()
         return new_rows
 
-    async def load_gate_history(self, conv_id: str) -> GateHistorySnapshot:
+    async def load_gate_history(
+        self, conv_id: str, *, since: float | None = None
+    ) -> GateHistorySnapshot:
         """加载决策消息历史的生效序列：最新锚点行 + 水位线之后的普通行
 
         水位线之前的全量行保留在库中可回溯，不参与请求——重启后请求前缀
         与关机前完全一致，前缀缓存跨重启命中。
-        """
-        return await asyncio.to_thread(self._load_gate_sync, conv_id)
 
-    def _load_gate_sync(self, conv_id: str) -> GateHistorySnapshot:
+        :param since: 仅加载该时刻（含）之后的行（锚点与普通行同受约束）；
+            每日清空后重启仅恢复当日上下文用，None 为全量口径
+        """
+        return await asyncio.to_thread(self._load_gate_sync, conv_id, since)
+
+    def _load_gate_sync(self, conv_id: str, since: float | None) -> GateHistorySnapshot:
         db = self.registry.get(conv_id)
         db.ensure()
+        floor = since if since is not None else 0.0
         with closing(sqlite3.connect(db.db_path, timeout=10)) as conn:
             watermark_row = conn.execute(
                 "SELECT value FROM gate_state WHERE key = 'watermark'"
@@ -81,13 +87,14 @@ class GateStore:
 
             anchor = conn.execute(
                 "SELECT id, content, created_at FROM gate_messages "
-                "WHERE kind = 'anchor' ORDER BY id DESC LIMIT 1"
+                "WHERE kind = 'anchor' AND created_at >= ? ORDER BY id DESC LIMIT 1",
+                (floor,),
             ).fetchone()
 
             msg_rows = conn.execute(
                 "SELECT id, role, content FROM gate_messages "
-                "WHERE kind = 'msg' AND id >= ? ORDER BY id",
-                (watermark,),
+                "WHERE kind = 'msg' AND id >= ? AND created_at >= ? ORDER BY id",
+                (watermark, floor),
             ).fetchall()
 
         rows: list[tuple[int, str, str]] = []

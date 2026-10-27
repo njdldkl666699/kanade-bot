@@ -165,6 +165,13 @@
           "title": "Time Windows",
           "type": "array"
         },
+        "daily_reset_time": {
+          "default": "04:00:00",
+          "description": "每日决策上下文清空时刻（Asia/Shanghai，进程启动时读取）：到点清空内存生效序列，DB 全量保留，重启仅恢复当日",
+          "pattern": "^\\d{1,2}:\\d{2}(:\\d{1,2})?$",
+          "title": "Daily Reset Time",
+          "type": "string"
+        },
         "backoff_start": {
           "default": 2,
           "description": "连续决策不回 N 次后开始退避",
@@ -1621,8 +1628,7 @@
             "softmax_scale": 55.0,
             "index_file": "memes_index.json",
             "matrix_file": "memes_index.npy"
-          },
-          "description": "表情包语义检索配置"
+          }
         },
         "image_caption": {
           "anyOf": [
@@ -1633,8 +1639,7 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "description": "图片转述模型配置，如果为None则不启用图片转述。\n\n不启用且主模型不支持图片输入，则无法处理图片消息。"
+          "default": null
         },
         "rag": {
           "$ref": "#/$defs/RAGConfig",
@@ -1675,12 +1680,12 @@
               "vision": false
             },
             "time_windows": [],
+            "daily_reset_time": "04:00:00",
             "backoff_start": 2,
             "backoff_base": 60.0,
             "backoff_cap": 1800.0,
             "gate_timeout": 30.0
-          },
-          "description": "主动回复配置"
+          }
         },
         "billing": {
           "$ref": "#/$defs/TokenBillingConfig",
@@ -1690,18 +1695,15 @@
             "off_peak_input_per_1k": 6.0,
             "off_peak_output_per_1k": 24.0,
             "min_cost": 1
-          },
-          "description": "按Token计费的费率配置"
+          }
         },
         "configs_file": {
           "default": "chat_configs.json",
-          "description": "聊天配置文件名",
           "title": "Configs File",
           "type": "string"
         },
         "fail_image_file": {
           "default": "chat_fail.jpg",
-          "description": "聊天失败时发送的图片名，不存在则返回默认的文本消息",
           "title": "Fail Image File",
           "type": "string"
         }
@@ -2574,6 +2576,7 @@
           "backoff_base": 60.0,
           "backoff_cap": 1800.0,
           "backoff_start": 2,
+          "daily_reset_time": "04:00:00",
           "enabled": false,
           "gate": {
             "context_window": null,

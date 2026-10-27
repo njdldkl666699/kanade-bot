@@ -4,12 +4,13 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from nonebot import logger
 from pydantic_ai import Agent, ModelMessage, ModelRequest, ModelResponse, RunUsage
 from pydantic_ai.messages import TextPart, UserPromptPart
 
+from kanade_bot.utils.common import asia_shanghai_now
 from kanade_bot.utils.pai_runtime import build_model_settings, get_model
 
 from ...config import cfg
@@ -30,6 +31,21 @@ FALLBACK_SUMMARY_TEMPLATE = (
 
 SUMMARY_TIMEOUT = 120.0
 """摘要锚点生成调用超时（秒）"""
+
+
+# ===== 每日清空（决策上下文的当日边界） =====
+
+
+def daily_reset_boundary(at: datetime | None = None) -> datetime:
+    """最近一次每日清空时刻：决策上下文的当日边界（Asia/Shanghai）
+
+    决策上下文的“一天”以 `auto_reply.daily_reset_time`（默认 04:00）为界：
+    到点清空内存生效序列，重启恢复只取该时刻之后的行。
+    """
+    at = at or asia_shanghai_now()
+    reset = cfg.auto_reply.daily_reset_time
+    boundary = at.replace(hour=reset.hour, minute=reset.minute, second=0, microsecond=0)
+    return boundary if boundary <= at else boundary - timedelta(days=1)
 
 
 # ===== 本次决策轮的尾部元信息（唯一变化部分） =====
@@ -134,6 +150,8 @@ class SessionGateHistory:
     写内存与 DB。截断（`_truncate`）保留最近 N 条原始行、把更早部分压缩成
     新锚点行，DB 不删行只推进水位线——重启加载 `[最新锚点] + [水位线后普通行]`，
     请求前缀与关机前一致，前缀缓存跨重启命中。
+    每日定时清空内存生效序列（`reset_context`，时刻见 `daily_reset_boundary`），
+    重启经 `restore_today` 只取当日行；跨清空时刻的前缀缓存失效属预期。
     """
 
     def __init__(self, store: GateStore, session_id: str):
@@ -146,9 +164,13 @@ class SessionGateHistory:
         self.anchor_at: float | None = None
         """当前锚点生成时间（wall clock）"""
 
-    async def restore(self) -> None:
-        """从 DB 恢复生效序列与元信息（首次使用该会话时调用）"""
-        snapshot = await self.store.load_gate_history(self.session_id)
+    async def restore(self, *, since: float | None = None) -> None:
+        """从 DB 恢复生效序列与元信息（首次使用该会话时调用）
+
+        :param since: 仅恢复该时刻（含）之后的行（锚点与普通行同受约束）；
+            每日清空边界用，None 为全量口径。边界之前的行仍在库中，只是不进上下文
+        """
+        snapshot = await self.store.load_gate_history(self.session_id, since=since)
         self.rows = [GateRow(row_id, role, content) for row_id, role, content in snapshot.rows]
         self.watermark = snapshot.watermark
         self.anchor_at = snapshot.anchor_at
@@ -157,6 +179,19 @@ class SessionGateHistory:
                 f"决策历史恢复 {self.session_id}：{len(self.rows)} 条生效行，"
                 f"水位线 {self.watermark}，全量 {snapshot.total_rows} 行"
             )
+
+    async def restore_today(self) -> None:
+        """恢复当日决策上下文：自最近每日清空时刻起的行（重启默认口径）"""
+        await self.restore(since=daily_reset_boundary().timestamp())
+
+    def reset_context(self) -> None:
+        """清空内存生效序列（每日定时清空用）
+
+        DB 全量行与水位线保留不删：重启经 `restore_today` 只取当日行，
+        更早的留库可回溯。旧锚点内容属清空前的上下文，锚点态一并丢弃。
+        """
+        self.rows = []
+        self.anchor_at = None
 
     async def clear(self) -> int:
         """清空决策历史：内存生效序列与 DB 全量行（含锚点行与水位线）

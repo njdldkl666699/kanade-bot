@@ -303,6 +303,18 @@ async def test_runtime_orchestration():
         assert state.last_proactive_at is None
         print("reply path OK")
 
+        # 每日清空：调度任务已注册；内存生效序列归零、锚点态丢弃，DB 全量保留
+        from kanade_bot.plugins.chat.agent.proactive.runtime import scheduler as _scheduler
+
+        job_ids = [str(job.id) for job in _scheduler.get_jobs()]
+        assert any("_daily_reset" in job_id for job_id in job_ids), job_ids
+        assert state.history.rows, "清空前内存应有生效行"
+        await auto_reply_runtime._daily_reset()
+        assert state.history.rows == [] and state.history.anchor_at is None
+        snap = await state.history.store.load_gate_history(sid)
+        assert snap.total_rows > 0, "每日清空不删 DB 行"
+        print("daily reset OK")
+
         # 清空决策上下文：DB 全量行删除、内存序列与水位线复位；未知会话返回 None
         assert await auto_reply_runtime.clear_history("no-such-session") is None
         deleted = await auto_reply_runtime.clear_history(sid)
