@@ -27,6 +27,9 @@ render:
     skip_browser_install: true
     storage_path: ~/.cache/ms-playwright
     remote_local_resource_policy: memory
+  html:
+    max_pixels: 2147483647
+    max_auto_height: 2147483647
   resources:
     local_access:
       allowed_paths:
