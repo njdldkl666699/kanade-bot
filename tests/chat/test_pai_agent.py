@@ -1640,40 +1640,33 @@ class GateDailyResetTest(unittest.IsolatedAsyncioTestCase):
         finally:
             chat_cfg.auto_reply.daily_reset_time = saved
 
-    async def test_restore_today_filters_old_rows_and_anchor(self):
-        """当日恢复：边界前的行与旧锚点不进上下文；当日新锚点正常加载；DB 全量保留"""
+    async def test_restore_today_filters_old_rows(self):
+        """当日恢复：边界前的行不进上下文；DB 全量保留"""
         boundary = daily_reset_boundary().timestamp()
         old_ids = await self.store.append_gate_messages(
             "s1",
-            [("msg", "user", "昨日消息"), ("anchor", "user", "昨日锚点")],
+            [("user", "昨日消息")],
         )
         for row_id in old_ids:
             self._set_created_at("s1", boundary - 3600, row_id=row_id)
         await self.store.append_gate_messages(
-            "s1", [("msg", "user", "今日消息"), ("msg", "assistant", '{"reply": false}')]
+            "s1", [("user", "今日消息"), ("assistant", '{"reply": false}')]
         )
 
-        # 全量口径（since=None）：行为与旧版一致（锚点 + 全部普通行）
+        # 全量口径（since=None）：全部普通行加载
         snap_all = await self.store.load_gate_history("s1")
-        self.assertEqual(len(snap_all.rows), 4)
-        # 当日口径：昨日行与旧锚点被过滤
+        self.assertEqual(len(snap_all.rows), 3)
+        # 当日口径：昨日行被过滤
         snap_today = await self.store.load_gate_history("s1", since=boundary)
         self.assertEqual([row[2] for row in snap_today.rows], ["今日消息", '{"reply": false}'])
-        self.assertEqual(snap_today.total_rows, 4, "DB 全量行保留不删")
+        self.assertEqual(snap_today.total_rows, 3, "DB 全量行保留不删")
 
         history = SessionGateHistory(self.store, "s1")
         await history.restore_today()
         self.assertEqual([row.content for row in history.rows], ["今日消息", '{"reply": false}'])
-        self.assertIsNone(history.anchor_at)
-
-        # 当日生成的新锚点：正常加载并成为首行
-        await self.store.append_gate_messages("s1", [("anchor", "user", "今日新锚点")])
-        await history.restore_today()
-        self.assertEqual(history.rows[0].content, "今日新锚点")
-        self.assertIsNotNone(history.anchor_at)
 
     async def test_reset_context_memory_only_db_kept(self):
-        """每日清空：内存生效序列与锚点态归零；DB 行保留，全量口径仍完整可恢复"""
+        """每日清空：内存生效序列归零；DB 行保留，全量口径仍完整可恢复"""
         history = SessionGateHistory(self.store, "s1")
         await history.append("user", "消息1")
         await history.append("assistant", '{"reply": false}')
@@ -1682,7 +1675,6 @@ class GateDailyResetTest(unittest.IsolatedAsyncioTestCase):
 
         history.reset_context()
         self.assertEqual(history.rows, [])
-        self.assertIsNone(history.anchor_at)
 
         # 行属昨日时：当日恢复为空（相当于错过的每日清空在恢复时补齐），全量恢复完整
         self._set_created_at("s1", daily_reset_boundary().timestamp() - 3600)

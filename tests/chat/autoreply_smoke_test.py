@@ -122,33 +122,26 @@ async def test_store_roundtrip():
         ids = await store.append_gate_messages(
             "s1",
             [
-                ("msg", "user", "[10-26 14:02] 用户A(123)：大家好"),
-                ("msg", "assistant", '{"reply": false, "reason": "灌水"}'),
+                ("user", "[10-26 14:02] 用户A(123)：大家好"),
+                ("assistant", '{"reply": false, "reason": "灌水"}'),
             ],
         )
         assert ids == [1, 2], ids
 
-        await store.set_gate_state("s1", "watermark", "2")
-        await store.append_gate_messages("s1", [("anchor", "user", "[摘要锚点]…")])
-
         snap = await store.load_gate_history("s1")
-        assert snap.watermark == 2
-        assert snap.rows[0] == (3, "user", "[摘要锚点]…"), "锚点行在最前"
-        assert snap.rows[1:] == [(2, "assistant", '{"reply": false, "reason": "灌水"}')], (
-            "水位线之前的普通行不参与请求"
-        )
-        assert snap.total_rows == 3 and snap.anchor_at is not None
+        assert snap.rows == [
+            (1, "user", "[10-26 14:02] 用户A(123)：大家好"),
+            (2, "assistant", '{"reply": false, "reason": "灌水"}'),
+        ]
+        assert snap.total_rows == 2
 
-        assert await store.get_gate_state("s1", "watermark") == "2"
         assert await store.get_gate_state("s1", "missing") is None
 
-        # 清空决策历史：全量行删除 + 水位线清零，时间戳元信息 kv 保留
+        # 清空决策历史：全量行删除，时间戳元信息 kv 保留
         await store.set_gate_state("s1", "last_bot_at", "1.5")
-        assert await store.clear_gate_history("s1") == 3
+        assert await store.clear_gate_history("s1") == 2
         snap = await store.load_gate_history("s1")
-        assert snap.rows == [] and snap.watermark == 0 and snap.total_rows == 0
-        assert snap.anchor_at is None
-        assert await store.get_gate_state("s1", "watermark") is None
+        assert snap.rows == [] and snap.total_rows == 0
         assert await store.get_gate_state("s1", "last_bot_at") == "1.5"
         print("store roundtrip OK")
 
@@ -303,23 +296,23 @@ async def test_runtime_orchestration():
         assert state.last_proactive_at is None
         print("reply path OK")
 
-        # 每日清空：调度任务已注册；内存生效序列归零、锚点态丢弃，DB 全量保留
+        # 每日清空：调度任务已注册；内存生效序列归零，DB 全量保留
         from kanade_bot.plugins.chat.agent.proactive.runtime import scheduler as _scheduler
 
         job_ids = [str(job.id) for job in _scheduler.get_jobs()]
         assert any("_daily_reset" in job_id for job_id in job_ids), job_ids
         assert state.history.rows, "清空前内存应有生效行"
         await auto_reply_runtime._daily_reset()
-        assert state.history.rows == [] and state.history.anchor_at is None
+        assert state.history.rows == []
         snap = await state.history.store.load_gate_history(sid)
         assert snap.total_rows > 0, "每日清空不删 DB 行"
         print("daily reset OK")
 
-        # 清空决策上下文：DB 全量行删除、内存序列与水位线复位；未知会话返回 None
+        # 清空决策上下文：DB 全量行删除、内存序列复位；未知会话返回 None
         assert await auto_reply_runtime.clear_history("no-such-session") is None
         deleted = await auto_reply_runtime.clear_history(sid)
         assert deleted == start + 2, deleted  # 每条群消息一行（mock 决策不 append）
-        assert state.history.rows == [] and state.history.watermark == 0
+        assert state.history.rows == []
         snap = await state.history.store.load_gate_history(sid)
         assert snap.rows == [] and snap.total_rows == 0
         assert state.counters.replies == 1, "统计计数不受清空影响"

@@ -13,7 +13,7 @@ from nonebot.log import default_format
 from nonebot.utils import escape_tag
 
 from kanade_bot.utils.onebot11 import BotOfflineNoticeEvent
-from kanade_bot.utils.schema import KanadeConfig
+from kanade_bot.utils.schema import ConfigRegistry, KanadeConfig
 from scripts.util import get_config, load_configs
 
 log_file_path = Path("cache/kanade.log")
@@ -187,8 +187,6 @@ def register_other_configs_and_generate_schema():
     """注册适配器和第三方插件的配置类，并生成合并后的配置Schema"""
     from nonebot.adapters.console.config import Config as ConsoleAdapterConfig
     from nonebot.adapters.onebot.v11.config import Config as OneBotV11AdapterConfig
-
-    from kanade_bot.utils.schema import ConfigRegistry
 
     ConfigRegistry.register_config_types(ConsoleAdapterConfig, OneBotV11AdapterConfig)
 

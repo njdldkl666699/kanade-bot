@@ -10,6 +10,7 @@ from nonebot.config import Env
 from openai.types import ReasoningEffort
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
+from typing_extensions import TypeForm
 
 from scripts.github_watchdog import Config as WatchdogConfig
 
@@ -171,7 +172,7 @@ class ConfigRegistry:
         if not cfg.generate_schemas:
             return
 
-        fields: dict[str, tuple[type[Any] | None, FieldInfo]] = {}
+        fields: dict[str, tuple[TypeForm[Any] | None, FieldInfo]] = {}
         for config_type in cls.config_types:
             use_doc = config_type.model_config.get("use_attribute_docstrings", False)
             doc_map = _extract_docstrings(config_type) if not use_doc else {}

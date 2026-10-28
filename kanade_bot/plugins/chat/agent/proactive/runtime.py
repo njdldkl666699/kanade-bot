@@ -22,7 +22,6 @@ from ..manager import chat_manager
 from ..prompt import _bot_name
 from .debounce import MessageDebouncer
 from .executor import send_auto_reply
-from .gate import gate_limit_tokens
 from .gate_history import GateMeta, SessionGateHistory, format_duration
 from .windows import describe_window, window_probability
 
@@ -109,6 +108,7 @@ class AutoReplyRuntime:
             hour=reset.hour,
             minute=reset.minute,
             timezone="Asia/Shanghai",
+            id="_daily_reset",
         )
 
     # ===== 启用判定 =====
@@ -450,17 +450,7 @@ class AutoReplyRuntime:
             lines.append("防抖：空闲（无进行中批次）")
 
         count, estimated = state.history.context_stats()
-        limit = gate_limit_tokens()
-        limit_str = _format_k(limit) if limit is not None else "未知"
-        lines.append(
-            f"决策器上下文：{count} 条 / 估算 {_format_k(estimated)} tokens（上限 {limit_str}）"
-        )
-        anchor_desc = (
-            datetime.fromtimestamp(state.history.anchor_at).strftime("%m-%d %H:%M 生成")
-            if state.history.anchor_at is not None
-            else "无"
-        )
-        lines.append(f"  水位线 {state.history.watermark} | 摘要锚点：{anchor_desc}")
+        lines.append(f"决策器上下文：{count} 条 / 估算 {_format_k(estimated)} tokens")
 
         counters = state.counters
         if counters.input_tokens:

@@ -47,7 +47,7 @@
 | 冷却/退避 | 连续 N 次决策不回 → MaiBot 式退避：到期延迟 base×2ⁿ 秒重查（上限 cap）；决策回即清零 |
 | 文字提及 bot 名 | 不特殊处理，LLM 自己从消息里看出来 |
 | 费用 | 决策调用与主动回复产出均不扣费（延续现状） |
-| 决策记录 | 决策 messages 持久化 session store（全量+水位线，重启不 miss）；观测靠统计命令与结构化日志 |
+| 决策记录 | 决策 messages 持久化 session store（全量，重启不 miss）；观测靠统计命令与结构化日志 |
 | 适用范围 | **仅群聊**——私聊不做主动回复（to_me 被动通道天然覆盖，见 §0） |
 | 许可合规 | 净室开发：MaiBot 为 GPL-3.0、本项目 MIT——思想可借鉴，实现独立编写，不复制其代码（见 §0） |
 | 尾部元信息 | 只报「最近 K 条」数量与时间元信息，**不复制消息内容**（历史已含，避免重复固化） |
@@ -206,9 +206,7 @@ MaiBot idle backoff 的变体，计数源是**决策节点的输出**：
 
 决策 Agent 为进程级 lazy 单例（`get_gate_agent`）：系统提示在首次构建时读一次、进程内固定
 （提示词须逐字节稳定以保前缀缓存命中，改文件需重启）+ `output_type=ReplyDecision`，
-模型与 `ModelSettings` 按生效配置构建一次。决策模型的上下文窗口解析
-（显式配置 > /models 元数据 > genai-prices）同样进程内固化一次（`gate_context_window`），
-避免 registry/网络状态变化导致截断阈值漂移。
+模型与 `ModelSettings` 按生效配置构建一次。
 
 ### 输入布局（原生 message 序列，为前缀缓存而设计）
 
@@ -266,7 +264,7 @@ pydantic-ai 实现：决策 Agent 每轮以 `message_history=决策消息历史`
 ```sql
 CREATE TABLE gate_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL DEFAULT 'msg',   -- 'msg' 普通行 | 'anchor' 摘要锚点行
+    kind TEXT NOT NULL DEFAULT 'msg',   -- 预留列，恒为 'msg'（历史版本曾区分摘要锚点行）
     role TEXT NOT NULL,                 -- 'user' | 'assistant'
     content TEXT NOT NULL,
     created_at REAL NOT NULL
@@ -274,40 +272,23 @@ CREATE TABLE gate_messages (
 CREATE TABLE gate_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
-- 全量 append 入库（`append_gate_messages`，返回新行 id）；截断不删行，只推进
-  `gate_state` 中的**生效水位线** `watermark`（普通行起始行号）；
-- 加载（`load_gate_history(since=...)`）= `[最新一条锚点行] + [id ≥ watermark 的 msg 行]`，
-  锚点与普通行同受 `since` 时间边界约束（每日清空用，见下节）；多次截断会产生多条
-  锚点行，只有最新一条生效；
+- 全量 append 入库（`append_gate_messages`，返回新行 id）；
+- 加载（`load_gate_history(since=...)`）= 全部普通行（kind='msg'，按行号升序），
+  受 `since` 时间边界约束（每日清空用，见下节）；历史版本的摘要锚点行
+  （kind='anchor'）不再参与请求，直接忽略；
 - `gate_state` 另存 `last_bot_at` / `last_proactive_at` 时间戳（元信息跨重启不丢）；
-- 重启经 `restore_today` 加载生效序列（水位线 + 当日边界，见下节）：当日内的重启
+- 重启经 `restore_today` 加载生效序列（当日边界，见下节）：当日内的重启
   请求前缀与关机前完全一致，前缀缓存跨重启命中；
-- 水位线之前的全量行保留可回溯（何时判定过什么），不参与请求；会话 `reset`
+- 时间边界之前的全量行保留可回溯（何时判定过什么），不参与请求；会话 `reset`
   时随 `store.clear` 一并清空。
 
-### 截断：截头 + 摘要锚点（复用主 Agent 压缩摘要档配置）
+### 上下文规模：不做摘要压缩（2026-10-28 移除）
 
-上限度量与截断参数直接复用 `cfg.compaction`，不新增配置：
-
-| 项 | 取值 | 复用字段 |
-|---|---|---|
-| 触发上限 | 决策模型 context_window × 比例 | `summary_target_fraction`（None 回退 `trigger_fraction`=0.7） |
-| 保留条数 | 截断后原样保留的最近消息条数 | `summary_keep_messages`（40） |
-| 摘要模型 | 锚点摘要生成模型 | `summary_model`（None 继承决策模型） |
-| 摘要模板 | 锚点摘要提示词（`{messages}` 占位） | `summary_prompt_file`（CompactionSummary.md） |
-
-- 触发时机：每次决策发起前检查（`_maybe_truncate`，token 估算复用 compaction 的
-  `estimate_request_tokens`），不设后台任务；
-- 动作：保留最近 `summary_keep_messages` 条原始行，被截部分渲染为 `User:` / `Assistant:`
-  行（对齐 CompactionSummary.md 的记录格式说明）填入摘要模板，由摘要模型压成**一条摘要
-  锚点消息**（user 角色，固定前缀 `[以下是你之前旁观的群聊记录摘要…`，置于序列头部）；
-- 新序列 = [摘要锚点] + [最近 N 条]，锚点行 append 入库（kind='anchor'）、水位线推进到
-  保留部分首行，本次请求承受一次 miss；
-- 摘要锚点跨重启生效（加载时最新锚点行置于最前）；生成失败（超时 120s / 空产出）则本次
-  决策放弃，不留半截状态——摘要先生成、成功后才写库与替换内存；
-- 生效行数 ≤ `summary_keep_messages` 时无可截内容，记 warning 照原样发起请求（罕见）；
-- 摘要模板读取复用 compaction 的校验规则（含 `{messages}` 占位干跑校验），文件缺失或
-  非法时回退内置简短模板。
+决策上下文**不做摘要压缩/截断**：决策器每日定时清空（见下节），单日上下文长度
+天然有界；决策输出为固定小 JSON，当日群聊输入也远达不到模型窗口，摘要压缩
+现阶段不可能触发，只徒增链路复杂度（摘要模型调用、锚点行、水位线）。历史版本的
+「截头 + 摘要锚点」机制（复用 `cfg.compaction` 摘要档配置）已整体移除，若未来
+单日上下文实际接近窗口上限再重新引入。
 ### 每日清空：决策上下文的当日边界（2026-10-27）
 
 决策器旁观的是「今天这个群在聊什么」——昨天的消息与判定对今天的插话判断几乎无用，
@@ -317,10 +298,10 @@ CREATE TABLE gate_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 |---|---|
 | 清空时刻 | `auto_reply.daily_reset_time`（默认 `04:00`，Asia/Shanghai，凌晨群聊最安静）；cron 任务在 `AutoReplyRuntime` 构造时注册，进程启动读配置，改动需重启生效 |
 | 当日边界 | `daily_reset_boundary()`：最近一次清空时刻（04:00 前属前一天，恰在边界属当天） |
-| 动作 | `_daily_reset()` 逐在线会话调 `SessionGateHistory.reset_context()`：内存 `rows` 与锚点态归零；**不删 DB 行、不推进水位线**。未加载的会话无内存态，无需处理 |
-| 重启恢复 | `_restore_state` → `restore_today()`：`load_gate_history(since=边界)` 按 `created_at` 过滤，**锚点与普通行同受约束**（昨日旧摘要锚点不会复活）；bot 若在清空时刻停机错过 cron，边界过滤在恢复时天然补齐 |
-| 与截断的关系 | 正交：截断解决**单日**上下文过长（token 上限驱动，摘要锚点保留脉络）；每日清空解决**跨日**上下文无用（时间驱动，直接归零）。清空后当日再触发截断，新锚点只摘要当日内容 |
-| 与清空命令的关系 | `清空决策上下文` 是 SUPERUSER 手动**全量删除**（DB 行清空、水位线归零）；每日清空是自动**内存重置**（DB 留档可回溯，仅不进上下文） |
+| 动作 | `_daily_reset()` 逐在线会话调 `SessionGateHistory.reset_context()`：内存 `rows` 归零；**不删 DB 行**。未加载的会话无内存态，无需处理 |
+| 重启恢复 | `_restore_state` → `restore_today()`：`load_gate_history(since=边界)` 按 `created_at` 过滤；bot 若在清空时刻停机错过 cron，边界过滤在恢复时天然补齐 |
+| 与上下文规模的关系 | 每日清空同时承担上下文规模约束：清空后当日上下文从零累积，不做摘要压缩（见上节） |
+| 与清空命令的关系 | `清空决策上下文` 是 SUPERUSER 手动**全量删除**（DB 行清空）；每日清空是自动**内存重置**（DB 留档可回溯，仅不进上下文） |
 
 决策恰在清空时刻进行中不受影响：其固化行（判定 user/assistant）属清空后的新上下文。
 跨清空时刻的决策器前缀缓存失效属预期（上下文本身已归零）。
@@ -331,8 +312,7 @@ CREATE TABLE gate_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   必须模板化固定，**不注入任何动态内容**（时间、计数只出现在本次决策轮的尾部 user 消息里）；
 - messages append-only：条目一旦写入永不改写——跳过的批次、退避延迟期间的消息照常追加，
   下次请求的前缀与本次完全一致，命中到上一轮判定为止；
-- 前缀失效点有两个：**截断**（截头 + 重生成摘要锚点，一次 miss，之后重新命中）与
-  **每日清空**（上下文归零，跨清空时刻的缓存自然失效，属预期）；重启不再是失效点
+- 前缀失效点只有**每日清空**（上下文归零，跨清空时刻的缓存自然失效，属预期）；重启不再是失效点
   （决策历史持久化 DB，当日内的重启前缀一致，见上节）；
 - 命中与否取决于端点（DeepSeek/OpenAI 等自动前缀缓存），从决策 usage 的 `cache_read_tokens`
   观测：随结构化日志输出，并累计进 `决策统计` 命令（§6）。
@@ -357,7 +337,6 @@ logger.info(
 )
 logger.info("批次跳过 {} 时段={} 概率={:.2f} 未抽中，消息留 buffer")  # 概率闸未中
 logger.info("退避延迟 {} 计数={} 延迟={:.0f}s")  # 退避触发
-logger.info("决策历史截断 {}：… 条 → 1 锚点 + … 条，估算 … → … tokens")  # 截断发生
 ```
 
 ## 5. 回复执行
@@ -412,23 +391,20 @@ async with aclosing(
 📊 决策统计（群 12345）
 状态：启用 | 时段概率 1.00（无窗口命中） | 退避：连续沉默 1/2
 防抖：批次进行中，2.3s 后到期（本批 3 条）
-决策器上下文：86 条 / 估算 6.2k tokens（上限 16k）
-  水位线 12 | 摘要锚点：10-24 生成
+决策器上下文：86 条 / 估算 6.2k tokens
 缓存命中（累计）：78.3%（cache_read 412k / input 526k）
 决策累计：37 次 = 回 9 + 不回 21 + 概率跳过 5 + 失败 2
 昵称 上次发言：5分钟前
 ```
 
-- 上下文条数/水位线/摘要锚点时间/上次发言时刻来自 DB（重启不清零）；token 累计与各类
-  计数器为内存态，重启清零；
-- 上限显示为「决策模型窗口 × `summary_target_fraction`」的实际生效值
-  （未配置时回退 `trigger_fraction`）。
+- 上下文条数与上次发言时刻来自 DB（重启不清零）；token 累计与各类
+  计数器为内存态，重启清零。
 
 ### 清空决策上下文命令
 
 `清空决策上下文`（aliases：`清除决策上下文` / `decision_clear` / `decisionclear`，
-SUPERUSER）：清空当前会话的决策消息历史——DB `gate_messages` 全量删除、水位线
-kv 清零（`SessionGateHistory.clear()` → `store.clear_gate_history()`），内存生效
+SUPERUSER）：清空当前会话的决策消息历史——DB `gate_messages` 全量删除
+（`SessionGateHistory.clear()` → `store.clear_gate_history()`），内存生效
 序列同步清空，决策器从零开始重新旁观；返回删除行数。
 
 不在清理范围：时间戳元信息 kv（last_bot_at / last_proactive_at）、统计计数、防抖/
@@ -487,21 +463,18 @@ class AutoReplyConfig(AttrDocModel):
 console/onebot 平台结构保持 `get_by_platform` 不变。迁移：`chat_configs.json` 中的旧键
 `auto_reply_group_config` 被忽略（存量均为空 dict），可择机清理。
 
-截断上限与保留条数**复用 `cfg.compaction` 摘要档配置**（`summary_target_fraction` / `summary_keep_messages` /
-`summary_model`），见 §4，不新增字段。
-
 ## 9. 代码结构
 
 | 文件 | 职责 |
 |---|---|
 | `agent/proactive/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
 | `agent/proactive/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
-| `agent/proactive/gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 决策 Agent（进程级 lazy 单例）/ 决策模型配置与上下文窗口解析 |
-| `agent/proactive/gate_history.py` | `SessionGateHistory`（内存+DB 同步、决策调用、截断+摘要锚点）、尾部元信息构建；每日清空边界（`daily_reset_boundary` / `restore_today` / `reset_context`） |
+| `agent/proactive/gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 决策 Agent（进程级 lazy 单例）/ 决策模型配置 |
+| `agent/proactive/gate_history.py` | `SessionGateHistory`（内存+DB 同步、决策调用）、尾部元信息构建；每日清空边界（`daily_reset_boundary` / `restore_today` / `reset_context`） |
 | `agent/proactive/windows.py` | 时段窗口匹配与概率（`match_time_window` / `window_probability`） |
 | `agent/proactive/runtime.py` | `AutoReplyRuntime`：per-session 状态（防抖定时、退避、防重入、计数器）、概率闸、决策编排、回复执行调度、每日清空 cron（`_daily_reset`）、`on_group_message` / `on_bot_message` / `on_buffer_consumed` 入口、统计输出；对 manager/chat 延迟导入 |
 | `agent/proactive/executor.py` | `send_auto_reply`（流式主动发送 + 产出 append，`require_buffer` 防重判） |
-| `agent/history/gate_store.py` | `gate_messages` / `gate_state` 表：全量 append、水位线、锚点行、`since` 边界加载、kv 读写 |
+| `agent/history/gate_store.py` | `gate_messages` / `gate_state` 表：全量 append、`since` 边界加载、kv 读写 |
 | `agent/session/` | `on_buffer_consumed` 回调属性：`send_and_wait` 轮末清 buffer 后触发（`reset` 丢弃不触发）；`require_buffer` 锁内复检（§5） |
 | `handler/chat_flow.py` | `handle_chat_monitor`：消息进 buffer → 启用群进入主动回复流水线；被动回复产出 append 进决策历史 |
 | `handler/auto_reply.py` | `决策统计`、`/启用主动回复` `/禁用主动回复` `/清空决策上下文`（SUPERUSER，运行时切换/维护） |
@@ -544,7 +517,7 @@ sequenceDiagram
 
 - 固定最小冷却间隔（两次主动回复间硬性间隔）——退避只由「连续决策不回」触发，语义不同；
 - 文字提及 bot 名的特殊通道（LLM 自行识别）；
-- 决策历史的 JSONL/外部导出——messages 已持久化 session store（全量+水位线），观测靠统计命令与结构化日志；
+- 决策历史的 JSONL/外部导出——messages 已持久化 session store（全量），观测靠统计命令与结构化日志；
 - 裸图/纯表情的防抖特判；
 - per-group 时段/概率覆盖（仅全局）；
 - MaiBot 式动态门控的窗口配额闭环与 8 特征概率回归——本项目用真 LLM 替代，时段概率闸是其极简版；

@@ -36,7 +36,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 | `tools/` | 宿主工具集按域拆分：`media`（图片查看/搜索/发送、HTML 渲染）、`messaging`（语音/文件/转发记录）、`memory`（记忆三件套）、`env`（Python 环境）、`scheduling`（定时任务） |
 | `prompt.py` | 模块化提示词渲染（`config/chat/prompts/` 下的 Markdown 片段） |
 | `vision.py` / `schedule.py` | 图片转述子 agent；定时任务存储与触发 |
-| `proactive/` | 主动回复：`runtime`（编排与统计）、`gate`（决策 Agent 构建）、`gate_history`（决策消息历史与截断锚点）、`windows`（时段概率）、`debounce`（防抖）、`executor`（主动回复执行）（见 `AUTOREPLY_DESIGN.md`） |
+| `proactive/` | 主动回复：`runtime`（编排与统计）、`gate`（决策 Agent 构建）、`gate_history`（决策消息历史）、`windows`（时段概率）、`debounce`（防抖）、`executor`（主动回复执行）（见 `AUTOREPLY_DESIGN.md`） |
 
 插件顶层（接口与共享设施）：`matcher.py`（全部 matcher 集中定义）+ `handler/`（按命令域拆分的处理器：`chat_flow` 被动回复编排与回复资格判定、`session_cmds`/`task_cmds`/`ban`/`auto_reply`/`meme_cmds`）；`config/`（按域拆分的配置包）；`memes/`（表情包语义检索子系统）；`deliver.py`（分段投递）、`rag.py`、`util.py`（轮次计费回调、黑名单判定与群 ID 提取）。
 

@@ -52,7 +52,7 @@ class AutoReplyConfig(AttrDocModel):
 
     是否回复由 LLM 决策节点结合群聊内容判定；
 
-    上下文压缩复用 `compaction` 摘要档配置。
+    决策上下文每日定时清空，规模受当日边界约束，不做摘要压缩。
     """
 
     enabled: bool = False
