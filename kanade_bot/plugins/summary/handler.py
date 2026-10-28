@@ -26,7 +26,7 @@ from .matcher import summarize
 from .summarizer import summarizer
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import md_to_pic
+from nonebot_plugin_htmlrender import render_markdown
 
 require("crystal")
 from kanade_bot.plugins.crystal import (
@@ -163,7 +163,7 @@ async def _(
             await try_delete_msg()
             await summarize.finish(f"总结失败: {e}")
 
-        image = await md_to_pic(summary)
+        image = bytes(await render_markdown(summary))
         await try_delete_msg()
         _bill_usage()
         await summarize.finish(OneBotMessageSegment.image(image))

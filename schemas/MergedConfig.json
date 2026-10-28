@@ -134,7 +134,7 @@
       "type": "object"
     },
     "AutoReplyConfig": {
-      "description": "主动回复配置\n\n仅群聊生效\n\n是否回复由 LLM 决策节点结合群聊内容判定；\n\n上下文压缩复用 `compaction` 摘要档配置。",
+      "description": "主动回复配置\n\n仅群聊生效\n\n是否回复由 LLM 决策节点结合群聊内容判定；\n\n决策上下文每日定时清空，规模受当日边界约束，不做摘要压缩。",
       "properties": {
         "enabled": {
           "default": false,
@@ -198,6 +198,38 @@
         }
       },
       "title": "AutoReplyConfig",
+      "type": "object"
+    },
+    "CacheSettings": {
+      "additionalProperties": false,
+      "description": "Sizing of the shared resource cache budget.",
+      "properties": {
+        "max_entries": {
+          "default": 256,
+          "minimum": 0,
+          "title": "Max Entries",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 67108864,
+          "minimum": 0,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "max_resource_bytes": {
+          "default": 67108864,
+          "minimum": 0,
+          "title": "Max Resource Bytes",
+          "type": "integer"
+        },
+        "revalidate_seconds": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Revalidate Seconds",
+          "type": "number"
+        }
+      },
+      "title": "CacheSettings",
       "type": "object"
     },
     "ChatPromptConfig": {
@@ -438,6 +470,130 @@
       "title": "CompactionConfig",
       "type": "object"
     },
+    "FilehostSettings": {
+      "additionalProperties": false,
+      "description": "Core-owned settings for the optional asset publisher adapter.",
+      "properties": {
+        "cache_ttl_seconds": {
+          "default": 300.0,
+          "minimum": 0.0,
+          "title": "Cache Ttl Seconds",
+          "type": "number"
+        },
+        "request_header_name": {
+          "default": "X-HTMLRender-Filehost-Request",
+          "title": "Request Header Name",
+          "type": "string"
+        },
+        "request_header_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Header Value"
+        },
+        "request_header_salt": {
+          "default": "nonebot-plugin-htmlrender:filehost:guard:v1",
+          "title": "Request Header Salt",
+          "type": "string"
+        },
+        "prewarm_enabled": {
+          "default": true,
+          "title": "Prewarm Enabled",
+          "type": "boolean"
+        },
+        "prewarm_max_files": {
+          "default": 256,
+          "minimum": 0,
+          "title": "Prewarm Max Files",
+          "type": "integer"
+        },
+        "prewarm_paths": {
+          "items": {
+            "format": "path",
+            "type": "string"
+          },
+          "title": "Prewarm Paths",
+          "type": "array"
+        },
+        "prewarm_extensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Prewarm Extensions",
+          "type": "array"
+        },
+        "public_base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Public Base Url"
+        },
+        "max_entries": {
+          "default": 256,
+          "exclusiveMinimum": 0,
+          "title": "Max Entries",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 268435456,
+          "exclusiveMinimum": 0,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "FilehostSettings",
+      "type": "object"
+    },
+    "GraphicsSettings": {
+      "additionalProperties": false,
+      "description": "Independent physical-pixel scene backends composed as capabilities.",
+      "properties": {
+        "backends": {
+          "default": [],
+          "items": {
+            "enum": [
+              "pillow",
+              "skia"
+            ],
+            "type": "string"
+          },
+          "title": "Backends",
+          "type": "array"
+        },
+        "max_pixels": {
+          "default": 16777216,
+          "exclusiveMinimum": 0,
+          "title": "Max Pixels",
+          "type": "integer"
+        },
+        "max_concurrency": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "max_commands": {
+          "default": 100000,
+          "exclusiveMinimum": 0,
+          "title": "Max Commands",
+          "type": "integer"
+        }
+      },
+      "title": "GraphicsSettings",
+      "type": "object"
+    },
     "HandleConfig": {
       "properties": {
         "strict_mode": {
@@ -480,6 +636,50 @@
         }
       },
       "title": "HandleConfig",
+      "type": "object"
+    },
+    "HtmlRenderSettings": {
+      "additionalProperties": false,
+      "description": "Shared limits for provider-neutral HTML raster operations.",
+      "properties": {
+        "max_source_bytes": {
+          "default": 67108864,
+          "exclusiveMinimum": 0,
+          "title": "Max Source Bytes",
+          "type": "integer"
+        },
+        "max_pixels": {
+          "default": 16777216,
+          "exclusiveMinimum": 0,
+          "title": "Max Pixels",
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "default": 67108864,
+          "exclusiveMinimum": 0,
+          "title": "Max Output Bytes",
+          "type": "integer"
+        },
+        "max_device_pixel_ratio": {
+          "default": 4.0,
+          "exclusiveMinimum": 0,
+          "title": "Max Device Pixel Ratio",
+          "type": "number"
+        },
+        "max_auto_height": {
+          "default": 16384,
+          "exclusiveMinimum": 0,
+          "title": "Max Auto Height",
+          "type": "integer"
+        },
+        "max_concurrency": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Max Concurrency",
+          "type": "integer"
+        }
+      },
+      "title": "HtmlRenderSettings",
       "type": "object"
     },
     "ImageCaptionConfig": {
@@ -581,6 +781,27 @@
         }
       },
       "title": "ImageCaptionConfig",
+      "type": "object"
+    },
+    "LocalAccessSettings": {
+      "additionalProperties": false,
+      "description": "Security policy for local filesystem resource access.",
+      "properties": {
+        "allow_any_path": {
+          "default": false,
+          "title": "Allow Any Path",
+          "type": "boolean"
+        },
+        "allowed_paths": {
+          "items": {
+            "format": "path",
+            "type": "string"
+          },
+          "title": "Allowed Paths",
+          "type": "array"
+        }
+      },
+      "title": "LocalAccessSettings",
       "type": "object"
     },
     "MCPServerConfig": {
@@ -699,6 +920,24 @@
         }
       },
       "title": "MindleConfig",
+      "type": "object"
+    },
+    "ObservabilitySettings": {
+      "additionalProperties": false,
+      "description": "Which observability integrations this plugin exports to.",
+      "properties": {
+        "sentry": {
+          "default": false,
+          "title": "Sentry",
+          "type": "boolean"
+        },
+        "prometheus": {
+          "default": false,
+          "title": "Prometheus",
+          "type": "boolean"
+        }
+      },
+      "title": "ObservabilitySettings",
       "type": "object"
     },
     "PromptSectionConfig": {
@@ -868,6 +1107,102 @@
       "title": "RAGConfig",
       "type": "object"
     },
+    "RemoteAccessSettings": {
+      "additionalProperties": false,
+      "description": "Security policy for remote (http/https) resource fetches.",
+      "properties": {
+        "allow_private_networks": {
+          "default": false,
+          "title": "Allow Private Networks",
+          "type": "boolean"
+        },
+        "allow_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allow Hosts",
+          "type": "array"
+        },
+        "deny_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Deny Hosts",
+          "type": "array"
+        },
+        "max_redirects": {
+          "default": 5,
+          "minimum": 0,
+          "title": "Max Redirects",
+          "type": "integer"
+        },
+        "request_timeout_seconds": {
+          "default": 30.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Request Timeout Seconds",
+          "type": "number"
+        },
+        "max_concurrent_fetches": {
+          "default": 8,
+          "exclusiveMinimum": 0,
+          "title": "Max Concurrent Fetches",
+          "type": "integer"
+        }
+      },
+      "title": "RemoteAccessSettings",
+      "type": "object"
+    },
+    "RenderSettings": {
+      "additionalProperties": false,
+      "description": "The whole ``render`` configuration namespace.",
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "startup": {
+          "$ref": "#/$defs/RenderStartupMode",
+          "default": "off"
+        },
+        "provider_config": {
+          "additionalProperties": true,
+          "title": "Provider Config",
+          "type": "object"
+        },
+        "html": {
+          "$ref": "#/$defs/HtmlRenderSettings"
+        },
+        "graphics": {
+          "$ref": "#/$defs/GraphicsSettings"
+        },
+        "resources": {
+          "$ref": "#/$defs/ResourceSettings"
+        },
+        "observability": {
+          "$ref": "#/$defs/ObservabilitySettings"
+        }
+      },
+      "title": "RenderSettings",
+      "type": "object"
+    },
+    "RenderStartupMode": {
+      "description": "Provider runtime initialization policy.",
+      "enum": [
+        "off",
+        "warmup",
+        "probe"
+      ],
+      "title": "RenderStartupMode",
+      "type": "string"
+    },
     "ReplyGateConfig": {
       "description": "主动回复决策节点模型配置",
       "properties": {
@@ -967,6 +1302,58 @@
         }
       },
       "title": "ReplyGateConfig",
+      "type": "object"
+    },
+    "ResourceSettings": {
+      "additionalProperties": false,
+      "description": "Core-validated resource, cache, and security configuration.",
+      "properties": {
+        "cache": {
+          "$ref": "#/$defs/CacheSettings"
+        },
+        "templates": {
+          "$ref": "#/$defs/TemplateSettings"
+        },
+        "traversal": {
+          "$ref": "#/$defs/ResourceTraversalSettings"
+        },
+        "local_access": {
+          "$ref": "#/$defs/LocalAccessSettings"
+        },
+        "remote_access": {
+          "$ref": "#/$defs/RemoteAccessSettings"
+        },
+        "filehost": {
+          "$ref": "#/$defs/FilehostSettings"
+        }
+      },
+      "title": "ResourceSettings",
+      "type": "object"
+    },
+    "ResourceTraversalSettings": {
+      "additionalProperties": false,
+      "description": "Bounds for resolving nested template-variable resources.",
+      "properties": {
+        "max_nodes": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Max Nodes",
+          "type": "integer"
+        },
+        "max_depth": {
+          "default": 64,
+          "minimum": 0,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "max_concurrency": {
+          "default": 16,
+          "exclusiveMinimum": 0,
+          "title": "Max Concurrency",
+          "type": "integer"
+        }
+      },
+      "title": "ResourceTraversalSettings",
       "type": "object"
     },
     "SandboxConfig": {
@@ -1351,6 +1738,26 @@
         }
       },
       "title": "TTSConfig",
+      "type": "object"
+    },
+    "TemplateSettings": {
+      "additionalProperties": false,
+      "description": "Sizing of the template environment cache.",
+      "properties": {
+        "environment_cache_max_entries": {
+          "default": 64,
+          "minimum": 0,
+          "title": "Environment Cache Max Entries",
+          "type": "integer"
+        },
+        "environment_compiled_cache_size": {
+          "default": 256,
+          "minimum": 0,
+          "title": "Environment Compiled Cache Size",
+          "type": "integer"
+        }
+      },
+      "title": "TemplateSettings",
       "type": "object"
     },
     "TestSiteCfg": {
@@ -2784,129 +3191,6 @@
       "title": "Host",
       "type": "string"
     },
-    "htmlrender_browser": {
-      "default": "chromium",
-      "description": "Playwright浏览器引擎类型，默认值为 'chromium'。",
-      "title": "Htmlrender Browser",
-      "type": "string"
-    },
-    "htmlrender_browser_args": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright 浏览器启动参数。",
-      "title": "Htmlrender Browser Args"
-    },
-    "htmlrender_browser_channel": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器通道类型。",
-      "title": "Htmlrender Browser Channel"
-    },
-    "htmlrender_browser_executable_path": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器可执行文件的路径。",
-      "title": "Htmlrender Browser Executable Path"
-    },
-    "htmlrender_connect": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "通过Playwright协议连接Playwright浏览器的端点地址。",
-      "title": "Htmlrender Connect"
-    },
-    "htmlrender_connect_over_cdp": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "通过 CDP 连接Playwright浏览器的端点地址。",
-      "title": "Htmlrender Connect Over Cdp"
-    },
-    "htmlrender_download_host": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "下载Playwright浏览器时的主机地址。",
-      "title": "Htmlrender Download Host"
-    },
-    "htmlrender_download_proxy": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "下载Playwright浏览器时的代理设置。",
-      "title": "Htmlrender Download Proxy"
-    },
-    "htmlrender_proxy_host": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器使用的代理主机地址。",
-      "title": "Htmlrender Proxy Host"
-    },
-    "htmlrender_proxy_host_bypass": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Playwright浏览器代理的绕过地址。",
-      "title": "Htmlrender Proxy Host Bypass"
-    },
     "localstore_cache_dir": {
       "anyOf": [
         {
@@ -3401,6 +3685,9 @@
       "default": false,
       "title": "Ps Use Env Nick",
       "type": "boolean"
+    },
+    "render": {
+      "$ref": "#/$defs/RenderSettings"
     },
     "schema_output_dir": {
       "default": "schemas/",

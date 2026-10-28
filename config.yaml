@@ -17,6 +17,21 @@ console_strict_tome: true
 
 localstore_use_cwd: true
 
+render:
+  provider: playwright
+  startup: probe
+  provider_config:
+    engine: chromium
+    connect_ws:
+      endpoint: ws://127.0.0.1:39211/
+    skip_browser_install: true
+    storage_path: ~/.cache/ms-playwright
+    remote_local_resource_policy: memory
+  resources:
+    local_access:
+      allowed_paths:
+        - config
+
 chat:
   agent:
     model: deepseek-flash

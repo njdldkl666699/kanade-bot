@@ -23,7 +23,7 @@ from .common import get_sandbox
 from .messaging import send_to_session
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import html_to_pic
+from nonebot_plugin_htmlrender import get_default_application
 
 
 async def _load_qq_image(ctx: RunContext[ChatDeps], file: str) -> bytes | None:
@@ -165,13 +165,17 @@ async def render_html_image(
         file_name += ".png"
 
     try:
-        image = await html_to_pic(
-            html,
-            wait=wait_ms,
-            full_page=full_page,
+        app = get_default_application()
+        async with app.extensions.playwright.page(
             viewport={"width": viewport_width, "height": viewport_height},
-            template_path=f"file://{sandbox.workspace_dir.resolve()}",
-        )
+            device_scale_factor=2.0,
+        ) as page:
+            # 先导航到工作区目录建立相对资源基准，再注入HTML
+            await page.goto(f"file://{sandbox.workspace_dir.resolve()}")
+            await page.set_content(html, wait_until="networkidle")
+            if wait_ms:
+                await page.wait_for_timeout(wait_ms)
+            image = await page.screenshot(full_page=full_page, type="png")
     except Exception as e:
         logger.exception("HTML渲染为图片失败: {}", e)
         return f"HTML渲染为图片失败: {e}"

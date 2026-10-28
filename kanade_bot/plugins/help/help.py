@@ -7,7 +7,7 @@ from kanade_bot.utils.common import get_project_version
 from .config import Config
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import md_to_pic
+from nonebot_plugin_htmlrender import render_markdown
 
 cfg = get_plugin_config(Config).help
 
@@ -48,7 +48,7 @@ async def ensure_help_image(doc_name: str) -> bytes | None:
 
     logger.info(f"生成 {doc_name} 帮助文档图片，路径: {pic_path.absolute()}")
     start = time.time()
-    help_image = await md_to_pic(help_md)
+    help_image = bytes(await render_markdown(help_md))
     end = time.time()
     logger.info(f"生成 {doc_name} 帮助文档图片完成，耗时: {end - start:.2f}秒")
 

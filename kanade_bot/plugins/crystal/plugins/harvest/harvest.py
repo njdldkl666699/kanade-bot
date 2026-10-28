@@ -13,7 +13,7 @@ from .cache import harvest_power_cache
 from .config import cfg, harvest_config
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import template_to_pic
+from nonebot_plugin_htmlrender import render_template
 
 
 @dataclass
@@ -143,10 +143,10 @@ def _material_template_data(
 async def render_harvest_result(result: HarvestResult) -> bytes:
     material_names, material_images = _material_template_data(result.materials)
 
-    return await template_to_pic(
-        template_path=str(cfg.template_dir_path),
-        template_name=cfg.result_template_file,
-        templates={
+    artifact = await render_template(
+        cfg.template_dir_path,
+        cfg.result_template_file,
+        variables={
             "category_name": result.category_name,
             "power_cost": f"{result.power_cost:g}",
             "action_name": result.action_name,
@@ -157,6 +157,7 @@ async def render_harvest_result(result: HarvestResult) -> bytes:
             "crystal_image": _image_to_data_url(cfg.crystal_image_path),
         },
     )
+    return bytes(artifact)
 
 
 async def render_harvest_results(results: list[HarvestResult]) -> bytes:
@@ -176,10 +177,10 @@ async def render_harvest_results(results: list[HarvestResult]) -> bytes:
         for result in results
     ]
 
-    return await template_to_pic(
-        template_path=str(cfg.template_dir_path),
-        template_name=cfg.results_template_file,
-        templates={
+    artifact = await render_template(
+        cfg.template_dir_path,
+        cfg.results_template_file,
+        variables={
             "results": result_items,
             "result_count": len(results),
             "total_power_cost": f"{sum(result.power_cost for result in results):g}",
@@ -190,3 +191,4 @@ async def render_harvest_results(results: list[HarvestResult]) -> bytes:
             "crystal_image": _image_to_data_url(cfg.crystal_image_path),
         },
     )
+    return bytes(artifact)

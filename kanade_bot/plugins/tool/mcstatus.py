@@ -9,7 +9,7 @@ from nonebot import require
 from .config import cfg
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import template_to_pic
+from nonebot_plugin_htmlrender import render_template
 
 
 def _encode_image_as_data_url(image_path: Path) -> str:
@@ -75,10 +75,11 @@ async def render_mc_status(
     template_path = cfg.template_file_path
     template_name = template_path.name
 
-    return await template_to_pic(
-        template_path=str(template_path.resolve().parent),
-        template_name=template_name,
-        templates={
+    # wait=50 已随 0.8 移除：模板资源均为 data: URL，无需截图前额外等待
+    artifact = await render_template(
+        template_path.resolve().parent,
+        template_name,
+        variables={
             "theme": theme,
             "icon_src": _resolve_icon_src(status.icon),
             "motd_html": motd_html,
@@ -90,5 +91,5 @@ async def render_mc_status(
             "max_players": players.max,
             "sample_names": sample_names,
         },
-        wait=50,
     )
+    return bytes(artifact)

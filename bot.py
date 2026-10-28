@@ -176,11 +176,11 @@ def patch_foreign_plugins():
     stat_matcher.priority = 2
 
     ## nonebot_plugin_htmlrender
-    from nonebot_plugin_htmlrender import md_to_pic
+    from nonebot_plugin_htmlrender import render_markdown
 
     # 修改默认宽度
-    MD_TO_PIC_WIDTH = 720
-    md_to_pic.__defaults__ = ("", "", "", MD_TO_PIC_WIDTH, "png", None, 2, 30000)
+    assert render_markdown.__kwdefaults__ is not None
+    render_markdown.__kwdefaults__["width"] = 720
 
 
 def register_other_configs_and_generate_schema():
@@ -196,7 +196,7 @@ def register_other_configs_and_generate_schema():
 
     # from nonebot_plugin_datastore.config import Config as DataStoreConfig
     from nonebot_plugin_githubcard.config import Config as GithubCardConfig
-    from nonebot_plugin_htmlrender.config import Config as HTMLRenderConfig
+    from nonebot_plugin_htmlrender import RenderPluginConfig
     from nonebot_plugin_localstore.config import Config as LocalStoreConfig
 
     # from nonebot_plugin_orm.config import Config as ORMConfig
@@ -209,14 +209,12 @@ def register_other_configs_and_generate_schema():
     # from nonebot_plugin_wordcloud.config import Config as WordCloudConfig
 
     ConfigRegistry.register_config_types(
-        ConsoleAdapterConfig,
-        OneBotV11AdapterConfig,
         AlconnaConfig,
         APSchedulerConfig,
         ChatRecorderConfig,
         # DataStoreConfig,
         GithubCardConfig,
-        HTMLRenderConfig,
+        RenderPluginConfig,
         LocalStoreConfig,
         # ORMConfig,
         PermissionConfig,

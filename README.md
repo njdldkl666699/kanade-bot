@@ -19,7 +19,8 @@
 1. 克隆仓库到本地；
 2. 安装依赖：`uv sync`；
 3. 创建`config-{环境}.yaml`配置文件，补全`config.yaml`和`config-{环境}.yaml`中的配置项；
-4. 运行机器人：`nb run`。
+4. 启动Playwright服务端：`uv run playwright run-server --port 39211`；
+5. 运行机器人：`nb run`。
 
 ### 依赖
 
@@ -50,6 +51,41 @@ sandlock check   # 确认 ABI 与 protection 可用性
 ```
 
 **内核版本要求**：sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）。在低于此版本的内核上，bot会生成wrapper并降级到 Landlock ABI v4。若连v4也无法满足，则沙箱无法启动。降级只削弱防进程逃逸，文件系统隔离仍可用。
+
+### Playwright 渲染服务
+
+图片渲染基于 [nonebot-plugin-htmlrender](https://github.com/kexue-z/nonebot-plugin-htmlrender) 0.8+。默认配置通过 WebSocket 连接**独立运行**的 Playwright server，浏览器生命周期与Bot进程解耦：Bot重启或退出只断开连接，不会关闭浏览器。
+
+首次使用需先安装浏览器：
+
+```bash
+uv run playwright install --with-deps chromium
+```
+
+先于Bot启动渲染服务：
+
+```bash
+uv run playwright run-server --port 39211
+```
+
+看到 `Listening on ws://127.0.0.1:39211/` 即就绪，对应 `config.yaml` 中的连接配置：
+
+```yaml
+render:
+  provider: playwright
+  startup: probe
+  provider_config:
+    engine: chromium
+    connect_ws:
+      endpoint: ws://127.0.0.1:39211/
+```
+
+注意事项：
+
+- server与Bot须使用同一venv；跨机器部署时两端版本差过大会被 WS 版本门禁拒绝连接；
+- `render_template` 读取的模板目录需列入 `render.resources.local_access.allowed_paths`（默认已放行 `config` 目录）；
+- 长期运行建议用 systemd 等方式托管 server 进程；
+- 若希望浏览器跟随Bot进程启动/退出（本地模式），删除 `provider_config` 中的 `connect_ws` 与 `skip_browser_install` 即可。
 
 ### 配置
 

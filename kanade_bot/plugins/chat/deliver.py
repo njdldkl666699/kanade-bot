@@ -20,7 +20,7 @@ from kanade_bot.utils.session import SessionInfo
 from .memes import get_memes
 
 require("nonebot_plugin_htmlrender")
-from nonebot_plugin_htmlrender import md_to_pic
+from nonebot_plugin_htmlrender import render_markdown
 
 type SendFunc = Callable[[OneBotMessage | MessageSegment | str], Awaitable[None]]
 """单条消息发送函数：接收完整消息，负责投递到目标"""
@@ -156,7 +156,7 @@ async def send_segments(
             and isinstance(m := messages[0], str)
             and content_format == "markdown"
         ):
-            message = MessageSegment.image(await md_to_pic(m))
+            message = MessageSegment.image(bytes(await render_markdown(m)))
             if reply is not None:
                 message += reply
             await send(message)
