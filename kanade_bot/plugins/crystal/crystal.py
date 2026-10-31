@@ -15,6 +15,25 @@ def increment_crystal(platform: PlatformType, user_id: str, crystal: int) -> Non
     crystal_data_writer.mark_dirty()
 
 
+async def maybe_init_crystal_user(
+    matcher: type[Matcher] | Matcher,
+    platform: PlatformType,
+    user_id: str,
+) -> None:
+    """如果用户没有水晶数据（新号），自动注册水晶系统，赠送首次使用水晶并发送首次使用消息"""
+    data = crystal_data.instance.get_by_platform(platform)
+    if user_id in data:
+        return
+
+    cfg = crystal_config.instance
+    data[user_id] = cfg.first_use_bonus
+    crystal_data_writer.mark_dirty()
+
+    template = random.choice(cfg.first_use_templates)
+    message = template.format(first_use_bonus=cfg.first_use_bonus)
+    await matcher.send(message)
+
+
 async def increment_crystal_maybe_init(
     matcher: type[Matcher] | Matcher,
     platform: PlatformType,
@@ -22,16 +41,9 @@ async def increment_crystal_maybe_init(
     crystal: int,
 ):
     """增加用户积分，如果用户没有水晶数据，说明是首次使用此功能，赠送水晶并发送首次使用消息"""
+    await maybe_init_crystal_user(matcher, platform, user_id)
+
     data = crystal_data.instance.get_by_platform(platform)
-    if user_id not in data:
-        # 如果用户没有水晶数据，说明是首次使用此功能，赠送水晶并发送首次使用消息
-        cfg = crystal_config.instance
-        data[user_id] = cfg.first_use_bonus
-
-        template = random.choice(cfg.first_use_templates)
-        message = template.format(first_use_bonus=cfg.first_use_bonus)
-        await matcher.send(message)
-
     data[user_id] += crystal
     crystal_data_writer.mark_dirty()
 
@@ -58,6 +70,17 @@ def check_user_crystal(
     if consume <= 0:
         return True
     return get_crystal(platform, user_id) >= consume
+
+
+async def check_user_crystal_maybe_init(
+    matcher: type[Matcher] | Matcher,
+    handler_key: HandlerKeyEnum,
+    platform: PlatformType,
+    user_id: str,
+) -> bool:
+    """检查用户水晶是否足够，新号先自动注册水晶系统并赠送首次使用水晶"""
+    await maybe_init_crystal_user(matcher, platform, user_id)
+    return check_user_crystal(handler_key, platform, user_id)
 
 
 def consume_crystal(platform: PlatformType, user_id: str, crystal: int) -> None:

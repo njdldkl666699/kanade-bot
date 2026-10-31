@@ -33,7 +33,11 @@ from ..matcher import chat, chat_monitor
 from ..util import group_id_of, is_banned, make_turn_biller
 
 require("crystal")
-from kanade_bot.plugins.crystal import HandlerKeyEnum, check_user_crystal, finish_fail_consume
+from kanade_bot.plugins.crystal import (
+    HandlerKeyEnum,
+    check_user_crystal_maybe_init,
+    finish_fail_consume,
+)
 
 if cfg.rag.enabled:
     from ..rag import query
@@ -178,7 +182,7 @@ async def handle_chat(bot: Bot, event: OneBotMessageEvent | ConsoleMessageEvent)
     key = HandlerKeyEnum.CHAT
     platform = get_platform_type(event)
     user_id = event.get_user_id()
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(chat, key, platform, user_id):
         await finish_fail_consume(chat, key, platform, user_id)
 
     await send_message_in_chunks(chat, bot, event)

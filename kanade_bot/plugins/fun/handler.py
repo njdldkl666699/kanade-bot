@@ -50,7 +50,7 @@ from .waifu import get_compressed_image, query_lolicon_waifus, random_loli_waifu
 require("crystal")
 from kanade_bot.plugins.crystal import (
     HandlerKeyEnum,
-    check_user_crystal,
+    check_user_crystal_maybe_init,
     finish_fail_consume,
     succeed_consume,
 )
@@ -277,7 +277,7 @@ async def _(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(refresh_waifu, key, platform, user_id):
         await finish_fail_consume(refresh_waifu, key, platform, user_id)
 
     succeed_consume(key, platform, user_id)
@@ -291,7 +291,7 @@ async def _(event: ConsoleMessageEvent, arg_msg: Message = CommandArg()):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(random_waifu, key, platform, user_id):
         await finish_fail_consume(random_waifu, key, platform, user_id)
 
     json_str = arg_msg.extract_plain_text().strip()
@@ -317,7 +317,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent, arg_msg: Message = CommandAr
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(random_waifu, key, platform, user_id):
         await finish_fail_consume(random_waifu, key, platform, user_id)
 
     json_str = arg_msg.extract_plain_text().strip()

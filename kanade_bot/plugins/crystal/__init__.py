@@ -7,12 +7,14 @@ from . import handler as handler
 from .config import Config
 from .crystal import (
     check_user_crystal,
+    check_user_crystal_maybe_init,
     consume_and_increment,
     consume_crystal,
     finish_fail_consume,
     get_crystal,
     increment_crystal,
     increment_crystal_maybe_init,
+    maybe_init_crystal_user,
     succeed_consume,
 )
 from .enum import HandlerKeyEnum
@@ -30,11 +32,13 @@ sub_plugins = nonebot.load_plugins(str(Path(__file__).parent.joinpath("plugins")
 __all__ = [
     "HandlerKeyEnum",
     "check_user_crystal",
+    "check_user_crystal_maybe_init",
     "consume_and_increment",
     "consume_crystal",
     "finish_fail_consume",
     "get_crystal",
     "increment_crystal",
     "increment_crystal_maybe_init",
+    "maybe_init_crystal_user",
     "succeed_consume",
 ]

@@ -31,7 +31,7 @@ from nonebot_plugin_htmlrender import render_markdown
 require("crystal")
 from kanade_bot.plugins.crystal import (
     HandlerKeyEnum,
-    check_user_crystal,
+    check_user_crystal_maybe_init,
     consume_crystal,
     finish_fail_consume,
 )
@@ -110,7 +110,7 @@ async def _(
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(summarize, key, platform, user_id):
         await finish_fail_consume(summarize, key, platform, user_id)
 
     size = arg_msg.extract_plain_text().strip()

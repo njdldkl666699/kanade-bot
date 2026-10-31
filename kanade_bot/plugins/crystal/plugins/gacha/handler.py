@@ -8,7 +8,7 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 
 from kanade_bot.plugins.crystal import (
-    check_user_crystal,
+    check_user_crystal_maybe_init,
     consume_and_increment,
     finish_fail_consume,
 )
@@ -31,7 +31,7 @@ async def _(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(gacha, key, platform, user_id):
         await finish_fail_consume(gacha, key, platform, user_id)
 
     v = gacha_config.instance
@@ -66,7 +66,7 @@ async def _(event: Event):
     platform = get_platform_type(event)
     user_id = event.get_user_id()
 
-    if not check_user_crystal(key, platform, user_id):
+    if not await check_user_crystal_maybe_init(gacha_10, key, platform, user_id):
         await finish_fail_consume(gacha_10, key, platform, user_id)
 
     # 抽十次卡

@@ -5,7 +5,7 @@ from nonebot.adapters.onebot.v11 import Message as OneBotMessage
 from nonebot.adapters.onebot.v11 import MessageSegment as OneBotMessageSegment
 from nonebot.params import CommandArg
 
-from kanade_bot.plugins.crystal import increment_crystal
+from kanade_bot.plugins.crystal import increment_crystal, maybe_init_crystal_user
 from kanade_bot.plugins.crystal.config import crystal_data
 from kanade_bot.utils.common import get_platform_type
 
@@ -118,6 +118,8 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
     user_id = event.get_user_id()
 
     crystal_cost = int(power * cfg.power_crystal_cost)
+    # 新号直接消耗水晶也自动注册水晶系统并赠送首次使用水晶
+    await maybe_init_crystal_user(resume_harvest_power, platform, user_id)
     data = crystal_data.instance.get_by_platform(platform)
     user_crystal = data.get(user_id, 0)
     if user_crystal < crystal_cost:

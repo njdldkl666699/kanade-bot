@@ -35,7 +35,7 @@ async def parse_message_segments(content: str) -> list[MessageSegment]:
     1. 按两个及以上换行拆分，代码块先替换为占位符保护
     2. 还原代码块占位符为原始代码块
     3. `{{表情: 描述}}`引用替换为动画表情消息段（向量检索）
-    4. `[CQ:at,qq=10001000]`替换为at消息段
+    4. `[CQ:at,qq=10001000]`或`@123456`替换为at消息段
     """
     # 用于存储最终的块
     segments: list[MessageSegment] = []
@@ -79,10 +79,11 @@ async def parse_message_segments(content: str) -> list[MessageSegment]:
                 else:
                     logger.warning("未检索到匹配的表情包，丢弃占位符：{{表情: {}}}", desc)
 
-        # 处理@消息段
-        if at_match := re.search(r"\[CQ:at,qq=(\d+)\]", chunk):
+        # 处理@消息段：兼容 `[CQ:at,qq=10001000]` 与 `@123456` 两种写法
+        # 裸@格式限定5-11位数字，避免误吞 `@2x` 这类短数字；
+        if at_match := re.search(r"\[CQ:at,qq=(\d+)\]|[@](\d{5,11})", chunk):
             chunk = chunk.replace(at_match.group(0), "")
-            qq_id = int(at_match.group(1))
+            qq_id = int(at_match.group(1) or at_match.group(2))
             segments.append(MessageSegment.at(qq_id))
 
         # 处理后的文本块，如果不为空，则添加为文本消息段

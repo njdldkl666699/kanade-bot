@@ -59,7 +59,7 @@ from nonebot_plugin_localstore import get_plugin_cache_file
 require("crystal")
 from kanade_bot.plugins.crystal import (
     HandlerKeyEnum,
-    check_user_crystal,
+    check_user_crystal_maybe_init,
     finish_fail_consume,
     succeed_consume,
 )
@@ -305,7 +305,7 @@ async def _(face_msg: OneBotMessage = CommandArg()):
 @image_generation.handle()
 async def _(event: OneBotMessageEvent, arg_msg: Message = CommandArg()):
     kpu = (HandlerKeyEnum.IMAGE_GENERATION, "onebot", event.get_user_id())
-    if not check_user_crystal(*kpu):
+    if not await check_user_crystal_maybe_init(image_generation, *kpu):
         await finish_fail_consume(image_generation, *kpu)
 
     try:
@@ -326,7 +326,7 @@ async def _(
     arg_msg: Message = CommandArg(),
 ):
     kpu = (HandlerKeyEnum.IMAGE_EDIT, "onebot", event.get_user_id())
-    if not check_user_crystal(*kpu):
+    if not await check_user_crystal_maybe_init(image_edit, *kpu):
         await finish_fail_consume(image_edit, *kpu)
 
     try:
@@ -383,7 +383,7 @@ async def _(
     arg_msg: Message = CommandArg(),
 ):
     kpu = (HandlerKeyEnum.VIDEO_GENERATION, "onebot", event.get_user_id())
-    if not check_user_crystal(*kpu):
+    if not await check_user_crystal_maybe_init(video_generation, *kpu):
         await finish_fail_consume(video_generation, *kpu)
 
     try:

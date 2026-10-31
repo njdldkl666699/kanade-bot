@@ -167,7 +167,14 @@ async def _(arg_msg: Message = CommandArg()):
     image = await asyncio.to_thread(render_gallery_thumbnails, name, pic_files)
     if not image:
         await gallery_pictures.finish(f"画廊 {name} 中没有可读取的图片。")
-    await gallery_pictures.finish(OneBotMessageSegment.image(image))
+
+    # 有别名时，同时以文字展示全部别名
+    message = OneBotMessage()
+    aliases = gallery_name_data.instance.name_to_aliases.get(name, [])
+    if aliases:
+        message += f"画廊 {name} 的别名：{'、'.join(aliases)}\n"
+    message += OneBotMessageSegment.image(image)
+    await gallery_pictures.finish(message)
 
 
 @get_picture.handle()
