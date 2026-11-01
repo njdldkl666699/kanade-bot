@@ -106,22 +106,25 @@ async def _(event: Event, message: Message = EventMessage()):
 
     # 仅处理群聊消息
     messages = None
+    user_id: str
     if isinstance(event, ConsolePublicMessageEvent):
         messages = group_message_cache.get_console(event.channel.id)
+        user_id = event.user.id
     elif isinstance(event, OneBotGroupMessageEvent):
         messages = group_message_cache.get_onebot(event.group_id)
+        user_id = str(event.user_id)
     else:
         return
 
     # 比对当前消息和上一条消息
-    last_message = messages[-1] if messages else None
+    last_message = messages[-1][1] if messages else None
     # 如果当前消息和上一条消息不同，则清空记录并添加当前消息
     if not _is_equal_message(message, last_message):
         messages.clear()
-    messages.append(message)  # pyright: ignore[reportArgumentType]
+    messages.append((user_id, message))  # pyright: ignore[reportArgumentType]
 
-    # 如果当前消息和上一条消息相同，并且记录数量达到阈值，则+1消息并清空记录
-    if len(messages) >= threshold:
+    # 仅当连续达到阈值条相同消息，且发送者均为不同用户（n 个不同的人）时，才+1消息并清空记录
+    if len(messages) >= threshold and len({uid for uid, _ in messages}) >= threshold:
         messages.clear()
         await plus_one.send(message)
 

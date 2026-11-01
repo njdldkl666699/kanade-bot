@@ -17,7 +17,7 @@ class ScopedConfig(AttrDocModel):
     ciallo_image_file: str = "宵崎奏Ciallo.webp"
     """Ciallo表情图片名"""
     plus_one_threshold: int = 0
-    """+1功能的触发阈值，单位为条消息，小于等于0表示禁用"""
+    """+1功能的触发阈值，需要连续 n 个不同用户发送相同消息才触发，小于等于0表示禁用"""
     duanzi_list_file: str = "duanzi.json"
     """段子(史)JSON列表文件名"""
     lolicon_proxy: str = "i.yuki.sh"

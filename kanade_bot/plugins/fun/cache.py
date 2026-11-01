@@ -48,19 +48,19 @@ waifu_cache = UserDailyWaifuCache(Path, cfg.cache_file_path)
 
 
 class GroupMessageCache:
-    """群消息缓存，存储群内的消息列表"""
+    """群消息缓存，存储群内的消息列表（含发送者ID）"""
 
     def __init__(self):
-        self._console: dict[str, list[ConsoleMessage]] = {}
-        self._onebot: dict[int, list[OneBotMessage]] = {}
+        self._console: dict[str, list[tuple[str, ConsoleMessage]]] = {}
+        self._onebot: dict[int, list[tuple[str, OneBotMessage]]] = {}
 
-    def get_console(self, group_id: str) -> list[ConsoleMessage]:
+    def get_console(self, group_id: str) -> list[tuple[str, ConsoleMessage]]:
         """获取群消息列表，如果不存在则创建一个空列表"""
         if group_id not in self._console:
             self._console[group_id] = []
         return self._console[group_id]
 
-    def get_onebot(self, group_id: int) -> list[OneBotMessage]:
+    def get_onebot(self, group_id: int) -> list[tuple[str, OneBotMessage]]:
         """获取群消息列表，如果不存在则创建一个空列表"""
         if group_id not in self._onebot:
             self._onebot[group_id] = []
