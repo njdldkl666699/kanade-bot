@@ -33,7 +33,7 @@ from .compaction import (
 )
 from .conv_db import ConvDBRegistry
 from .gate_store import GateHistorySnapshot, GateStore
-from .store import SessionStore
+from .store import SessionStore, prune_dominated_marks
 
 __all__ = [
     "BLOB_REF_PREFIX",
@@ -63,6 +63,7 @@ __all__ = [
     "externalize_messages",
     "extract_summary",
     "persist_run",
+    "prune_dominated_marks",
     "rehydrate_messages",
     "summary_model_settings",
 ]

@@ -18,6 +18,7 @@ from pydantic_ai import (
     SystemPromptPart,
 )
 from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.messages import CompactionPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import ClearToolResults, SummarizingCompaction, TieredCompaction
@@ -26,6 +27,10 @@ from pydantic_ai_harness.compaction import (
     estimate_context_tokens,
     estimate_token_count,
 )
+
+# 摘要 metadata 标记常量：私有模块但带版本号（summary.v1），是 harness 官方
+# 认定摘要的唯一标记；harness 若迁移路径会在升级时以 ImportError 显性暴露
+from pydantic_ai_harness.compaction._summary import SUMMARY_METADATA_KEY
 
 from kanade_bot.utils.session import SessionInfo
 
@@ -173,16 +178,26 @@ def build_summary_mark(params: CompactionConfig, result: list[ModelMessage]) -> 
 
 
 _SUMMARY_PREFIX = "Summary of previous conversation:\n\n"
-"""摘要 Part 的前缀（与 pydantic_ai_harness `_summarizing_compaction` 约定一致）"""
+"""旧版摘要 Part 的前缀（harness ≥0.64 改用 CompactionPart + metadata 标记）"""
 
 
 def extract_summary(messages: list[ModelMessage]) -> str | None:
-    """从压缩后的历史中取出摘要文本（手动压缩命令预览用），无摘要返回 None"""
+    """从压缩后的历史中取出摘要文本（手动压缩命令预览用），无摘要返回 None
+
+    兼容两种形态：新版 `CompactionPart`（metadata 标记，harness ≥0.64）与
+    旧版带前缀的 `SystemPromptPart`（历史库已落盘的摘要快照）。
+    """
     for msg in messages:
         if not isinstance(msg, ModelRequest):
             continue
         for part in msg.parts:
-            if isinstance(part, SystemPromptPart):
+            if (
+                isinstance(part, CompactionPart)
+                and part.metadata is not None
+                and part.metadata.get(SUMMARY_METADATA_KEY) is True
+            ):
+                return str(part.content).strip() or None
+            if isinstance(part, SystemPromptPart) and part.content.startswith(_SUMMARY_PREFIX):
                 text = part.content.removeprefix(_SUMMARY_PREFIX)
                 return text.strip() or None
     return None

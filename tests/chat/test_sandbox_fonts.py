@@ -143,6 +143,7 @@ def _load_manager_module():
         build_compaction_capability=lambda *a, **k: _Obj(),
         build_summary=lambda *a, **k: _Obj(),
         build_summary_mark=lambda *a, **k: _Obj(),
+        estimate_post_compaction_tokens=lambda *a, **k: 0,
         extract_summary=lambda *a, **k: None,
         compact_between_turns=_noop,
         persist_run=_noop,

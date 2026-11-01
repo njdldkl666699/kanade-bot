@@ -82,18 +82,39 @@ $kanade-blob:{sha256(media_type + \0 + data)}:{media_type}
 
 `rollback` 删除消息行后其引用的 blobs 成为孤儿，不追踪（来源少、量小）；`clear`（会话 reset）全量清空 blobs 表。
 
-## 4. restore 缓存
+## 4. restore 缓存与快路径
 
-`restore`（全量 load + marks 重放）的结果缓存在会话库实例（`_ConvDB`）上：
+`restore` 的结果缓存在会话库实例（`_ConvDB`）上：
 
 - **缓存形态是占位形态**（不含图片 bytes），内存占用约为真实形态的 1/3；命中后经 blob LRU 还原
 - **键为压缩参数指纹**：`params.fingerprint()` 不匹配不命中，防止同实例异参数读到过期结果
 - **写路径失效**：`append` / `rollback` / `add_compaction_mark` / `clear_marks` / `clear` 后置空。所有写路径都在本类内，进程内强一致（bot 单进程运行，无跨进程写）
 - **blob LRU**：每会话 128MB 预算，热点图片常驻内存、冷图淘汰；重启自然冷缓存
 
+### 快路径：被支配 mark 剪枝 + 前缀跳读（v2.1）
+
+缓存未命中时不再全量加载，而是（`store.py::prune_dominated_marks` / `_replay_pruned`）：
+
+1. **先剪枝再重放**：边界为 B 的摘要档 mark 支配它之前边界 ≤ B 的全部 marks
+   （摘要重放直接采用存储快照、完全忽略输入，被支配 marks 的产物必然被整体替换）。
+   典型链 `[clear@b, sum@b, sum@b2, …]` 全部坍缩为最后一条摘要。
+   剪枝是纯读路径优化，不改库（rollback 语义不变）；clear 档输出参与后续决策，不支配任何 mark
+2. **漂移检测只覆盖幸存 marks**：被支配 mark 的过期指纹不参与漂移判定，
+   也不得触发丢弃健康摘要的重建（413 事故教训：死 mark 指纹漂移 → `clear_marks`
+   连健康摘要一起删 → 全量复活）
+3. **前缀跳读**：首条幸存 mark 为摘要档时，其覆盖前缀的消息行完全不读取
+   （`WHERE seq > cut`）；marks 的 `result` 懒还原（仅幸存者需要）
+4. **行↔消息 1:1 假设**：快路径切片要求每行 payload 恰好一条消息、mark 边界单调
+   （写路径必然满足）；旧数据破坏假设时抛 `_LegacyLayoutError` 自动回退 v2 保守全量重放
+
 ### 关键决策：marks 重放始终在真实形态上执行
 
-缓存可以存占位形态，但**重放必须用真实消息**。原因：`ClearToolResults` 等策略内部依赖 token 估算做清理决策，占位形态会让估算严重失真（base64 巨串 → 几十字节），重放结果与在线压缩时的决策分歧，破坏「恢复历史 == 关闭前发送内容」这一核心不变量。
+缓存与快路径加载可以存占位形态，但**参与策略决策的消息必须是真实形态**：
+clear 段在进入 `apply_strategy` 前经 blob LRU 还原，摘要快照在采用前还原。
+原因：`ClearToolResults` 等策略内部依赖 token 估算做清理决策，占位形态会使估算
+严重失真（base64 巨串 → 几十字节），重放结果与在线压缩时的决策分歧，破坏
+「恢复历史 == 关闭前发送内容」这一核心不变量。被支配前缀与被摘要档丢弃的
+segment 永不参与决策，保持占位形态（甚至不加载）是安全的。
 
 ## 5. 消息指纹
 
@@ -104,11 +125,14 @@ $kanade-blob:{sha256(media_type + \0 + data)}:{media_type}
 - `persist_run`：run 结束后补写压缩前消息 → 记 mark（`up_to_seq` = 补写后行数-1）→ 追加压缩后尾部消息
 - `restore`：按 `up_to_seq` 分段重放/替换并拼回尾部，重建结果与最后一次请求发送的内容一致
 - 对齐使用内容级公共前缀（`repair_messages` 可能改写历史，位置切片会错位）
-- 参数漂移：marks 记录的指纹与当前参数不一致时，丢弃旧 marks 并按新参数从全量重放。
-  指纹仅覆盖重放相关字段（`trigger_fraction`/`keep_pairs`/`context_window`，
-  见 `REPLAY_RELEVANT_FIELDS`），生成期字段变更或 schema 演进不触发漂移
+- 参数漂移：**幸存**（剪枝后参与重放的）marks 指纹与当前参数不一致时，丢弃旧 marks
+  并按新参数从全量重放。指纹仅覆盖重放相关字段（`trigger_fraction`/`keep_pairs`/
+  `context_window`，见 `REPLAY_RELEVANT_FIELDS`），生成期字段变更或 schema 演进不触发漂移；
+  被支配 marks 的指纹不参与判定（v2.1，见 §4）
 
-## 7. 实测数据（v6.0.3，本地 81MB 生产副本）
+## 7. 实测数据
+
+v6.0.3（本地 81MB 生产副本）：
 
 | 指标 | v1（单库内嵌 base64） | v2 |
 |---|---|---|
@@ -117,7 +141,20 @@ $kanade-blob:{sha256(media_type + \0 + data)}:{media_type}
 | 压缩指纹 | 全量 JSON dump（含 base64） | blob 标记形态（文本量级） |
 | 跨会话写 | 共享单库 WAL 写锁 | 各自独立库 |
 
+v2.1（175.8MB 生产副本，2032 行 / 133 blobs 122.9MB / 4 marks，冷 restore）：
+
+| 指标 | v2 | v2.1（剪枝+前缀跳读） |
+|---|---|---|
+| restore 耗时 | 14.4s | **0.3s** |
+| Python 稳态增量 | +128.9MB（含 LRU 117MB 全量图） | **+31.6MB**（LRU 仅尾部 15 图） |
+| Python 阶段峰值 | 357.6MB | **167.2MB** |
+| RSS 峰值增量 | +371.5MB | **+159.9MB** |
+| 恢复结果指纹 | 基准 | **逐字节一致**（真库回归验证） |
+
 ## 8. 历史
 
 - v6.0.3 之前：所有会话共用 `data/chat/agent_sessions.sqlite3`（含 `conv_id` 列），图片以 base64 内嵌消息 JSON
 - v6.0.3：切换为分库 + 图片外置；旧库在启动时自动迁移后归档为 `.migrated.bak`。生产迁移已完成，迁移代码已移除
+- v2.1（2026-11-01）：restore 读路径优化——被支配 mark 剪枝（先于漂移检测）、
+  被支配前缀跳读、marks result 懒还原、游标迭代；等价性由
+  `tests/chat/test_pai_agent.py::PrunedReplayTest`（v2 全量重放基准）守卫

@@ -837,6 +837,179 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         )
 
 
+# ===== 读路径优化：被支配 mark 剪枝 + 前缀跳读（等价性守卫） =====
+
+
+class PrunedReplayTest(unittest.IsolatedAsyncioTestCase):
+    """剪枝与前缀跳读：restore 输出必须与 v2 全量重放逐字节等价
+
+    基准 `_legacy_replay` 是 v2 的原重放循环（未剪枝、全量实体加载）。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    async def _legacy_replay(self, conv_id: str) -> list[ModelMessage]:
+        history = await self.store.load(conv_id)
+        marks = await self.store.load_compaction_marks(conv_id)
+        acc, covered = [], -1
+        for mark in marks:
+            boundary = mark.up_to_seq if mark.up_to_seq >= 0 else len(history) - 1
+            acc = await compaction_mod.apply_strategy(
+                [*acc, *history[covered + 1 : boundary + 1]], mark
+            )
+            covered = boundary
+        return [*acc, *history[covered + 1 :]]
+
+    def _sum_mark(
+        self, snapshot: list[ModelMessage], up_to_seq: int
+    ) -> compaction_mod.CompactionMark:
+        mark = compaction_mod.build_summary_mark(TEST_PARAMS, snapshot)
+        mark.up_to_seq = up_to_seq
+        return mark
+
+    def _clear_mark(self, up_to_seq: int) -> compaction_mod.CompactionMark:
+        mark = compaction_mod.build_clear_mark(TEST_PARAMS)
+        mark.up_to_seq = up_to_seq
+        return mark
+
+    def test_prune_rules(self):
+        """支配规则：同边界/更小边界被摘要档收编；clear 档不支配任何 mark"""
+        from kanade_bot.plugins.chat.agent.history import prune_dominated_marks
+
+        # applied_at 是时间戳，dataclass 不等；比较 (strategy, up_to_seq) 投影
+        def ids(marks):
+            return [(m.strategy, m.up_to_seq) for m in marks]
+
+        s = lambda b: self._sum_mark(make_history(1), b)
+        c = lambda b: self._clear_mark(b)
+
+        # 生产 DB 形态：clear 与 summarizing 同边界 → clear 被支配
+        self.assertEqual(ids(prune_dominated_marks([c(10), s(10)])), [("summarizing", 10)])
+        # 级联支配：更早的全部被最后一条大边界摘要收编
+        self.assertEqual(
+            ids(prune_dominated_marks([c(5), s(5), s(8), s(10)])), [("summarizing", 10)]
+        )
+        # clear 输出参与后续决策：摘要档之后的 clear 幸存
+        self.assertEqual(
+            ids(prune_dominated_marks([s(5), c(8)])),
+            [("summarizing", 5), ("clear_tool_results", 8)],
+        )
+        # 无摘要档：全保留
+        self.assertEqual(
+            ids(prune_dominated_marks([c(5), c(8)])),
+            [("clear_tool_results", 5), ("clear_tool_results", 8)],
+        )
+        # -1（覆盖全部）支配之前一切
+        self.assertEqual(ids(prune_dominated_marks([c(5), s(-1)])), [("summarizing", -1)])
+
+    async def test_restore_equals_legacy_on_dominated_chain(self):
+        """被支配链（生产形态）恢复 == 最后快照 + mark 之后的消息 == v2 全量重放"""
+        await self.store.append("c1", make_history(4))  # seq 0..11
+        snapshot1, snapshot2 = make_history(1, "s1"), make_history(1, "s2")
+        await self.store.add_compaction_mark("c1", self._clear_mark(11))
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot1, 11))
+        await self.store.append("c1", make_history(1, "mid"))  # seq 12..14
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot2, 14))
+        later = make_history(2, "later")  # seq 15..20
+        await self.store.append("c1", later)
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp([*snapshot2, *later]), "应等于最后快照 + 尾部")
+        self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")), "与 v2 全量重放等价")
+
+    async def test_drift_of_dominated_mark_not_destructive(self):
+        """决策点①回归：被支配 mark 的过期指纹不触发漂移，健康摘要不被丢弃"""
+        await self.store.append("c1", make_history(4))  # seq 0..11
+        stale = CompactionParams(keep_pairs=TEST_PARAMS.keep_pairs + 5)
+        drifted_clear = compaction_mod.build_clear_mark(stale)  # 过期指纹
+        drifted_clear.up_to_seq = 11
+        await self.store.add_compaction_mark("c1", drifted_clear)  # 将被支配
+        snapshot = make_history(1, "summary")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, 11))
+        later = make_history(1, "later")  # seq 12..14
+        await self.store.append("c1", later)
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp([*snapshot, *later]), "摘要应保留")
+        marks = await self.store.load_compaction_marks("c1")
+        self.assertEqual(len(marks), 2, "不应触发 clear_marks 连健康 mark 一起删")
+
+    async def test_drift_of_surviving_mark_still_rebaselines(self):
+        """幸存 mark 指纹漂移仍触发丢弃重建（漂移保护对重放参与者不变）"""
+        history = make_history(4)
+        await self.store.append("c1", history)
+        stale = CompactionParams(keep_pairs=TEST_PARAMS.keep_pairs + 5)
+        mark = compaction_mod.build_clear_mark(stale)  # 无摘要档 → 幸存
+        mark.up_to_seq = len(history) - 1
+        await self.store.add_compaction_mark("c1", mark)
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        expected = await compaction_mod.apply_strategy(
+            history, compaction_mod.build_clear_mark(TEST_PARAMS)
+        )
+        self.assertEqual(fp(restored), fp(expected))
+        self.assertEqual(len(await self.store.load_compaction_marks("c1")), 1, "应落新 mark")
+
+    async def test_prefix_blobs_not_fetched(self):
+        """被支配前缀的消息行不读取：其图片 blob 不进入 LRU（内存守卫）"""
+        await self.store.append("c1", make_image_history("prefix"))  # seq 0..1
+        snapshot = make_history(1, "summary")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, up_to_seq=1))
+        tail = make_image_history("tail")  # seq 2..3
+        await self.store.append("c1", tail)
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        values = list(self.store.registry.get("c1")._blob_cache.values())
+        self.assertFalse(any(v.endswith(b"prefix") for v in values), "被支配前缀的图不应进入 LRU")
+        self.assertTrue(any(v.endswith(b"tail") for v in values), "尾部图片应已还原")
+        self.assertEqual(fp(restored), fp([*snapshot, *tail]))
+
+    async def test_clear_after_summary_replays_segment(self):
+        """summarizing 之后的 clear mark：其覆盖段以真实形态参与决策"""
+        await self.store.append("c1", make_history(4))  # seq 0..11
+        snapshot = make_history(1, "s")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, 11))
+        mid = make_history(2, "mid")  # seq 12..17，含工具返回
+        await self.store.append("c1", mid)
+        await self.store.add_compaction_mark("c1", self._clear_mark(17))
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")))
+        self.assertLess(_uncleared(restored), _uncleared([*snapshot, *mid]), "clear 段应被清理")
+
+    async def test_multi_message_row_falls_back(self):
+        """一行多消息的旧布局：快路径回退保守全量重放，输出仍与基准一致"""
+        db_path = Path(self.tmp.name) / "sessions" / "c1.sqlite3"
+        history = make_history(4)
+        await self.store.append("c1", history)
+        snapshot = make_history(1, "s")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, 11))
+        await self.store.append("c1", make_history(1, "later"))
+
+        # 把 seq=0/1 两行合成一行双消息（旧布局形态），删掉多余行
+        two = ModelMessagesTypeAdapter.dump_json([history[0], history[1]])
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("UPDATE messages SET payload = ? WHERE seq = 0", (two,))
+            conn.execute("DELETE FROM messages WHERE seq = 1")
+            conn.commit()
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")), "回退路径等价")
+
+    async def test_non_monotonic_boundaries_fall_back(self):
+        """mark 边界非单调（写路径不可能产生）：保守回退，输出仍与基准一致"""
+        await self.store.append("c1", make_history(4))
+        snapshot = make_history(1, "s")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, 11))
+        await self.store.add_compaction_mark("c1", self._clear_mark(5))  # 边界回退
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")))
+
+
 # ===== 主模型窗口解析（压缩阈值固化） =====
 
 
