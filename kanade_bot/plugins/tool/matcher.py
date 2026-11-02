@@ -64,6 +64,8 @@ remove_a_schedule = on_command(
 )
 register_matcher(remove_a_schedule, "移除定时任务")
 
+### QQ功能
+
 set_emoji_like = on_command(
     "回应表情",
     aliases={"贴", "回复表情"},
@@ -117,6 +119,16 @@ send_face = on_command(
     block=True,
 )
 register_matcher(send_face, "发送表情")
+
+send_face_from_msg_emoji_likes = on_command(
+    "发送贴的表情",
+    aliases={"send_face_from_msg_emoji_likes", "发贴的表情"},
+    priority=2,
+    block=True,
+)
+register_matcher(send_face_from_msg_emoji_likes, "发送贴的表情")
+
+### 图片创作与视频生成
 
 image_generation = on_command(
     "文生图",

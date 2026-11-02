@@ -35,6 +35,21 @@ async def set_msg_emoji_like(
     )
 
 
+async def get_msg_emoji_likes(
+    bot: Bot,
+    message_id: int,
+):
+    """获取一条消息的全部表情回应
+
+    :param message_id: 消息ID
+    :return: 该消息上每个表情回应的编号、数量与用户列表。
+    """
+    return await bot.call_api(
+        "get_msg_emoji_likes",
+        message_id=message_id,
+    )
+
+
 async def send_poke(
     bot: Bot,
     user_id: int | str,

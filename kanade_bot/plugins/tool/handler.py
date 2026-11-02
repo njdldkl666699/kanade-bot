@@ -17,7 +17,7 @@ from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 
 from kanade_bot.utils.common import HTTPX_CLIENT
-from kanade_bot.utils.onebot11 import send_poke, set_msg_emoji_like
+from kanade_bot.utils.onebot11 import get_msg_emoji_likes, send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
 from .config import preset_reaction_cfg
@@ -33,6 +33,7 @@ from .matcher import (
     remove_a_schedule,
     send_a_poke,
     send_face,
+    send_face_from_msg_emoji_likes,
     send_like,
     set_emoji_like,
     set_this_emoji_like,
@@ -300,6 +301,23 @@ async def _(face_msg: OneBotMessage = CommandArg()):
         await send_face.finish("请提供一个有效的表情ID")
 
     await send_face.finish(MessageSegment.face(face_id))
+
+
+@send_face_from_msg_emoji_likes.handle()
+async def _(bot: OneBot, event: OneBotMessageEvent):
+    if not (reply := event.reply):
+        await send_face_from_msg_emoji_likes.finish("请引用一条消息")
+
+    r = await get_msg_emoji_likes(bot, reply.message_id)
+    if not r or not (data := r["data"]):
+        await send_face_from_msg_emoji_likes.finish("该消息没有表情回应")
+
+    message = OneBotMessage()
+    for emoji_data in data:
+        emoji_id = int(emoji_data["emoji_id"])
+        message.append(MessageSegment.face(emoji_id))
+
+    await send_face_from_msg_emoji_likes.finish(message)
 
 
 @image_generation.handle()
