@@ -309,11 +309,11 @@ async def _(bot: OneBot, event: OneBotMessageEvent):
         await send_face_from_msg_emoji_likes.finish("请引用一条消息")
 
     r = await get_msg_emoji_likes(bot, reply.message_id)
-    if not r or not (data := r["data"]):
+    if not r:
         await send_face_from_msg_emoji_likes.finish("该消息没有表情回应")
 
     message = OneBotMessage()
-    for emoji_data in data:
+    for emoji_data in r:
         emoji_id = int(emoji_data["emoji_id"])
         message.append(MessageSegment.face(emoji_id))
 
