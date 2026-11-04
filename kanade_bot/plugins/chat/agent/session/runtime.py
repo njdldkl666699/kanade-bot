@@ -142,7 +142,6 @@ class ChatSession:
         rag_docs: list[str] | None = None,
         reply_text: str | None = None,
         images: list[ImageInput] | None = None,
-        timeout: float = 60,
         on_usage: UsageCallback | None = None,
         system_notification: str | None = None,
         require_buffer: bool = False,
@@ -157,7 +156,6 @@ class ChatSession:
 
         prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息
         images: 图片附件列表
-        timeout: 相邻流事件间的间隔超时，超时后取消运行并抛出TimeoutError
         on_usage: 轮次正常结束时回调；异常或中途取消时不回调
         system_notification: 显式注入本轮的系统通知；不消费排队通知槽位，且单独视为可运行内容
         require_buffer: 取得会话锁后复检缓冲区，为空则直接放弃本轮（空生成器）。
@@ -254,18 +252,9 @@ class ChatSession:
                                 iterator = stream.__aiter__()
                                 while True:
                                     try:
-                                        event = await asyncio.wait_for(
-                                            iterator.__anext__(), timeout=timeout
-                                        )
+                                        event = await iterator.__anext__()
                                     except StopAsyncIteration:
                                         break
-                                    except TimeoutError:
-                                        # 相邻事件间隔超时：取消运行
-                                        # 中断在途 LLM 请求与工具循环，进程内取消即真正停止
-                                        stream.cancel()
-                                        raise TimeoutError(
-                                            f"Timeout after {timeout}s waiting for stream events"
-                                        )
 
                                     if isinstance(event, PartEndEvent):
                                         part = event.part
@@ -274,6 +263,15 @@ class ChatSession:
                                             yield part.content
                                     elif isinstance(event, FunctionToolCallEvent):
                                         tool_called = True
+                            except (Exception, asyncio.CancelledError, GeneratorExit):
+                                # 异常/取消终止的运行同样落库：已完成的消息（含工具
+                                # 往返）保留在会话历史，下一轮用户请求可接着上次
+                                # 的结果继续；悬空的工具调用由 pydantic-ai 在下一轮
+                                # 请求前自动补全合成返回。
+                                aborted = await self._persist_aborted_run(stream, base=history)
+                                if aborted is not None:
+                                    history = aborted
+                                raise
                             finally:
                                 self.current_stream = None
 
@@ -362,6 +360,41 @@ class ChatSession:
                 self.buffer.clear()
                 if (callback := self.on_buffer_consumed) is not None:
                     callback(session_id)
+
+    async def _persist_aborted_run(
+        self,
+        stream: AgentRunEvents[str],
+        *,
+        base: list[ModelMessage],
+    ) -> list[ModelMessage] | None:
+        """异常/取消终止的运行落库：拆除在途请求后持久化已完成的消息"""
+        mgr = self._mgr
+        await stream.aclose()
+        try:
+            run = list(stream.all_messages())
+            run_new = stream.new_messages()
+        except Exception as e:
+            # 首个事件前即终止：运行未启动，无可落库内容
+            logger.debug(f"会话{self.session_id}异常终止的运行未产生消息：{e}")
+            return None
+        try:
+            await persist_run(
+                mgr.store,
+                self.session_id,
+                mgr.compaction,
+                base=base,
+                all_messages=run,
+                new_messages=run_new,
+            )
+        except Exception as e:
+            logger.warning(f"会话{self.session_id}异常终止运行的持久化失败：{e}")
+            return None
+        if run_new:
+            logger.warning(
+                f"会话{self.session_id}运行异常终止，已落库{len(run_new)}条新增消息，"
+                f"下一轮请求可接着继续"
+            )
+        return run
 
     # ===== 管理操作 =====
 

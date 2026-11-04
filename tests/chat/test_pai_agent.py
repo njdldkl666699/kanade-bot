@@ -1761,6 +1761,190 @@ class ProactiveBufferGuardTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(on_content_records, ["主动接话"])
 
 
+# ===== 异常/取消终止的运行落库（2026-11-04 移除应用层流超时改造） =====
+
+
+class FailingScriptedModel(ScriptedModel):
+    """指定序号（1-based）的流式请求在首个事件处抛异常，模拟网络错误中断"""
+
+    def __init__(self, script: list[ModelResponse], fail_on: int):
+        super().__init__(script)
+        self.fail_on = fail_on
+
+    def stream(self, messages, info: AgentInfo):
+        gen = super().stream(messages, info)  # 推进脚本计数并记录请求
+        if self.index == self.fail_on:
+
+            async def fail():
+                raise RuntimeError("模拟网络故障")
+                yield {}  # 不可达：仅为使函数成为异步生成器
+
+            return fail()
+
+        return gen
+
+
+class AbortedRunPersistenceTest(unittest.IsolatedAsyncioTestCase):
+    """异常/取消终止的运行同样落库：已完成的消息保留，下一轮接着继续
+
+    生产语义：轮次不再有应用层超时（首字由网络层 read timeout 兜底），但
+    网络错误、手动中断等异常终止仍会发生——已完成的消息必须落库，下一轮
+    用户请求从断点继续，而不是整轮丢弃。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    def _make_session(
+        self, model: FunctionModel, *, tool_started: asyncio.Event | None = None
+    ) -> ChatSession:
+        """与 ProactiveBufferGuardTest 同构的最小 ChatSession，附带慢工具"""
+
+        recorder = compaction_mod.build_compaction_capability(NOOP_PARAMS)
+        agent = Agent(model, capabilities=[recorder])
+
+        @agent.tool_plain
+        async def slow(i: int) -> str:
+            """慢工具：进入即报告，供中断测试制造「执行中」窗口"""
+            if tool_started is not None:
+                tool_started.set()
+            await asyncio.sleep(0.05)
+            return f"slow-out-{i}"
+
+        mgr = SimpleNamespace(
+            store=self.store,
+            agent=agent,
+            compaction=recorder,
+            compaction_params=NOOP_PARAMS,
+            model_settings={},
+            output_upper_tokens=None,
+            mcp_toolsets=[],
+            sandbox_manager=None,
+            memory_store=None,
+        )
+        return ChatSession("c1", manager=mgr)
+
+    async def _turn(self, session: ChatSession, prompt: str) -> list[str]:
+        out: list[str] = []
+        async with aclosing(
+            session.send_and_wait(STATS_SESSION_INFO, prompt, bot_id="b1")
+        ) as contents:
+            async for content in contents:
+                out.append(content)
+        return out
+
+    async def test_model_error_mid_run_persists_partial_history(self):
+        """第2次模型请求网络错误：已完成的工具往返落库，下一轮从其后继续"""
+        scripted = FailingScriptedModel(
+            [resp_tool("slow", {"i": 1}, "n1"), resp_text("最终回答")], fail_on=2
+        )
+        session = self._make_session(FunctionModel(scripted, stream_function=scripted.stream))
+
+        with self.assertRaises(RuntimeError):
+            await self._turn(session, "帮我查一下")
+
+        # 已完成部分落库：用户消息 + 工具调用响应 + 工具返回；失败请求由框架
+        # 追加空 ModelResponse(state='interrupted') 标记断点 frontier
+        self.assertEqual(await self.store.count("c1"), 4)
+        msgs = await self.store.restore("c1", params=NOOP_PARAMS)
+        self.assertIsInstance(msgs[-2], ModelRequest)
+        self.assertIsInstance(msgs[-2].parts[-1], ToolReturnPart)
+        self.assertIsInstance(msgs[-1], ModelResponse)
+        self.assertEqual(msgs[-1].state, "interrupted")
+
+        # 下一轮正常续跑：上轮落库的消息随历史发给模型，产出接着继续
+        out = await self._turn(session, "然后呢")
+        self.assertIn("最终回答", "".join(out))
+        flat = [p for m in scripted.sent_messages[-1] for p in getattr(m, "parts", [])]
+        self.assertTrue(
+            any(isinstance(p, UserPromptPart) and "帮我查一下" in str(p.content) for p in flat),
+            "上轮用户消息应出现在续跑请求历史中",
+        )
+        self.assertTrue(
+            any(isinstance(p, ToolReturnPart) and p.tool_call_id == "n1" for p in flat),
+            "上轮工具返回应出现在续跑请求历史中",
+        )
+
+    async def test_interrupt_mid_tool_persists_dangling_call(self):
+        """工具执行中手动中断：悬空调用与 interrupted 标记落库，下一轮自动补全合成返回"""
+        from pydantic_ai.exceptions import RunCancelled
+        from pydantic_ai.messages import SYNTHESIZED_TOOL_RETURN_METADATA_KEY
+
+        scripted = ScriptedModel([resp_tool("slow", {"i": 1}, "n1"), resp_text("续跑回答")])
+        tool_started = asyncio.Event()
+        session = self._make_session(
+            FunctionModel(scripted, stream_function=scripted.stream),
+            tool_started=tool_started,
+        )
+
+        task = asyncio.create_task(self._turn(session, "帮我查一下"))
+        await asyncio.wait_for(tool_started.wait(), timeout=5)
+        self.assertTrue(session.interrupt())
+        with self.assertRaises(RunCancelled):
+            await task
+
+        # 已落库：用户消息 + 工具调用响应 + interrupted 标记请求（工具未完成）
+        self.assertEqual(await self.store.count("c1"), 3)
+        msgs = await self.store.restore("c1", params=NOOP_PARAMS)
+        self.assertEqual(msgs[-1].state, "interrupted")
+
+        # 下一轮：请求发出前悬空调用被自动补全合成返回，随后正常产出
+        out = await self._turn(session, "然后呢")
+        self.assertIn("续跑回答", "".join(out))
+        synth = [
+            p
+            for m in scripted.sent_messages[-1]
+            for p in getattr(m, "parts", [])
+            if isinstance(p, ToolReturnPart)
+            and p.metadata.get(SYNTHESIZED_TOOL_RETURN_METADATA_KEY)
+        ]
+        self.assertEqual(len(synth), 1, "悬空调用 n1 应被补全合成返回")
+        self.assertEqual(synth[0].tool_call_id, "n1")
+
+    async def test_consumer_abort_persists_partial_run(self):
+        """消费方中途放弃（GeneratorExit）：已开始的部分照样落库，下一轮正常继续"""
+        scripted = ScriptedModel([resp_text("第一段"), resp_text("第二段")])
+        session = self._make_session(FunctionModel(scripted, stream_function=scripted.stream))
+
+        # 收到首条产出即放弃（生产对应：平台发送失败后 aclosing 关闭生成器）
+        gen = session.send_and_wait(STATS_SESSION_INFO, "讲个故事", bot_id="b1")
+        async with aclosing(gen):
+            async for content in gen:
+                self.assertEqual(content, "第一段")
+                break
+
+        # 用户消息必然已落库；首条响应是否入库取决于取消时刻（框架只保留
+        # 已完成部分），故不精确断言条数
+        self.assertGreaterEqual(await self.store.count("c1"), 1)
+
+        # 下一轮正常继续：未消费的脚本后续照常产出，不重复不丢失
+        out = await self._turn(session, "然后呢")
+        self.assertEqual("".join(out), "第二段")
+
+    async def test_external_cancel_persists_partial_run(self):
+        """外部任务取消（CancelledError，如进程关闭）：工具执行中取消同样落库可续跑"""
+        scripted = ScriptedModel([resp_tool("slow", {"i": 1}, "n1"), resp_text("续跑回答")])
+        tool_started = asyncio.Event()
+        session = self._make_session(
+            FunctionModel(scripted, stream_function=scripted.stream),
+            tool_started=tool_started,
+        )
+
+        task = asyncio.create_task(self._turn(session, "帮我查一下"))
+        await asyncio.wait_for(tool_started.wait(), timeout=5)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        # 取消展开后框架补记 interrupted 标记，快照照常落库
+        self.assertGreaterEqual(await self.store.count("c1"), 2)
+
+        out = await self._turn(session, "然后呢")
+        self.assertIn("续跑回答", "".join(out))
+
+
 # ===== 决策历史每日清空（2026-10-27） =====
 
 

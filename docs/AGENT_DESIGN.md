@@ -57,7 +57,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
   → 分段发送回平台；on_usage 回调计费
 ```
 
-流式消费的三个关键点：产出粒度是 `PartEndEvent`（整条助手消息，token 级 delta 不外发）；watchdog 包在 `__anext__` 上，相邻事件超时即 `cancel()` 并抛 `TimeoutError`；取消/异常路径同样保证消息缓冲区清空与会话锁释放（调用方需 `aclosing` 包裹生成器）。
+流式消费的三个关键点：产出粒度是 `PartEndEvent`（整条助手消息，token 级 delta 不外发）；无应用层超时——模型可长时间推理或执行工具而不输出事件，首字与流内间隔由网络层（HTTP client 的 read timeout）兕底；异常/取消终止的运行同样落库已完成的消息（悬空的工具调用由 pydantic-ai 在下一轮请求前自动补全合成返回），且任何退出路径都保证消息缓冲区清空与会话锁释放（调用方需 `aclosing` 包裹生成器）。
 
 ## 4. 核心设计决策
 
@@ -78,7 +78,8 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 
 - **空响应重发**：整轮无文本且无工具调用时，按消息空间基准（`baseline`）与 DB 行基准（`db_floor`）双重回退后重发，最多 2 次；耗尽抛 `EmptyResponseError`（本轮已回退，不污染历史）
 - **截断续写**：`finish_reason == "length"` 时以一句续写提示继续，单轮最多 5 次；续写历史已入库，回退点不受影响
-- **超时即真停**：流事件间隔超时触发进程内 `cancel()`，在途 LLM 请求与工具循环一并中断，无僵尸 turn
+- **无应用层超时**：模型可能长时间推理或执行工具而不输出事件，首字与流内间隔由网络层（HTTP client 的 read timeout）兕底，应用层不对流事件间隔计时
+- **异常终止落库**：网络错误/手动中断等异常终止的运行同样把已完成的消息（含工具往返）落库，下一轮用户请求从断点继续，而非整轮丢弃
 - **用量回调**：仅轮次正常结束时回调 `on_usage`（累计含重发与续写），供计费与统计
 
 ## 6. 子 Agent 与生态

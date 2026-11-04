@@ -353,7 +353,6 @@ async with aclosing(
         session_info,
         "",
         bot_id=bot.self_id,
-        timeout=600,
         system_notification=build_auto_reply_notification(reason),
         require_buffer=True,
     )

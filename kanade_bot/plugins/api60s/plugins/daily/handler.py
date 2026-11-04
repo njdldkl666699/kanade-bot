@@ -8,6 +8,7 @@ from nonebot.params import CommandArg
 
 from kanade_bot.plugins.api60s.client import client
 
+from .cache import daily60s_cache
 from .matcher import ai_news, daily60s, epic, it_news
 
 require("nonebot_plugin_htmlrender")
@@ -25,9 +26,10 @@ async def handle_60s_console(bot: ConsoleBot):
 
 @daily60s.handle()
 async def handle_60s_onebot(bot: OneBot):
-    r = await client.get("/v2/60s", params={"encoding": "image-proxy"})
-    r.raise_for_status()
-    await daily60s.finish(OneBotMessageSegment.image(r.content))
+    image = daily60s_cache.get()
+    if image is None:
+        image = await daily60s_cache.refresh()
+    await daily60s.finish(OneBotMessageSegment.image(image))
 
 
 @ai_news.handle()

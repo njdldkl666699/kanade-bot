@@ -128,7 +128,6 @@ class ChatSessionManager:
         session_info: SessionInfo,
         *,
         bot_id: str,
-        timeout: float,
         on_usage: UsageCallback,
         system_notification: str,
     ) -> AsyncGenerator[str]:
@@ -140,7 +139,6 @@ class ChatSessionManager:
             session_info,
             "",
             bot_id=bot_id,
-            timeout=timeout,
             on_usage=on_usage,
             system_notification=system_notification,
         )

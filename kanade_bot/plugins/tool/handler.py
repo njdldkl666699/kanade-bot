@@ -312,7 +312,7 @@ async def _(bot: OneBot, event: OneBotMessageEvent):
     if not r:
         await send_face_from_msg_emoji_likes.finish("该消息没有表情回应")
 
-    message = OneBotMessage()
+    message = OneBotMessage(" ")  # 加一个空格，防止第一个表情是超级表情仅发第一个
     for emoji_data in r:
         emoji_id = int(emoji_data["emoji_id"])
         message.append(MessageSegment.face(emoji_id))

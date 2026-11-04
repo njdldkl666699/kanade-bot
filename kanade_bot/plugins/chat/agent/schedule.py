@@ -36,9 +36,6 @@ TZ = ZoneInfo("Asia/Shanghai")
 JOB_PREFIX = "chat_scheduled_task"
 """APScheduler任务ID前缀"""
 
-PROACTIVE_RUN_TIMEOUT = 600
-"""主动唤醒运行的流事件间隔超时（秒），与用户消息驱动的一致"""
-
 
 def _now() -> datetime:
     return datetime.now(TZ)
@@ -139,7 +136,6 @@ class SessionWaker(Protocol):
         session_info: SessionInfo,
         *,
         bot_id: str,
-        timeout: float,
         on_usage: UsageCallback,
         system_notification: str,
     ) -> AsyncGenerator[str]: ...
@@ -387,7 +383,6 @@ class ScheduledTaskManager:
             waker(
                 info,
                 bot_id=task.bot_id,
-                timeout=PROACTIVE_RUN_TIMEOUT,
                 on_usage=bill,
                 system_notification=notification,
             )

@@ -117,7 +117,6 @@ async def send_message_in_chunks(
                 rag_docs=rag_docs,
                 reply_text=reply_text,
                 images=attachments,
-                timeout=600,
                 on_usage=bill_usage,
             )
         ) as contents:

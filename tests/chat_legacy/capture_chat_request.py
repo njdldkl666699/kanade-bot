@@ -124,7 +124,6 @@ async def main() -> None:
                 session_info,
                 "你好，请用一两句话介绍一下你自己。",
                 bot_id="10000",
-                timeout=180,
             )
         ) as contents:
             async for content in contents:
