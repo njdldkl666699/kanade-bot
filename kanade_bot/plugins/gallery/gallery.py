@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import cache, lru_cache
 from hashlib import sha256
 from io import BytesIO
+from itertools import combinations, pairwise
 from pathlib import Path
 from threading import RLock
 
@@ -38,6 +39,27 @@ class AddPicturesResult:
             lines.append("如需跳过查重强制添加，请在添加图片命令末尾加上 force 参数。")
         lines.append(f"成功添加 {self.added_count} 张图片到画廊 {gallery_name}。")
         return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class GalleryDuplicatePair:
+    first_path: Path
+    second_path: Path
+    reason: str
+
+
+@dataclass(frozen=True)
+class GallerySelfCheckResult:
+    picture_count: int
+    duplicate_pairs: list[GalleryDuplicatePair]
+
+    def summary(self, gallery_name: str) -> str:
+        if not self.duplicate_pairs:
+            return f"画廊 {gallery_name} 自检完成：共 {self.picture_count} 张图片，未发现重复图片。"
+        return (
+            f"画廊 {gallery_name} 自检完成：共 {self.picture_count} 张图片，"
+            f"发现 {len(self.duplicate_pairs)} 对重复图片。"
+        )
 
 
 @dataclass(frozen=True)
@@ -172,6 +194,62 @@ def find_duplicate_pictures(
         )
 
     return unique_paths, duplicates
+
+
+def _picture_id_sort_key(path: Path) -> tuple[int, int | str]:
+    """图片按ID数值升序排列，非数字文件名的图片排在后面"""
+    stem = path.stem
+    return (0, int(stem)) if stem.isdigit() else (1, stem)
+
+
+def check_gallery_duplicates(name: str) -> GallerySelfCheckResult:
+    """自检画廊内全部图片，返回互相重复的图片对
+
+    文件内容完全一致的图片按组只报告相邻图片对；
+    其余图片两两比较感知哈希，命中阈值的图片对全部报告。
+    """
+    entries = sorted(
+        _gallery_index.hashes_for_gallery(name),
+        key=lambda item: _picture_id_sort_key(item[0]),
+    )
+
+    pairs: list[GalleryDuplicatePair] = []
+    exact_pairs: set[tuple[Path, Path]] = set()
+
+    by_file_hash: dict[str, list[Path]] = {}
+    for path, hashes in entries:
+        by_file_hash.setdefault(hashes.file_hash, []).append(path)
+    for group in by_file_hash.values():
+        if len(group) < 2:
+            continue
+        for first, second in pairwise(group):
+            pairs.append(GalleryDuplicatePair(first, second, "文件完全一致"))
+        exact_pairs.update(combinations(group, 2))
+
+    for (first_path, first_hashes), (second_path, second_hashes) in combinations(entries, 2):
+        if (first_path, second_path) in exact_pairs:
+            continue
+        distances = perceptual_distances(first_hashes, second_hashes)
+        if distances is None:
+            continue
+        similar_hashes = [
+            hash_name
+            for hash_name, distance, threshold in zip(
+                ("dHash", "pHash", "aHash"),
+                distances,
+                (8, 2, 2),
+            )
+            if distance < threshold
+        ]
+        pairs.append(
+            GalleryDuplicatePair(
+                first_path,
+                second_path,
+                f"感知哈希相似：{'、'.join(similar_hashes)}",
+            )
+        )
+
+    return GallerySelfCheckResult(picture_count=len(entries), duplicate_pairs=pairs)
 
 
 HASH_INDEX_FILE_NAME = "image_index_v1.json"
@@ -381,7 +459,7 @@ OVERVIEW_COVER_SIZE = (200, 200)
 OVERVIEW_HEADER_HEIGHT = 58
 OVERVIEW_TEXT_GAP = 6
 
-DUPLICATE_COLUMNS = 2
+DUPLICATE_COLUMNS = 4
 DUPLICATE_THUMBNAIL_SIZE = (180, 135)
 DUPLICATE_CELL_WIDTH = 408
 DUPLICATE_CELL_HEIGHT = 200
@@ -836,8 +914,53 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
     if not duplicates:
         return b""
 
-    columns = min(DUPLICATE_COLUMNS, len(duplicates))
-    rows = (len(duplicates) + columns - 1) // columns
+    return _render_duplicate_pair_cells(
+        title=f"检测到 {len(duplicates)} 张重复图片",
+        subtitle="如需跳过查重，请在添加图片命令末尾加上 force 参数",
+        cells=[
+            (
+                duplicate.candidate_path,
+                f"待添加 #{duplicate.candidate_index}",
+                duplicate.existing_path,
+                f"画廊已有 #{duplicate.existing_path.stem}",
+                duplicate.reason,
+            )
+            for duplicate in duplicates
+        ],
+    )
+
+
+def render_gallery_self_check(
+    name: str,
+    pairs: list[GalleryDuplicatePair],
+) -> bytes:
+    """渲染画廊自检发现的全部重复图片对，左右并列展示"""
+    if not pairs:
+        return b""
+
+    return _render_duplicate_pair_cells(
+        title=f"画廊 {name} 自检：发现 {len(pairs)} 对重复图片",
+        cells=[
+            (
+                pair.first_path,
+                f"图片 #{pair.first_path.stem}",
+                pair.second_path,
+                f"图片 #{pair.second_path.stem}",
+                pair.reason,
+            )
+            for pair in pairs
+        ],
+    )
+
+
+def _render_duplicate_pair_cells(
+    title: str,
+    cells: list[tuple[Path, str, Path, str, str]],
+    subtitle: str = "",
+) -> bytes:
+    """渲染重复图片对比的通用布局，每个单元格左右并列展示两张图片"""
+    columns = min(DUPLICATE_COLUMNS, len(cells))
+    rows = (len(cells) + columns - 1) // columns
     canvas_width = GALLERY_PADDING * 2 + columns * DUPLICATE_CELL_WIDTH
     canvas_height = DUPLICATE_HEADER_HEIGHT + GALLERY_PADDING + rows * DUPLICATE_CELL_HEIGHT
     canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
@@ -847,18 +970,19 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
     detail_font = _load_font(14)
     draw.text(
         (GALLERY_PADDING, GALLERY_PADDING),
-        f"检测到 {len(duplicates)} 张重复图片",
+        title,
         fill="#202124",
         font=title_font,
     )
-    draw.text(
-        (GALLERY_PADDING, GALLERY_PADDING + 32),
-        "如需跳过查重，请在添加图片命令末尾加上 force 参数",
-        fill="#5f6368",
-        font=detail_font,
-    )
+    if subtitle:
+        draw.text(
+            (GALLERY_PADDING, GALLERY_PADDING + 32),
+            subtitle,
+            fill="#5f6368",
+            font=detail_font,
+        )
 
-    for index, duplicate in enumerate(duplicates):
+    for index, (left_path, left_label, right_path, right_label, reason) in enumerate(cells):
         row, column = divmod(index, columns)
         cell_x = GALLERY_PADDING + column * DUPLICATE_CELL_WIDTH
         cell_y = DUPLICATE_HEADER_HEIGHT + row * DUPLICATE_CELL_HEIGHT
@@ -872,18 +996,17 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
         left_x = cell_x + 8
         right_x = cell_x + 220
         image_y = cell_y + 28
-        _paste_comparison_thumbnail(canvas, duplicate.candidate_path, left_x, image_y)
-        _paste_comparison_thumbnail(canvas, duplicate.existing_path, right_x, image_y)
+        _paste_comparison_thumbnail(canvas, left_path, left_x, image_y)
+        _paste_comparison_thumbnail(canvas, right_path, right_x, image_y)
         draw.text(
             (left_x, cell_y + 2),
-            f"待添加 #{duplicate.candidate_index}",
+            left_label,
             fill="#202124",
             font=label_font,
         )
-        existing_id = duplicate.existing_path.stem
         draw.text(
             (right_x, cell_y + 2),
-            f"画廊已有 #{existing_id}",
+            right_label,
             fill="#202124",
             font=label_font,
         )
@@ -895,7 +1018,7 @@ def render_duplicate_comparisons(duplicates: list[DuplicatePicture]) -> bytes:
         )
         draw.text(
             (left_x, image_y + DUPLICATE_THUMBNAIL_SIZE[1] + 5),
-            duplicate.reason,
+            reason,
             fill="#5f6368",
             font=detail_font,
         )

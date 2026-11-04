@@ -19,18 +19,21 @@ from kanade_bot.utils.parse import get_forward_message_events, parse_arg_message
 from .config import cfg, gallery_name_data
 from .gallery import (
     add_pictures,
+    check_gallery_duplicates,
     get_gallery_name,
     get_picture_by_id,
     invalidate_gallery_render_cache,
     remove_gallery_from_index,
     remove_picture_from_index,
     render_gallery_overview,
+    render_gallery_self_check,
     render_gallery_thumbnails,
 )
 from .matcher import (
     add_gallery,
     add_gallery_alias,
     add_picture,
+    check_gallery,
     gallery_pictures,
     get_picture,
     remove_gallery,
@@ -310,22 +313,71 @@ async def _finish_add_pictures(
 @remove_picture.handle()
 async def _(arg_msg: Message = CommandArg()):
     arg_str = arg_msg.extract_plain_text().strip()
-    if not arg_str.isdigit():
+    # 支持空格分隔的多个图片id，如：/删除图片 1 2 3
+    id_args = arg_str.split()
+    if not id_args or not all(id_arg.isdigit() for id_arg in id_args):
         await remove_picture.finish("请提供有效的图片id。")
 
-    pic_id = int(arg_str)
-    pic_path = get_picture_by_id(pic_id)
-    if pic_path is None:
-        await remove_picture.finish(f"未找到图片id {pic_id} 对应的图片文件。")
+    pic_ids = list(dict.fromkeys(int(id_arg) for id_arg in id_args))
 
-    # 将图片文件移至废纸篓
-    try:
-        send2trash(pic_path)
-    except OSError as e:
-        logger.exception(f"删除图片文件 {pic_path} 失败：{e}")
-        await remove_picture.finish(f"删除图片文件失败：{e}")
-    remove_picture_from_index(pic_path)
-    gallery_name = str(pic_path.parent.relative_to(cfg.data_dir_path))
-    invalidate_gallery_render_cache()
-    invalidate_gallery_render_cache(gallery_name)
-    await remove_picture.finish(f"成功删除图片 {pic_id}。")
+    deleted_ids: list[int] = []
+    missing_ids: list[int] = []
+    failed_ids: list[int] = []
+    gallery_names: set[str] = set()
+    for pic_id in pic_ids:
+        pic_path = get_picture_by_id(pic_id)
+        if pic_path is None:
+            missing_ids.append(pic_id)
+            continue
+
+        # 将图片文件移至废纸篓
+        try:
+            send2trash(pic_path)
+        except OSError as e:
+            logger.exception(f"删除图片文件 {pic_path} 失败：{e}")
+            failed_ids.append(pic_id)
+            continue
+        remove_picture_from_index(pic_path)
+        gallery_names.add(str(pic_path.parent.relative_to(cfg.data_dir_path)))
+        deleted_ids.append(pic_id)
+
+    if gallery_names:
+        invalidate_gallery_render_cache()
+        for gallery_name in gallery_names:
+            invalidate_gallery_render_cache(gallery_name)
+
+    lines: list[str] = []
+    if deleted_ids:
+        lines.append(f"成功删除图片 {'、'.join(map(str, deleted_ids))}。")
+    if missing_ids:
+        lines.append(f"未找到图片id {'、'.join(map(str, missing_ids))}。")
+    if failed_ids:
+        lines.append(f"删除失败的图片id：{'、'.join(map(str, failed_ids))}，请查看日志。")
+    await remove_picture.finish("\n".join(lines))
+
+
+@check_gallery.handle()
+async def _(arg_msg: Message = CommandArg()):
+    name_or_alias = arg_msg.extract_plain_text().strip()
+    if not name_or_alias:
+        await check_gallery.finish("请提供画廊名称。")
+
+    name = get_gallery_name(name_or_alias)
+    if not name:
+        await check_gallery.finish(f"未找到画廊：{name_or_alias}")
+
+    gallery_dir = cfg.data_dir_path / name
+    if not gallery_dir.is_dir():
+        logger.warning(f"画廊索引中存在画廊名称 {name}，但对应的目录不存在：{gallery_dir}")
+        await check_gallery.finish(f"画廊 {name} 的目录不存在。")
+
+    result = await asyncio.to_thread(check_gallery_duplicates, name)
+    if not result.duplicate_pairs:
+        await check_gallery.finish(result.summary(name))
+
+    image = await asyncio.to_thread(render_gallery_self_check, name, result.duplicate_pairs)
+    response = OneBotMessage()
+    if image:
+        response += OneBotMessageSegment.image(image)
+    response += OneBotMessageSegment.text(result.summary(name))
+    await check_gallery.finish(response)

@@ -71,3 +71,12 @@ remove_picture = on_command(
     block=True,
 )
 register_matcher(remove_picture, "删除图片")
+
+check_gallery = on_command(
+    "画廊自检",
+    aliases={"check_gallery", "自检画廊"},
+    priority=2,
+    permission=SUPERUSER,
+    block=True,
+)
+register_matcher(check_gallery, "画廊自检")
