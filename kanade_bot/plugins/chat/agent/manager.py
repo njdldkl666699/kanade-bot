@@ -65,6 +65,7 @@ class ChatSessionManager:
         self.request_budget = RequestBudgetCapability(
             context_window=self.compaction_params.context_window,
             output_upper_tokens=self.output_upper_tokens,
+            message_list_byte_budget=self.compaction_params.message_list_byte_budget,
         )
 
         self._prompt = ChatPrompt(cfg)

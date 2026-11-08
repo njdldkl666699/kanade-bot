@@ -408,6 +408,19 @@
           "description": "上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析",
           "title": "Context Window"
         },
+        "message_list_byte_budget": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 46137344,
+          "description": "消息列表请求体的字节预算\n\n基于消息列表估算 OpenAI 兼容请求体，不包含工具 schema。\n超过该值时优先触发摘要级压缩；压缩后仍超限则本地拒绝发送。None 表示关闭。",
+          "title": "Message List Byte Budget"
+        },
         "summary_target_fraction": {
           "anyOf": [
             {
@@ -1982,6 +1995,7 @@
             "keep_pairs": 3,
             "min_clear_tokens": null,
             "context_window": null,
+            "message_list_byte_budget": 46137344,
             "summary_target_fraction": null,
             "summary_model": null,
             "summary_keep_messages": 40,
@@ -2916,6 +2930,7 @@
         "compaction": {
           "context_window": null,
           "keep_pairs": 3,
+          "message_list_byte_budget": 46137344,
           "min_clear_tokens": null,
           "online_valve_fraction": 0.92,
           "summary_keep_messages": 40,

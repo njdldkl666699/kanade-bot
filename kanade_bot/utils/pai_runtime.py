@@ -53,7 +53,7 @@ def _get_client(provider: ProviderConfig | None) -> AsyncOpenAI:
             base_url=provider.base_url if provider else None,
             api_key=api_key,
             default_headers=headers,
-            max_retries=5,
+            max_retries=1,
         )
         _client_cache[key] = client
     return client

@@ -1,5 +1,6 @@
 """轮次输入构建：提示词组装、图片暂存沙箱与多模态内容构建"""
 
+import asyncio
 import base64
 import mimetypes
 import uuid
@@ -10,6 +11,7 @@ from pathlib import Path
 from nonebot import logger
 from pydantic_ai import BinaryContent, UserContent
 
+from kanade_bot.utils.image import compress_image
 from kanade_bot.utils.parse import ImageInput, build_sender_info
 from kanade_bot.utils.session import SessionInfo
 
@@ -92,12 +94,9 @@ async def build_user_content(
     if cfg.agent.vision:
         content.append(send_prompt)
         for image in images or []:
-            content.append(
-                BinaryContent(
-                    data=base64.b64decode(image.data or ""),
-                    media_type=image.mime_type or "image/jpeg",
-                )
-            )
+            raw = base64.b64decode(image.data or "")
+            data, media_type = await asyncio.to_thread(compress_image, raw, image.mime_type)
+            content.append(BinaryContent(data=data, media_type=media_type))
         return content
 
     # 模型无视觉：转述

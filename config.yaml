@@ -41,6 +41,7 @@ chat:
   session:
     buffer_max_size: 256
   compaction:
+    message_list_byte_budget: 46137344 # 44 MiB，DeepSeek 内联请求体上限 48 MiB
     trigger_fraction: 0.7
     keep_pairs: 3
     min_clear_tokens: 2000

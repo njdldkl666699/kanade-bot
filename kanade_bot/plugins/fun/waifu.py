@@ -1,12 +1,11 @@
 import asyncio
-from io import BytesIO
 from typing import Literal
 
 from nonebot import get_plugin_config
-from PIL import Image
 from pydantic import BaseModel
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.image import compress_image
 
 from .config import Config
 
@@ -138,28 +137,17 @@ async def random_loli_waifu() -> str:
     return resp.text
 
 
-async def get_compressed_image(
-    url: str,
-    *,
-    quality: int = 80,
-    lossless: bool = False,
-) -> bytes:
+async def get_compressed_image(url: str) -> bytes:
+    """下载图片并在超过 2MB 时压缩为 WebP（不缩放，保留原图尺寸）"""
+
     resp = await HTTPX_CLIENT.get(url)
     resp.raise_for_status()
-    raw = resp.content
-    if len(raw) < 2 * 1024 * 1024:
-        return raw
-
-    return await asyncio.to_thread(
-        _compress_image,
-        raw,
-        quality=quality,
-        lossless=lossless,
+    media_type = (resp.headers.get("Content-Type") or "").split(";")[0] or None
+    compressed, _ = await asyncio.to_thread(
+        compress_image,
+        resp.content,
+        media_type,
+        max_edge=None,
+        min_size=2 * 1024 * 1024,
     )
-
-
-def _compress_image(raw: bytes, *, quality: int, lossless: bool) -> bytes:
-    with Image.open(BytesIO(raw)) as img:
-        compressed_io = BytesIO()
-        img.save(compressed_io, format="WEBP", quality=quality, lossless=lossless)
-        return compressed_io.getvalue()
+    return compressed

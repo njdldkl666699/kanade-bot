@@ -167,6 +167,32 @@ class RequestBudgetTest(unittest.IsolatedAsyncioTestCase):
             await agent.run("x" * 400_000)
         self.assertEqual(scripted.sent_messages, [])
 
+    def test_request_bytes_counts_text_and_base64_images(self):
+        image = BinaryContent(data=b"x" * 3_000_000, media_type="image/jpeg")
+        messages = [ModelRequest(parts=[UserPromptPart(content=["你好", image])])]
+
+        estimated = compaction_mod.estimate_message_list_bytes(messages)
+        image_b64 = 4 * ((3_000_000 + 2) // 3)
+        self.assertGreaterEqual(estimated, image_b64)
+        self.assertLess(estimated, image_b64 + 10_000, "除图片外只应多出少量文本/结构开销")
+
+    async def test_over_byte_budget_request_is_rejected_before_model_call(self):
+        model, scripted = _make_model([resp_text("should not run")])
+        agent = Agent(
+            model,
+            capabilities=[
+                compaction_mod.RequestBudgetCapability(
+                    context_window=1_000_000,
+                    output_upper_tokens=65_536,
+                    message_list_byte_budget=1024,
+                )
+            ],
+        )
+        image = BinaryContent(data=b"x" * 10_000, media_type="image/jpeg")
+        with self.assertRaises(compaction_mod.ContextBudgetError):
+            await agent.run(["hi", image])
+        self.assertEqual(scripted.sent_messages, [])
+
     async def test_incident_sized_request_reduces_completion_budget(self):
         received: list[int | None] = []
 
@@ -1279,6 +1305,28 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
             await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
         )
         self.assertEqual(await store.load_compaction_marks("c1"), [])
+
+    async def test_byte_budget_triggers_summary_without_token_gate(self):
+        """请求体字节超预算时，即使 token 远低于闸门也触发摘要级压缩"""
+        store = SessionStore(self.db)
+        history = make_history(2)  # 含较长的工具返回，字节约 2KB
+        await store.append("c1", history)
+        params = CompactionParams(
+            trigger_fraction=0.8,
+            context_window=10**9,
+            summary_target_fraction=0.9,
+            summary_keep_messages=2,
+            summary_keep_user_messages=False,
+            message_list_byte_budget=1_000,
+        )
+        model, _ = _make_model([resp_text("这是摘要")])
+        info = await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
+        self.assertIsNotNone(info)
+        self.assertEqual(info["trigger"], "bytes")
+        self.assertLess(info["request_bytes_after"], info["request_bytes_before"])
+        marks = await store.load_compaction_marks("c1")
+        self.assertEqual(len(marks), 1)
+        self.assertEqual(marks[0].strategy, "summarizing")
 
     async def test_unfixed_window_skips(self):
         """窗口未固化（context_window=None）时保守跳过"""

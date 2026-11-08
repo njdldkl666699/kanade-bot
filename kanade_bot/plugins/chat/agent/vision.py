@@ -6,6 +6,7 @@ import base64
 from nonebot import logger
 from pydantic_ai import Agent, BinaryContent, UserContent
 
+from kanade_bot.utils.image import compress_image
 from kanade_bot.utils.pai_runtime import build_model_settings, get_model, run_with_continuation
 
 from ..config import cfg as chat_cfg
@@ -45,8 +46,9 @@ async def get_image_caption(data: str, mime_type: str) -> str | None:
         logger.warning(msg)
         return msg
 
+    raw, media_type = await asyncio.to_thread(compress_image, base64.b64decode(data), mime_type)
     user_prompt: list[UserContent] = [
-        BinaryContent(data=base64.b64decode(data), media_type=mime_type),
+        BinaryContent(data=raw, media_type=media_type),
         "请描述这张图片的内容。",
     ]
     try:

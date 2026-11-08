@@ -67,6 +67,13 @@ class CompactionConfig(AttrDocModel):
     context_window: int | None = None
     """上下文窗口覆盖值；None 时按模型 profile / genai-prices 解析"""
 
+    message_list_byte_budget: int | None = 44 * 1024 * 1024
+    """消息列表请求体的字节预算
+
+    基于消息列表估算 OpenAI 兼容请求体，不包含工具 schema。
+    超过该值时优先触发摘要级压缩；压缩后仍超限则本地拒绝发送。None 表示关闭。
+    """
+
     summary_target_fraction: float | None = None
     """`TieredCompaction` 的停止预算（上下文占用比例）；None 表示不启用摘要档"""
 

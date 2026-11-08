@@ -40,6 +40,7 @@ from .budget import (
     MIN_OUTPUT_TOKENS,
     ContextBudgetError,
     context_safety_margin,
+    estimate_message_list_bytes,
     estimate_request_tokens,
 )
 
@@ -360,6 +361,68 @@ def estimate_post_compaction_tokens(
     return max(base - reclaimed, 0)
 
 
+async def compact_by_message_list_budget(
+    store: SessionStore,
+    session_id: str,
+    params: CompactionConfig,
+    messages: list[ModelMessage],
+    *,
+    model: Model | str,
+    model_settings: ModelSettings | None = None,
+    output_upper_tokens: int | None = None,
+    extra_bytes: int = 0,
+) -> tuple[list[ModelMessage], dict[str, Any]] | None:
+    """消息列表请求体超过字节预算时执行一次摘要级压缩
+
+    `extra_bytes` 用于把尚未进入历史的当前轮用户内容计入预算；压缩只作用于
+    已落库的 `messages`，返回 `(压缩后历史, 统计信息)`。未超预算、无可压缩
+    内容或压缩前后无变化时返回 None。
+    """
+    budget = params.message_list_byte_budget
+    if budget is None or not messages:
+        return None
+
+    before_bytes = estimate_message_list_bytes(messages) + extra_bytes
+    if before_bytes <= budget:
+        return None
+
+    compacted = await compact_now(
+        build_summary(
+            params,
+            model_settings=model_settings,
+            output_upper_tokens=output_upper_tokens,
+        ),
+        messages,
+        model=model,
+        conversation_id=session_id,
+    )
+    if compacted is messages or messages_fingerprint(compacted) == messages_fingerprint(messages):
+        return None
+
+    mark = build_summary_mark(params, compacted)
+    mark.up_to_seq = await store.count(session_id) - 1
+    await store.add_compaction_mark(session_id, mark)
+
+    after_bytes = estimate_message_list_bytes(compacted) + extra_bytes
+    est_before = estimate_context_tokens(messages)
+    info: dict[str, Any] = {
+        "strategy": mark.strategy,
+        "trigger": "bytes",
+        "before": len(messages),
+        "after": len(compacted),
+        "request_bytes_before": before_bytes,
+        "request_bytes_after": after_bytes,
+        "tokens_before": est_before,
+        "tokens_after": estimate_post_compaction_tokens(messages, compacted, baseline=est_before),
+    }
+    logger.info(
+        f"会话{session_id}消息列表字节预算触发摘要压缩："
+        f"{before_bytes / 1024 / 1024:.1f}MiB → {after_bytes / 1024 / 1024:.1f}MiB，"
+        f"{len(messages)}条→{len(compacted)}条"
+    )
+    return compacted, info
+
+
 async def compact_between_turns(
     store: SessionStore,
     session_id: str,
@@ -372,9 +435,26 @@ async def compact_between_turns(
 ) -> dict[str, Any] | None:
     """轮末自动压缩：最终回复落库后、下一轮开始前执行（常规压缩唯一路径）
 
-    未触发 / 窗口未固化返回 None。
+    消息列表字节预算与 token 比例闸门任一命中都会触发；未触发 / 窗口未固化返回 None。
     """
-    if params.context_window is None or not messages:
+    if not messages:
+        return None
+
+    # 消息列表字节预算优先：它约束的是模型服务的请求体硬限制，token 闸门看不到图片字节
+    if (
+        byte_result := await compact_by_message_list_budget(
+            store,
+            session_id,
+            params,
+            messages,
+            model=model,
+            model_settings=model_settings,
+            output_upper_tokens=output_upper_tokens,
+        )
+    ) is not None:
+        return byte_result[1]
+
+    if params.context_window is None:
         # 窗口未固化时比例闸门无从计算；应急阀仍会自行回退解析，此处保守跳过
         return None
 

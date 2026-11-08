@@ -1,5 +1,6 @@
 """图片类工具：查看图片、以图搜图、发送图片、HTML 渲染"""
 
+import asyncio
 import base64
 import uuid
 from io import BytesIO
@@ -14,6 +15,7 @@ from PicImageSearch import BaiDu
 from pydantic_ai import BinaryContent, RunContext
 
 from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.image import compress_image
 from kanade_bot.utils.onebot11 import get_image_path
 
 from ...config import cfg
@@ -116,9 +118,10 @@ async def view_image(ctx: RunContext[ChatDeps], image: str) -> str | list[str | 
             return f"图片 {Path(image).name} 无法获取内容的文字描述。{saved_note}".strip()
         return f"图片 {Path(image).name} 的文字描述{saved_note}：\n{caption}"
 
+    view_data, view_mime = await asyncio.to_thread(compress_image, raw, mime_type)
     return [
         f"图片查看结果{saved_note}",
-        BinaryContent(data=raw, media_type=mime_type),
+        BinaryContent(data=view_data, media_type=view_mime),
     ]
 
 

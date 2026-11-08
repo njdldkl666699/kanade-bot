@@ -106,7 +106,7 @@ def _load_manager_module():
         database_file_path=Path(tempfile.gettempdir()) / "m.db", max_records_per_scope=8
     )
     cfg.compaction = types.SimpleNamespace(  # type: ignore[attr-defined]
-        enabled=False, keep_tail=10, context_window=None
+        enabled=False, keep_tail=10, context_window=None, message_list_byte_budget=None
     )
     cfg.agent = types.SimpleNamespace(vision=False)  # type: ignore[attr-defined]
 
@@ -144,8 +144,10 @@ def _load_manager_module():
         build_summary=lambda *a, **k: _Obj(),
         build_summary_mark=lambda *a, **k: _Obj(),
         estimate_post_compaction_tokens=lambda *a, **k: 0,
+        estimate_user_content_bytes=lambda *a, **k: 0,
         extract_summary=lambda *a, **k: None,
         compact_between_turns=_noop,
+        compact_by_message_list_budget=_noop,
         persist_run=_noop,
     )
     stub("kchat.agent.history.gate_store", GateStore=_Obj)

@@ -36,9 +36,11 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 │ 在线应急阀              │          │ compact_between_turns         │
 │ online_valve_fraction   │          │ 闸门 = summary_target_fraction│
 │ (0.92，None=完全关闭)    │          │ (0.8，未启用时退 trigger 0.7) │
-│ 超阈值才压缩（罕见）     │          │ clear → summary 依次升级      │
+│ 超阈值才压缩（罕见）     │          │ 或消息列表字节预算超限        │
 └────────────────────────┘          └──────────────────────────────┘
 ```
+
+- **请求前消息列表字节预算**：`send_and_wait` 在发起请求前估算消息列表（历史 + 本轮用户内容）的请求体字节；超过 `message_list_byte_budget` 时先做一次摘要压缩（`compact_by_message_list_budget`），压缩后仍超限则由 `RequestBudgetCapability` 本地拒绝。这是 2026-11-08 事故（图片把 DeepSeek 内联请求体推过 48 MiB）的预防路径。
 
 - **轮末压缩**是常规路径：在 `send_and_wait` 的 finally 里执行，传入 run 结束时的完整历史（避免重复 restore），失败只记日志不影响会话状态。此时 usage 锚点就是最终响应、其后没有新消息，天然免疫 run 内「锚点后字符启发式」的误估。
 - **在线应急阀**仅防单轮内上下文暴涨（如工具返回巨型内容）击穿窗口：`RecordingCompaction` 包住分层策略，按会话记录 run 内每次压缩的前后快照，run 结束由 `persist_run` 落库。`online_valve_fraction=None` 时用 `_NoopCapability` 占位，记录路径保持统一。记录前后快照必须各自拷贝：`TieredCompaction` 以 `ctx.messages[:] = ...` 原地替换列表，直接引用同一对象会让前后指纹永远相等、压缩事件静默丢失。
@@ -53,11 +55,13 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 
 ## 5. 请求预算（RequestBudgetCapability）
 
-与压缩并列的另一个 capability，解决「input + max_tokens ≤ window」型 400 错误：
+与压缩并列的另一个 capability，解决「input + max_tokens ≤ window」型 400 错误与请求体字节超限：
 
 - 每次模型请求前重估输入 tokens，`可用输出 = window − 估算输入 − 安全余量`（余量 = max(8192, 5% window)），动态收缩 `max_tokens`——400 死区由此消除（曾以生产事故实证服务器约束是两者之和不超过窗口）。
 - 可用输出低于 `MIN_OUTPUT_TOKENS`（4096）时抛 `ContextBudgetError`，阻止必然越界的请求发出。
+- **消息列表字节预算**：`estimate_message_list_bytes` 按 OpenAI 兼容 body 估算消息列表的文本 UTF-8、图片 base64 与 JSON 开销（不含工具 schema，实测与真实 `_map_messages` 误差约 0.2%）；超过 `message_list_byte_budget` 时抛 `ContextBudgetError`，由轮末/请求前摘要压缩兜底。DeepSeek 视觉内联请求体硬限制为 48 MiB，生产默认预算 44 MiB。
 - 摘要请求同样经 `summary_model_settings` 继承主模型设置并预留输出预算，预算不足直接失败而非发出截断的摘要。
+- 图片在进入模型输入/会话历史前由 `utils/image.compress_image` 缩放（长边 2048、JPEG q82）；动图与小图保持原样，压缩失败回退原图。
 
 ## 6. 压缩事件落库（persist_run）
 
@@ -83,6 +87,7 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 | `keep_pairs` | 3 | 3 | 保留最近 N 组工具调用对 |
 | `min_clear_tokens` | None | 2000 | 清理收益下限（仅在线生效，重放忽略） |
 | `context_window` | None | None | 窗口覆盖值；None 时启动解析并固化 |
+| `message_list_byte_budget` | 44 MiB | 44 MiB | 消息列表请求体字节预算；超限触发摘要压缩，压缩后仍超则本地拒绝；None 关闭 |
 | `summary_target_fraction` | None | 0.8 | 摘要档预算比例；None = 不启用摘要档 |
 | `summary_model` | None | null | 摘要模型；None 继承主模型 |
 | `summary_keep_messages` | 40 | 20 | 摘要范围内保留名额（与用户消息共享） |

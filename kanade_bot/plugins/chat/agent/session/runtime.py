@@ -38,7 +38,9 @@ from ..history import (
     build_summary,
     build_summary_mark,
     compact_between_turns,
+    compact_by_message_list_budget,
     estimate_post_compaction_tokens,
+    estimate_user_content_bytes,
     extract_summary,
     persist_run,
 )
@@ -224,6 +226,29 @@ class ChatSession:
 
             # 恢复历史：全量原始消息 + 按 marks 重放压缩
             history = await mgr.store.restore(session_id, params=mgr.compaction_params)
+
+            # 请求前消息列表字节预算：历史 + 本轮新内容超过预算时先做一次摘要压缩。
+            # token 闸门看不到图片 base64 体积，字节闸门是 48 MiB 请求体事故的预防路径。
+            if mgr.compaction_params.message_list_byte_budget is not None:
+                model = mgr.agent.model
+                assert isinstance(model, Model), "Agent 构造时传入的必为 Model 实例"
+                try:
+                    budget_result = await compact_by_message_list_budget(
+                        mgr.store,
+                        session_id,
+                        mgr.compaction_params,
+                        history,
+                        model=model,
+                        model_settings=mgr.model_settings,
+                        output_upper_tokens=mgr.output_upper_tokens,
+                        extra_bytes=estimate_user_content_bytes(user_content) + 96,
+                    )
+                except Exception as e:
+                    logger.warning(f"会话{session_id}请求前消息列表预算压缩失败（继续本轮）：{e}")
+                else:
+                    if budget_result is not None:
+                        history, info = budget_result
+                        logger.info(f"会话{session_id}请求前消息列表预算压缩完成：{info}")
 
             try:
                 total_usage = RunUsage()
