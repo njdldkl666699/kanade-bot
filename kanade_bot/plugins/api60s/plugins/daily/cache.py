@@ -27,11 +27,11 @@ class Daily60sCache:
 
 daily60s_cache = Daily60sCache()
 
-# 每天 06:00（Asia/Shanghai）预缓存当日图片
+# 每天 08:05（Asia/Shanghai）预缓存当日图片
 scheduler.add_job(
     daily60s_cache.refresh,
     "cron",
-    hour=6,
-    minute=0,
+    hour=8,
+    minute=5,
     timezone="Asia/Shanghai",
 )
