@@ -416,6 +416,42 @@
       "title": "CompactionConfig",
       "type": "object"
     },
+    "EmojiStyle": {
+      "enum": [
+        "lg",
+        "htc",
+        "sony",
+        "skype",
+        "apple",
+        "mozilla",
+        "google",
+        "docomo",
+        "huawei",
+        "icons8",
+        "twitter",
+        "openmoji",
+        "samsung",
+        "softbank",
+        "au-kddi",
+        "facebook",
+        "microsoft",
+        "messenger",
+        "emojidex",
+        "whatsapp",
+        "telegram",
+        "toss-face",
+        "joypixels",
+        "noto-emoji",
+        "serenityos",
+        "microsoft-teams",
+        "joypixels-animations",
+        "microsoft-3D-fluent",
+        "twitter-emoji-stickers",
+        "animated-noto-color-emoji"
+      ],
+      "title": "EmojiStyle",
+      "type": "string"
+    },
     "FilehostSettings": {
       "additionalProperties": false,
       "description": "Core-owned settings for the optional asset publisher adapter.",
@@ -886,6 +922,22 @@
       "title": "ObservabilitySettings",
       "type": "object"
     },
+    "PlatformEnum": {
+      "enum": [
+        "acfun",
+        "bilibili",
+        "douyin",
+        "kuaishou",
+        "nga",
+        "tiktok",
+        "twitter",
+        "weibo",
+        "xiaohongshu",
+        "youtube"
+      ],
+      "title": "PlatformEnum",
+      "type": "string"
+    },
     "ProactiveConfig": {
       "description": "主动回复配置\n\n仅群聊生效，是否回复由 LLM 决策节点结合群聊内容判定；\n\n决策上下文每日定时清空，规模受当日边界约束；超活跃群单日超限时护栏\n截断保留最近 N 个判定轮，不做摘要压缩。",
       "properties": {
@@ -1232,6 +1284,16 @@
         "probe"
       ],
       "title": "RenderStartupMode",
+      "type": "string"
+    },
+    "RenderType": {
+      "enum": [
+        "default",
+        "common",
+        "takumi",
+        "htmlrender"
+      ],
+      "title": "RenderType",
       "type": "string"
     },
     "ReplyGateConfig": {
@@ -1889,6 +1951,43 @@
       },
       "title": "TokenBillingConfig",
       "type": "object"
+    },
+    "VideoCodecs": {
+      "description": "视频的视频流编码枚举\n\n- HEV: HEVC(H.265)\n- AVC: AVC(H.264)\n- AV1: AV1\n- UNKNOWN: 未知",
+      "enum": [
+        [
+          "hev",
+          "hvc"
+        ],
+        [
+          "avc"
+        ],
+        [
+          "av01",
+          "av1"
+        ],
+        []
+      ],
+      "title": "VideoCodecs",
+      "type": "array"
+    },
+    "VideoQuality": {
+      "description": "视频的视频流分辨率枚举\n\n- _360P: 流畅 360P\n- _480P: 清晰 480P\n- _720P: 高清 720P60\n- _1080P: 高清 1080P\n- AI_REPAIR: 智能修复（人工智能修复画质）\n- _1080P_PLUS: 高清 1080P 高码率\n- _1080P_60: 高清 1080P 60 帧码率\n- _4K: 超清 4K\n- HDR: 真彩 HDR\n- DOLBY: 杜比视界\n- _8K: 超高清 8K",
+      "enum": [
+        16,
+        32,
+        64,
+        80,
+        100,
+        112,
+        116,
+        120,
+        125,
+        126,
+        127
+      ],
+      "title": "VideoQuality",
+      "type": "integer"
     },
     "WordleConfig": {
       "properties": {
@@ -3397,6 +3496,170 @@
       "title": "Onebot V11 Ws Urls",
       "type": "array",
       "uniqueItems": true
+    },
+    "parser_append_url": {
+      "default": false,
+      "description": "是否在解析结果中附加原始URL",
+      "title": "Parser Append Url",
+      "type": "boolean"
+    },
+    "parser_bili_ck": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "bilibili cookies",
+      "title": "Parser Bili Ck"
+    },
+    "parser_bili_video_codes": {
+      "default": [
+        [
+          "avc"
+        ],
+        [
+          "av01",
+          "av1"
+        ],
+        [
+          "hev",
+          "hvc"
+        ]
+      ],
+      "description": "B站视频编码",
+      "items": {
+        "$ref": "#/$defs/VideoCodecs"
+      },
+      "title": "Parser Bili Video Codes",
+      "type": "array"
+    },
+    "parser_bili_video_quality": {
+      "$ref": "#/$defs/VideoQuality",
+      "default": 80,
+      "description": "B站视频分辨率"
+    },
+    "parser_custom_font": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "自定义字体",
+      "title": "Parser Custom Font"
+    },
+    "parser_custom_font_weight": {
+      "default": 700,
+      "description": "字体粗细程度",
+      "title": "Parser Custom Font Weight",
+      "type": "integer"
+    },
+    "parser_disabled_platforms": {
+      "default": [],
+      "description": "禁止的解析器",
+      "items": {
+        "$ref": "#/$defs/PlatformEnum"
+      },
+      "title": "Parser Disabled Platforms",
+      "type": "array"
+    },
+    "parser_duration_maximum": {
+      "default": 480,
+      "description": "视频/音频最大时长",
+      "title": "Parser Duration Maximum",
+      "type": "integer"
+    },
+    "parser_emoji_cdn": {
+      "default": "https://emojicdn.elk.sh",
+      "description": "Pilmoji 表情 CDN",
+      "title": "Parser Emoji Cdn",
+      "type": "string"
+    },
+    "parser_emoji_style": {
+      "$ref": "#/$defs/EmojiStyle",
+      "default": "facebook",
+      "description": "Pilmoji 表情样式"
+    },
+    "parser_group_blacklist_enabled": {
+      "default": true,
+      "description": "是否启用群组黑名单模式(默认启用，即所有群聊的解析都是开启的)",
+      "title": "Parser Group Blacklist Enabled",
+      "type": "boolean"
+    },
+    "parser_max_size": {
+      "default": 90,
+      "description": "资源最大大小 默认 100 单位 MB",
+      "title": "Parser Max Size",
+      "type": "integer"
+    },
+    "parser_need_forward_contents": {
+      "default": true,
+      "description": "是否需要转发媒体内容",
+      "title": "Parser Need Forward Contents",
+      "type": "boolean"
+    },
+    "parser_need_upload": {
+      "default": false,
+      "description": "是否需要上传音频文件",
+      "title": "Parser Need Upload",
+      "type": "boolean"
+    },
+    "parser_proxy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "代理",
+      "title": "Parser Proxy"
+    },
+    "parser_render_type": {
+      "$ref": "#/$defs/RenderType",
+      "default": "common",
+      "description": "Renderer 类型"
+    },
+    "parser_use_base64": {
+      "default": false,
+      "description": "是否使用 base64 编码发送图片，音频，视频",
+      "title": "Parser Use Base64",
+      "type": "boolean"
+    },
+    "parser_xhs_ck": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "小红书 cookies",
+      "title": "Parser Xhs Ck"
+    },
+    "parser_ytb_ck": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "youtube cookies",
+      "title": "Parser Ytb Ck"
     },
     "permission_load_command": {
       "default": true,

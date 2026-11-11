@@ -17,7 +17,7 @@ console_strict_tome: true
 
 localstore_use_cwd: true
 
-render:
+render: # nonebot_plugin_htmlrender
   provider: playwright
   startup: probe
   provider_config:
@@ -156,6 +156,7 @@ handle:
   answer_file: answers.json
   idiom_file: words.txt
 
+# nonebot_plugin_picstatus
 ps_command: ["状态", "status"]
 ps_reply_target: false
 ps_ignore_parts: ["snap"]
@@ -163,10 +164,18 @@ ps_test_sites:
   - name: "百度"
     url: "https://www.baidu.com"
 
+# nonebot_plugin_githubcard
 github_type: 0
+
+# nonebot_plugin_whateat_pic
 whateat_cd: 0
 wordcloud_background_color: white
 
+# nonebot_plugin_parser
+parser_render_type: default
+parser_append_url: true
+
+api_timeout: 60
 generate_schemas: false
 schema_output_dir: ./schemas
 

@@ -182,6 +182,8 @@ def patch_foreign_plugins():
     assert render_markdown.__kwdefaults__ is not None
     render_markdown.__kwdefaults__["width"] = 720
 
+    ## nonebot_plugin_
+
 
 def register_other_configs_and_generate_schema():
     """注册适配器和第三方插件的配置类，并生成合并后的配置Schema"""
@@ -200,6 +202,7 @@ def register_other_configs_and_generate_schema():
     from nonebot_plugin_localstore.config import Config as LocalStoreConfig
 
     # from nonebot_plugin_orm.config import Config as ORMConfig
+    from nonebot_plugin_parser import Config as ParserConfig
     from nonebot_plugin_permission.config import Config as PermissionConfig
     from nonebot_plugin_picstatus.config import ConfigModel as PicStatusConfig
     from nonebot_plugin_uninfo.config import Config as UninfoConfig
@@ -217,6 +220,7 @@ def register_other_configs_and_generate_schema():
         RenderPluginConfig,
         LocalStoreConfig,
         # ORMConfig,
+        ParserConfig,
         PermissionConfig,
         PicStatusConfig,
         UninfoConfig,
