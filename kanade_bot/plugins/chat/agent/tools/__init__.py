@@ -3,9 +3,9 @@
 from typing import Any
 
 from .env import setup_python_env
-from .media import image_search, render_html_image, send_image, view_image
+from .media import image_search, render_html_image, view_image
 from .memory import forget_memory, recall_memory, save_memory
-from .messaging import get_forward_message, send_file, send_voice
+from .messaging import download_file, get_forward_message, send_file, send_voice
 from .scheduling import schedule_task
 
 
@@ -20,8 +20,8 @@ def build_tools() -> list[Any]:
         send_voice,
         image_search,
         render_html_image,
-        send_image,
         send_file,
+        download_file,
         setup_python_env,
         schedule_task,
     ]

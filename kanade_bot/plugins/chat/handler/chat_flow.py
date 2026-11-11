@@ -28,7 +28,7 @@ from kanade_bot.utils.session import extract_session_info
 from ..agent.manager import chat_manager
 from ..agent.proactive import proactive_runtime
 from ..config import cfg
-from ..deliver import parse_message_segments, send_segments
+from ..deliver import parse_reply_messages, send_messages, workspace_root_of
 from ..matcher import chat, chat_monitor
 from ..util import group_id_of, is_banned, make_turn_biller
 
@@ -56,21 +56,21 @@ async def _send_onebot_message(
     matcher: type[Matcher],
     bot: OneBot,
     event: OneBotMessageEvent,
-    segments: list[MessageSegment],
+    messages: list[OneBotMessage],
     *,
     content_long: bool = False,
     content_format: TextFormat = "plaintext",
     first_reply: bool = False,
 ):
-    """把消息段列表发送回事件来源会话（引用回复仅拼在第一条消息前）"""
+    """把消息列表发送回事件来源会话（引用回复仅拼在第一条消息前）"""
 
     async def _send(message: OneBotMessage | MessageSegment | str) -> None:
         await matcher.send(message)
 
-    await send_segments(
+    await send_messages(
         _send,
         bot,
-        segments,
+        messages,
         reply=MessageSegment.reply(event.message_id) if first_reply else None,
         content_long=content_long,
         content_format=content_format,
@@ -134,12 +134,14 @@ async def send_message_in_chunks(
                 replied = True
 
                 if isinstance(event, OneBotMessageEvent):
-                    segments = await parse_message_segments(content)
+                    messages = await parse_reply_messages(
+                        content, workspace_root_of(session_info.session_id)
+                    )
                     await _send_onebot_message(
                         matcher,
                         cast(OneBot, bot),
                         event,
-                        segments,
+                        messages,
                         content_long=len(content) > 600 or len(content.splitlines()) > 20,
                         content_format=guess_format(content),
                         first_reply=isinstance(event, OneBotGroupMessageEvent),

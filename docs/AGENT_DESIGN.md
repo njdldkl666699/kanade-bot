@@ -28,12 +28,12 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 | 文件/子包 | 职责 |
 | --- | --- |
 | `manager.py` | `ChatSessionManager`：共享运行时（Agent/存储/MCP/沙箱池/压缩配置）持有者、每会话 `ChatSession` 注册表、MCP 连接与缓冲区缓存生命周期钩子；调用方经 `get_session()` 持有会话对象 |
-| `session/` | `runtime.py`：`ChatSession`（每会话运行时状态与轮次编排 `send_and_wait`）；`input_build.py`：提示词组装/图片暂存沙箱/多模态内容；`stats.py`：工作区树形列表等统计辅助 |
+| `session/` | `runtime.py`：`ChatSession`（每会话运行时状态与轮次编排 `send_and_wait`）；`input_build.py`：单一入口 `build_user_content`（文本各来源独立成 `list[UserContent]` 文本部分，取代旧 `$` 分隔拼接；图片按模型能力压缩/转述追加）/图片暂存沙箱；`stats.py`：工作区树形列表等统计辅助 |
 | `deps.py` | `ChatDeps`：单次运行绑定的本地上下文（会话/发送者、记忆作用域、沙箱句柄） |
 | `history/` | `compaction.py` + `budget.py`：分层压缩策略、`RequestBudgetCapability`（动态 max_tokens）、轮末压缩与落库（见 `COMPACTION_DESIGN.md`）；`store.py`/`conv_db.py`/`gate_store.py`/`blobs.py`：append-only 会话数据库（主消息/marks/gate 表共享同一 `ConvDBRegistry`）与图片外置（见 `SESSION_STORE_DESIGN.md`） |
 | `memory.py` | 作用域隔离的长期记忆（见 `MEMORY_DESIGN.md`） |
 | `sandbox/` | mirage VFS + sandlock 沙箱：`hostenv`（Landlock/uv 检查与降级 wrapper）、`workspace`（`KanadeWorkspace` 与 capability）、`session`（常驻会话与 venv）、`manager`（沙箱池）（见 `SANDBOX_DESIGN.md`） |
-| `tools/` | 宿主工具集按域拆分：`media`（图片查看/搜索/发送、HTML 渲染）、`messaging`（语音/文件/转发记录）、`memory`（记忆三件套）、`env`（Python 环境）、`scheduling`（定时任务） |
+| `tools/` | 宿主工具集按域拆分：`media`（图片查看/搜索、HTML 渲染）、`messaging`（语音/文件收发/转发记录/文件下载）、`memory`（记忆三件套）、`env`（Python 环境）、`scheduling`（定时任务）；图片发送不设工具，回复中的 `![描述](地址)` Markdown语法由 `deliver` 解析（支持网络URL与工作区内路径，本地路径仅限工作区内；独立成行的块级图片单独成消息，行内图片与文本按原始顺序合入同一条消息） |
 | `prompt.py` | 模块化提示词渲染（`config/chat/prompts/` 下的 Markdown 片段） |
 | `vision.py` / `schedule.py` | 图片转述子 agent；定时任务存储与触发 |
 | `proactive/` | 主动回复：`runtime`（编排与统计）、`gate`（决策 Agent 构建）、`gate_history`（决策消息历史）、`windows`（时段概率）、`debounce`（防抖）、`executor`（主动回复执行）（见 `PROACTIVE_DESIGN.md`） |
@@ -48,7 +48,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
   → handler/chat_flow.py：水晶计费检查 → send_message_in_chunks
   → ChatSession.send_and_wait（异步生成器，逐条 yield 助手消息；调用方经 `chat_manager` 薄转发）
       1. 获取每会话 asyncio.Lock；群聊会话在此锁内切换记忆作用域到当前发送者
-      2. 组装提示词：RAG 检索片段 + 消息缓冲区 + 引用消息 + 系统通知 + 时间行
+      2. 组装输入：RAG 检索片段 + 消息缓冲区 + 引用消息 + 系统通知 + 时间行，各来源作为独立的文本内容部分（`list[UserContent]`）随图片一起发送
       3. 沙箱启用时：获取会话常驻沙箱，用户图片写入工作区并附路径说明
       4. SessionStore.restore：全量历史 + 按 compaction marks 重放压缩
       5. agent.run_stream_events：完整 agent 循环（含工具调用后继续生成）

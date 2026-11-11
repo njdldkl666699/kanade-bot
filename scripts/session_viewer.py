@@ -568,6 +568,9 @@ TEMPLATE = r"""<!doctype html>
   .b-think { background: #37304a; color: var(--purple); }
 
   .ctext { white-space: pre-wrap; word-break: break-word; font-size: 12.8px; }
+  /* 分段式用户消息（list[UserContent] 多文本部分）的相邻内容块间留白，避免多段紧贴 */
+  .ctext + .ctext, .ctext + .clamp-wrap, .clamp-wrap + .ctext, .clamp-wrap + .clamp-wrap {
+    margin-top: 8px; }
   .clamp-wrap .ctext { max-height: 260px; overflow: hidden; position: relative;
     -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent);
             mask-image: linear-gradient(180deg, #000 82%, transparent); }

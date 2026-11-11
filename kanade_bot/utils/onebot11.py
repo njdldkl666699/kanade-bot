@@ -1,6 +1,6 @@
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, override
+from typing import Any, Literal, override
 
 from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import Bot, MessageSegment, NoticeEvent
@@ -160,4 +160,43 @@ async def upload_private_file(
         user_id=user_id,
         file=str(file_path),
         name=name,
+    )
+
+
+async def get_group_file_url(
+    bot: Bot,
+    group_id: int,
+    file_id: str,
+    busid: Any | None = None,
+):
+    """获取群文件的下载链接
+
+    :param group_id: 群号
+    :param file_id: 文件ID
+    """
+    return await bot.call_api(
+        "get_group_file_url",
+        group_id=group_id,
+        file_id=file_id,
+        busid=busid,
+    )
+
+
+async def get_private_file_url(
+    bot: Bot,
+    file_id: str,
+    user_id: int | None = None,
+    file_hash: str | None = None,
+):
+    """获取私聊文件的下载链接
+
+    :param user_id: 用户ID
+    :param file_id: 文件ID
+    :param file_hash: 文件hash
+    """
+    return await bot.call_api(
+        "get_private_file_url",
+        user_id=user_id,
+        file_id=file_id,
+        file_hash=file_hash,
     )

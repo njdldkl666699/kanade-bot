@@ -1,14 +1,20 @@
-"""消息类工具：查看转发记录、发送语音与文件"""
+"""消息类工具：查看转发记录、发送语音与文件、下载文件"""
 
 import re
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
-from httpx import AsyncClient, HTTPError
+from httpx import AsyncClient, HTTPError, Timeout
 from nonebot import get_bot, logger
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic_ai import RunContext
 
-from kanade_bot.utils.onebot11 import upload_group_file, upload_private_file
+from kanade_bot.utils.onebot11 import (
+    get_group_file_url,
+    get_private_file_url,
+    upload_group_file,
+    upload_private_file,
+)
 from kanade_bot.utils.parse import format_forward_message_for_ai
 
 from ...config import cfg
@@ -19,6 +25,12 @@ _FORWARD_MARKER_RE = re.compile(r"\[forward:\s*id=([^\]\s]+)\s*\]")
 """消息文本中合并转发标记 `[forward:id=xxx]` 的匹配模式"""
 
 tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
+
+download_client = AsyncClient(timeout=Timeout(30, read=300), follow_redirects=True)
+"""文件下载专用客户端：长读超时 + 跟随重定向"""
+
+MAX_DOWNLOAD_BYTES = 2 * 1024**3
+"""单文件下载体积上限，超出时中止并清理残留文件"""
 
 
 async def send_to_session(ctx: RunContext[ChatDeps], message: Message) -> str | None:
@@ -151,3 +163,88 @@ async def send_file(ctx: RunContext[ChatDeps], path: str) -> str:
         return f"发送文件失败: {e}"
 
     return f"文件 {file_name} 已发送给会话 {ctx.deps.session_info.session_id}。"
+
+
+def _download_file_name(file_name: str, url: str, file_id: str) -> str:
+    """推断下载保存文件名：参数指定 > URL路径推断 > file_id，仅保留文件名部分防路径穿越"""
+    candidate = file_name.strip()
+    if not candidate:
+        # URL标准格式的文件名取路径最后一段；路径以/结尾视为无文件名
+        url_path = unquote(urlparse(url).path)
+        if url_path and not url_path.endswith("/"):
+            candidate = Path(url_path).name
+    return Path(candidate).name or file_id
+
+
+async def download_file(
+    ctx: RunContext[ChatDeps],
+    file_id: str,
+    file_name: str = "",
+) -> str:
+    """下载会话中收到的一个文件到沙箱工作区的 download/ 目录。
+
+    Args:
+        file_id: 文件ID。上下文中的文件消息段形如 `[file:file=yyy,file_id=xxx,name=yyy]`，传入其中的 file_id。
+        file_name: 保存使用的文件名。若上下文的文件消息段带有文件名则一并传入，以保留原始文件名；
+            缺省时从下载链接推断，仍无法推断则回退为 file_id。
+    """
+    sandbox = get_sandbox(ctx)
+    if sandbox is None:
+        return "未启用沙箱，无法下载文件。"
+
+    info = ctx.deps.session_info
+    try:
+        bot = get_bot(ctx.deps.bot_id)
+    except (KeyError, ValueError):
+        logger.error("无法获取Bot实例，bot_id: {}", ctx.deps.bot_id)
+        return "无法获取Bot实例，无法下载文件。"
+    if not isinstance(bot, Bot):
+        return "当前类型的Bot不支持下载文件。"
+
+    try:
+        if group_id := info.group_id:
+            r = await get_group_file_url(bot, int(group_id), file_id)
+        elif user_id := info.user_id:
+            r = await get_private_file_url(bot, file_id, user_id=int(user_id))
+        else:
+            return "当前会话没有可用的用户ID或群组ID，无法下载文件。"
+    except Exception as e:
+        # 实现端不支持该接口、文件过期等：转为错误文本返回给模型
+        logger.exception("获取文件下载链接失败: {}", e)
+        return f"获取文件下载链接失败: {e}"
+
+    url: str | None = r.get("url") if isinstance(r, dict) else None
+    if not url:
+        return f"未获取到文件 {file_id} 的下载链接，文件可能已过期或不可用。"
+
+    name = _download_file_name(file_name, url, file_id)
+    # 工作区为宿主本地目录挂载的 DiskVFS，直接写宿主路径对沙箱可见
+    target = sandbox.workspace_dir / "download" / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    size = 0
+    try:
+        async with download_client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            # Content-Length异常头（非数字）交给流式累计上限兜底
+            if (length := resp.headers.get("Content-Length", "")).isdigit() and (
+                int(length) > MAX_DOWNLOAD_BYTES
+            ):
+                return f"文件过大（{int(length)}字节，上限{MAX_DOWNLOAD_BYTES}字节），已取消下载。"
+            with target.open("wb") as f:
+                async for chunk in resp.aiter_bytes(256 * 1024):
+                    size += len(chunk)
+                    if size > MAX_DOWNLOAD_BYTES:
+                        raise ValueError(f"文件超过下载体积上限{MAX_DOWNLOAD_BYTES}字节")
+                    f.write(chunk)
+    except HTTPError as e:
+        logger.exception("下载文件失败: {}", e)
+        target.unlink(missing_ok=True)
+        return f"下载文件失败: {e}"
+    except (ValueError, OSError) as e:
+        logger.warning("下载文件失败: {}", e)
+        target.unlink(missing_ok=True)
+        return f"下载文件失败: {e}"
+
+    logger.info("文件已下载到工作区: {}（{}字节）", target, size)
+    return f"文件已下载到工作区 download/{name}（{size}字节）。"

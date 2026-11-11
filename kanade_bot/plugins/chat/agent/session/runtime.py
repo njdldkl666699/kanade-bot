@@ -45,7 +45,7 @@ from ..history import (
     persist_run,
 )
 from ..memory import MemoryContext
-from .input_build import build_send_prompt, build_user_content, stage_images_to_sandbox
+from .input_build import build_user_content, stage_images_to_sandbox
 from .stats import count_emptied_messages, list_workspace_files
 
 if TYPE_CHECKING:
@@ -156,11 +156,11 @@ class ChatSession:
 
         没有任何可发送内容（无prompt、缓冲区为空且无引用消息）时不产出任何消息。
 
-        prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息
-        images: 图片附件列表
-        on_usage: 轮次正常结束时回调；异常或中途取消时不回调
-        system_notification: 显式注入本轮的系统通知；不消费排队通知槽位，且单独视为可运行内容
-        require_buffer: 取得会话锁后复检缓冲区，为空则直接放弃本轮（空生成器）。
+        :param prompt: 用户消息文本内容，如果为空，则仅使用缓冲区中的消息和引用消息
+        :param images: 图片附件列表
+        :param on_usage: 轮次正常结束时回调；异常或中途取消时不回调
+        :param system_notification: 显式注入本轮的系统通知；不消费排队通知槽位，且单独视为可运行内容
+        :param require_buffer: 取得会话锁后复检缓冲区，为空则直接放弃本轮（空生成器）。
             主动回复执行器专用：外层的 buffer 非空检查与真正开始轮次之间，被动轮
             （to_me 触发）可能恰好消费了同一批消息，此时无新内容可接话，放弃才能
             避免对同一批消息连回两次。定时任务唤醒不设此项（通知本身即内容）。
@@ -189,15 +189,6 @@ class ChatSession:
                 logger.info("发送给模型的消息为空，未触发生成")
                 return
 
-            send_prompt = build_send_prompt(
-                session_info,
-                prompt,
-                rag_docs=rag_docs,
-                messages=self.buffer,
-                reply_text=reply_text,
-                system_notification=notice,
-            )
-
             # 沙箱启用时获取会话常驻沙箱（首次使用时创建，跨轮保留）
             sandbox_session = None
             sandbox_root = None
@@ -207,13 +198,18 @@ class ChatSession:
                 sandbox_root = mgr.sandbox_manager.workspace_root(session_id)
                 # 用户图片写入沙箱工作区
                 staged_images = await stage_images_to_sandbox(sandbox_session, images)
-            if staged_images:
-                send_prompt += (
-                    "\n\n$ 本轮用户发送的图片已保存到沙箱工作区"
-                    "（工具可用这些相对路径访问）：\n" + "\n".join(f"- {p}" for p in staged_images)
-                )
 
-            user_content = await build_user_content(send_prompt, images)
+            # 构建本轮输入：文本各来源独立成段，图片按模型能力追加
+            user_content = await build_user_content(
+                session_info,
+                prompt,
+                images,
+                rag_docs=rag_docs,
+                messages=self.buffer,
+                reply_text=reply_text,
+                system_notification=notice,
+                staged_images=staged_images,
+            )
 
             deps = ChatDeps(
                 session_info=session_info,

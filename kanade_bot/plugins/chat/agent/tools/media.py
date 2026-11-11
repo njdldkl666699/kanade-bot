@@ -1,4 +1,4 @@
-"""图片类工具：查看图片、以图搜图、发送图片、HTML 渲染"""
+"""图片类工具：查看图片、以图搜图、HTML 渲染"""
 
 import asyncio
 import base64
@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import magic
 from httpx import HTTPError
 from nonebot import get_bot, logger, require
-from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment
 from PicImageSearch import BaiDu
 from pydantic_ai import BinaryContent, RunContext
 
@@ -22,7 +22,6 @@ from ...config import cfg
 from ..deps import ChatDeps
 from ..vision import get_image_caption
 from .common import get_sandbox
-from .messaging import send_to_session
 
 require("nonebot_plugin_htmlrender")
 from nonebot_plugin_htmlrender import get_default_application
@@ -48,7 +47,9 @@ async def _load_qq_image(ctx: RunContext[ChatDeps], file: str) -> bytes | None:
     return path.read_bytes()
 
 
-async def view_image(ctx: RunContext[ChatDeps], image: str) -> str | list[str | BinaryContent]:
+async def view_image(
+    ctx: RunContext[ChatDeps], image: str, original: bool = False
+) -> str | list[str | BinaryContent]:
     """查看一张图片，返回图片内容供视觉理解。
 
     Args:
@@ -57,6 +58,7 @@ async def view_image(ctx: RunContext[ChatDeps], image: str) -> str | list[str | 
               若启用沙箱，还会自动保存到沙箱工作区 images/；
             - http/https 网络地址；
             - 沙箱工作区内的相对路径（需启用沙箱）。
+        original: 是否查看原图。默认False查看压缩图；需要识别图中小字、细微细节时传True查看原图。
     """
     logger.info("查看图片工具被调用，来源: {}", image)
     scheme = urlparse(image).scheme
@@ -118,9 +120,12 @@ async def view_image(ctx: RunContext[ChatDeps], image: str) -> str | list[str | 
             return f"图片 {Path(image).name} 无法获取内容的文字描述。{saved_note}".strip()
         return f"图片 {Path(image).name} 的文字描述{saved_note}：\n{caption}"
 
-    view_data, view_mime = await asyncio.to_thread(compress_image, raw, mime_type)
+    if original:
+        view_data, view_mime = raw, mime_type
+    else:
+        view_data, view_mime = await asyncio.to_thread(compress_image, raw, mime_type)
     return [
-        f"图片查看结果{saved_note}",
+        f"图片查看结果{saved_note}（{'原图' if original else '压缩图'}）",
         BinaryContent(data=view_data, media_type=view_mime),
     ]
 
@@ -250,31 +255,3 @@ async def image_search(ctx: RunContext[ChatDeps], image: str) -> str:
     if not resp.raw and not resp.exact_matches:
         return "以图搜图完成，但未找到相同或相似图片。"
     return "\n".join(lines)
-
-
-async def send_image(ctx: RunContext[ChatDeps], image: str) -> str:
-    """将图片发送给当前会话。
-
-    Args:
-        image: 图片来源。支持http/https网络URL；启用沙箱时也支持沙箱工作区内的相对路径。
-    """
-    source = image
-    scheme = urlparse(source).scheme
-    if scheme in ("http", "https"):
-        segment = MessageSegment.image(source)
-    elif not scheme:
-        sandbox = get_sandbox(ctx)
-        if sandbox is None:
-            return f"仅支持http/https网络URL（未启用沙箱，不支持本地路径）: {source}"
-        try:
-            stream = await sandbox.read(Path(source))
-        except FileNotFoundError:
-            return f"沙箱工作区中不存在该文件: {source}"
-        segment = MessageSegment.image(stream.read())
-    else:
-        return f"不支持的图片来源: {source}"
-
-    error = await send_to_session(ctx, Message(segment))
-    if error:
-        return error
-    return f"图片已发送给会话 {ctx.deps.session_info.session_id}。"
