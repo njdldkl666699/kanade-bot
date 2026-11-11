@@ -32,7 +32,9 @@ uv sync --with rag
 
 ### 沙箱
 
-聊天Agent的文件与Shell能力由 [mirage](https://github.com/strukto-ai/mirage) 沙箱提供。启用方式：
+聊天Agent的文件与Shell能力由[mirage](https://github.com/strukto-ai/mirage)提供虚拟终端，由[Sandlock](https://github.com/multikernel/sandlock)提供沙箱隔离。
+
+沙箱默认关闭。若需要启用，请确保系统内核版本满足要求，并安装Sandlock。
 
 ```yaml
 # config-{环境}.yaml
@@ -40,17 +42,11 @@ sandbox:
   enabled: true
 ```
 
-启用前需安装 **sandlock** CLI，并添加到`PATH`环境变量中。
+**内核版本要求**：Sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）。在低于此版本的内核上，bot会生成wrapper并降级到 Landlock ABI v4。若连v4也无法满足，则沙箱无法启动。降级只削弱防进程逃逸，文件系统隔离仍可用。
 
 ```bash
-# 从 https://github.com/multikernel/sandlock/releases 下载对应架构的二进制
-curl -fsSL -o sandlock.tar.gz \
-  https://github.com/multikernel/sandlock/releases/download/v0.9.0/sandlock-x86_64-unknown-linux-gnu.tar.gz
-tar xzf sandlock.tar.gz && install -m755 sandlock ~/.local/bin/
 sandlock check   # 确认 ABI 与 protection 可用性
 ```
-
-**内核版本要求**：sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）。在低于此版本的内核上，bot会生成wrapper并降级到 Landlock ABI v4。若连v4也无法满足，则沙箱无法启动。降级只削弱防进程逃逸，文件系统隔离仍可用。
 
 ### Playwright 渲染服务
 
