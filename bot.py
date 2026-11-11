@@ -182,7 +182,74 @@ def patch_foreign_plugins():
     assert render_markdown.__kwdefaults__ is not None
     render_markdown.__kwdefaults__["width"] = 720
 
-    ## nonebot_plugin_
+    ## nonebot_plugin_parser
+    # 覆盖 DefaultRenderer.render_messages:
+    # 图文（含视频封面）混排为一条消息，视频/音频各自为一条消息，
+    # 再将它们统一合并为一条合并转发消息
+    from nonebot_plugin_parser.exception import DownloadException
+    from nonebot_plugin_parser.helper import (
+        CustomNode,
+        Reference,
+        Segment,
+        Text,
+        UniHelper,
+        UniMessage,
+    )
+    from nonebot_plugin_parser.renders.default import DefaultRenderer
+
+    async def _parser_render_messages(self: DefaultRenderer):
+        texts = [
+            self.result.header,
+            self.result.text,
+            self.result.extra_info,
+        ]
+
+        if self.append_url:
+            texts.extend((self.result.display_url, self.result.repost_display_url))
+
+        texts = [text for text in texts if text]
+        texts[:-1] = [text + "\n" for text in texts[:-1]]
+        segs: list[Segment] = [Text(text) for text in texts]
+
+        if (
+            self.result.video
+            and (cover := self.result.video.cover)
+            and (cover_path := await cover.safe_get())
+        ):
+            segs.insert(1, UniHelper.img_seg(cover_path))
+
+        messages: list[UniMessage] = [UniMessage(segs)]
+        error: DownloadException | None = None
+
+        try:
+            async for message in self.render_contents():
+                # render_contents 受 need_forward_contents 等配置影响可能产出嵌套转发,
+                # 展平其中的节点内容, 使其作为一条普通消息参与最终合并转发,
+                # 避免 OneBot v11 下"转发节点内容中再嵌 node"无法发送的问题
+                if (
+                    len(message) == 1
+                    and isinstance(ref := message[0], Reference)
+                    and ref.id is None
+                ):
+                    flattened = UniMessage()
+                    for node in ref.children:
+                        if isinstance(node, CustomNode):
+                            flattened += node.content
+                    if flattened:
+                        message = flattened
+                messages.append(message)
+        except DownloadException as e:
+            # 部分媒体下载失败: 失败提示已被收集, 先发出合并转发再重新抛出, 保留失败 reaction 语义
+            error = e
+
+        messages = [message for message in messages if message]
+        if messages:
+            yield UniMessage(UniHelper.construct_forward_message(messages))
+
+        if error is not None:
+            raise error
+
+    DefaultRenderer.render_messages = _parser_render_messages
 
 
 def register_other_configs_and_generate_schema():

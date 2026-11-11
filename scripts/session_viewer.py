@@ -28,10 +28,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 from jinja2 import DictLoader, Environment
 from pydantic_ai import (
+    CompactionPart,
     ModelMessagesTypeAdapter,
     ModelResponse,
-    RetryPromptPart,
+    RetryFeedbackPart,
     SystemPromptPart,
+    TextContent,
     TextPart,
     ThinkingPart,
     ToolCallPart,
@@ -142,6 +144,10 @@ def _content_items(content: object, blob_meta: dict[str, str], db_q: str) -> lis
                 )
             else:
                 add_text(value)
+        elif isinstance(value, TextContent):
+            # harness 压缩保留的用户消息（kept-user-message.v1）被规范化为
+            # TextContent；按普通文本渲染，避免落入 repr 序列化兑底
+            add_one(value.content)
         elif isinstance(value, (list, tuple)):
             for v in value:
                 add_one(v)
@@ -155,6 +161,27 @@ def _content_items(content: object, blob_meta: dict[str, str], db_q: str) -> lis
 
     add_one(content)
     return items
+
+
+def _user_blocks(content: object, blob_meta: dict[str, str], db_q: str) -> list[dict]:
+    """UserPromptPart 内容 → 渲染项；多段输入（list[UserContent]）时为各段标注序号
+
+    分段式输入的每个顶层元素是一段独立来源（消息缓冲区 / 本次用户消息 / 图片 …），
+    展示层用 "段 i/n" 徽章 + 左侧竖线把段边界显式标出来，避免多段文本紧贴难以区分。
+    旧版 `$ ` 前缀拼接的单字符串消息（含 harness 压缩保留的 kept-user-message）
+    保持原单块文本渲染，不拆段。
+    """
+    if not isinstance(content, (list, tuple)) or len(content) < 2:
+        return _content_items(content, blob_meta, db_q)
+    segs = [blocks for seg in content if (blocks := _content_items(seg, blob_meta, db_q))]
+    total = len(segs)
+    out: list[dict] = []
+    for i, blocks in enumerate(segs, 1):
+        label = f"段 {i}/{total}"
+        for b in blocks:
+            b["seg_label"] = label
+        out.extend(blocks)
+    return out
 
 
 def _pretty_args(args: object) -> str:
@@ -173,6 +200,20 @@ def _short_call_id(call_id: str | None) -> str:
     if not call_id:
         return ""
     return call_id if len(call_id) <= 14 else f"…{call_id[-12:]}"
+
+
+_OUTCOME_LABELS = {"retried": "已重试", "failed": "失败", "denied": "拒绝", "interrupted": "已中断"}
+"""ToolReturnPart.outcome（非 success）→ 徽章文案"""
+
+
+def _retry_cause(part: object) -> str:
+    """RetryFeedbackPart / retried ToolReturnPart 的 retry.cause → 简短描述"""
+    retry = getattr(part, "retry", None)
+    cause = getattr(retry, "cause", None) if retry is not None else None
+    if cause is None:
+        return ""
+    text = str(cause)
+    return text if len(text) <= 80 else text[:79] + "…"
 
 
 def _usage_view(usage: object) -> dict:
@@ -202,27 +243,42 @@ def convert_message(msg: object, blob_meta: dict[str, str], db_q: str) -> dict:
     for part in getattr(msg, "parts", []):
         if isinstance(part, UserPromptPart):
             view["parts"].append(
-                {"type": "user", "blocks": _content_items(part.content, blob_meta, db_q)}
+                {"type": "user", "blocks": _user_blocks(part.content, blob_meta, db_q)}
+            )
+        elif isinstance(part, CompactionPart):
+            text = str(part.content or "")
+            view["parts"].append(
+                {
+                    "type": "compaction",
+                    "blocks": _content_items(text, blob_meta, db_q),
+                    "chars": len(text),
+                }
             )
         elif isinstance(part, SystemPromptPart):
             view["parts"].append(
                 {"type": "system", "content": str(part.content), "label": "system"}
             )
         elif isinstance(part, ToolReturnPart):
+            outcome = getattr(part, "outcome", "success") or "success"
             view["parts"].append(
                 {
                     "type": "tool_return",
                     "tool": part.tool_name,
                     "call_id": _short_call_id(part.tool_call_id),
+                    "outcome": _OUTCOME_LABELS.get(outcome, outcome)
+                    if outcome != "success"
+                    else "",
+                    "cause": _retry_cause(part) if outcome != "success" else "",
                     "blocks": _content_items(part.content, blob_meta, db_q),
                 }
             )
-        elif isinstance(part, RetryPromptPart):
+        elif isinstance(part, RetryFeedbackPart):
             view["parts"].append(
                 {
                     "type": "retry",
-                    "tool": part.tool_name or "",
-                    "call_id": _short_call_id(part.tool_call_id),
+                    "tool": "",
+                    "call_id": "",
+                    "cause": _retry_cause(part),
                     "blocks": _content_items(part.content, blob_meta, db_q),
                 }
             )
@@ -245,6 +301,18 @@ def convert_message(msg: object, blob_meta: dict[str, str], db_q: str) -> dict:
                     "tool": part.tool_name,
                     "call_id": _short_call_id(part.tool_call_id),
                     "args": _pretty_args(part.args),
+                }
+            )
+        elif getattr(part, "part_kind", "") == "retry-prompt":
+            # 旧版 RetryPromptPart（pydantic-ai 已弃用，v3 移除）：历史库中仍可能
+            # 落盘该形态，按 part_kind 识别渲染，避免 import 弃用类型
+            view["parts"].append(
+                {
+                    "type": "retry",
+                    "tool": getattr(part, "tool_name", None) or "",
+                    "call_id": _short_call_id(getattr(part, "tool_call_id", None)),
+                    "cause": "",
+                    "blocks": _content_items(getattr(part, "content", ""), blob_meta, db_q),
                 }
             )
         else:
@@ -510,7 +578,7 @@ TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}kanade 会话查看器{% endblock %}</title>
+<title>{% block title %}宵崎奏Bot 会话查看器{% endblock %}</title>
 <style>
   :root {
     --bg: #0e1116; --panel: #151a23; --panel2: #1a2130; --border: #262f42;
@@ -571,6 +639,14 @@ TEMPLATE = r"""<!doctype html>
   /* 分段式用户消息（list[UserContent] 多文本部分）的相邻内容块间留白，避免多段紧贴 */
   .ctext + .ctext, .ctext + .clamp-wrap, .clamp-wrap + .ctext, .clamp-wrap + .clamp-wrap {
     margin-top: 8px; }
+  /* 多段用户输入：每段左侧竖线 + 段号徽章，段边界一目了然（seg_label 由后端标注） */
+  .seg { position: relative; border-left: 2px solid var(--accent); padding-left: 12px;
+         margin-top: 10px; }
+  .seg:first-child { margin-top: 0; }
+  .seg::before { content: attr(data-seg); display: block; font-family: var(--mono);
+                 font-size: 10px; color: var(--accent); background: #1c2f52;
+                 border-radius: 5px; padding: 0 7px; width: fit-content;
+                 line-height: 1.7; margin-bottom: 3px; }
   .clamp-wrap .ctext { max-height: 260px; overflow: hidden; position: relative;
     -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent);
             mask-image: linear-gradient(180deg, #000 82%, transparent); }
@@ -599,6 +675,13 @@ TEMPLATE = r"""<!doctype html>
   details.think > summary { cursor: pointer; color: var(--purple); font-size: 11.5px;
                             font-family: var(--mono); user-select: none; }
   details.think .ctext { color: #97a3ba; font-size: 12px; margin-top: 4px; }
+
+  /* 压缩摘要（CompactionPart）：紫色虚线框与压缩事件时间线同色系 */
+  details.compaction { border: 1px dashed #55407a; background: #191327; border-radius: 8px;
+                       padding: 5px 10px; margin: 4px 0; }
+  details.compaction > summary { cursor: pointer; color: var(--purple); font-size: 11.5px;
+                                 font-family: var(--mono); user-select: none; }
+  details.compaction .ctext { font-size: 12px; margin-top: 4px; }
 
   .meta { border-top: 1px dashed var(--border); margin-top: 6px; padding: 5px 12px 8px;
           font-family: var(--mono); font-size: 10.5px; color: var(--dim); display: flex;
@@ -643,7 +726,7 @@ TEMPLATE = r"""<!doctype html>
 </head>
 <body>
 <header>
-  <h1>📦 kanade 会话查看器</h1>
+  <h1>📦 宵崎奏Bot 会话查看器</h1>
   {% if db_name is defined %}
     <span class="path">{{ db_name }}</span>
     <span class="path" style="opacity:.7">{{ db }}</span>
@@ -704,9 +787,10 @@ PAGE_INDEX = r"""{% extends "base" %}
 """
 
 PAGE_VIEW = r"""{% extends "base" %}
-{% block title %}{{ db_name }} · kanade 会话查看器{% endblock %}
+{% block title %}{{ db_name }} · 宵崎奏Bot 会话查看器{% endblock %}
 {% macro content_block(blocks) %}
   {% for it in blocks %}
+    {% if it.seg_label %}<div class="seg" data-seg="{{ it.seg_label }}">{% endif %}
     {% if it.kind == 'text' %}
       {% if it.long %}
       <div class="clamp-wrap">
@@ -724,6 +808,7 @@ PAGE_VIEW = r"""{% extends "base" %}
             alt="{{ it.hash[:12] }}"></a>
       {% endif %}
     {% endif %}
+    {% if it.seg_label %}</div>{% endif %}
   {% endfor %}
 {% endmacro %}
 
@@ -758,19 +843,24 @@ PAGE_VIEW = r"""{% extends "base" %}
       </div>
     {% elif p.type == 'tool_return' %}
       <div class="part tool_return">
-        <div class="toolhead"><span class="badge b-ret">返回</span> <b>{{ p.tool }}</b>
-          <span class="callid">{{ p.call_id }}</span></div>
+        <div class="toolhead"><span class="badge {% if p.outcome %}b-retry{% else %}b-ret{% endif %}">{% if p.outcome %}{{ p.outcome }}{% else %}返回{% endif %}</span> <b>{{ p.tool }}</b>
+          <span class="callid">{{ p.call_id }}</span>{% if p.cause %}<span class="callid">{{ p.cause }}</span>{% endif %}</div>
         <div style="margin-top:2px">{{ content_block(p.blocks) }}</div>
       </div>
     {% elif p.type == 'retry' %}
       <div class="part retry">
-        <div class="toolhead"><span class="badge b-retry">重试</span> <b>{{ p.tool }}</b>
-          <span class="callid">{{ p.call_id }}</span></div>
+        <div class="toolhead"><span class="badge b-retry">重试</span>{% if p.tool %} <b>{{ p.tool }}</b>{% endif %}
+          <span class="callid">{{ p.call_id }}</span>{% if p.cause %}<span class="callid">{{ p.cause }}</span>{% endif %}</div>
         <div style="margin-top:2px">{{ content_block(p.blocks) }}</div>
       </div>
     {% elif p.type == 'thinking' %}
       <details class="think">
         <summary>💭 thinking · {{ p.chars }} 字符</summary>
+        {{ content_block(p.blocks) }}
+      </details>
+    {% elif p.type == 'compaction' %}
+      <details class="compaction">
+        <summary>🗜 压缩摘要 · {{ '{:,}'.format(p.chars) }} 字符</summary>
         {{ content_block(p.blocks) }}
       </details>
     {% else %}
@@ -918,7 +1008,7 @@ def render_page(name: str, **ctx) -> str:
     return RENDER_ENV.get_template(name).render(**ctx)
 
 
-app = FastAPI(title="kanade 会话查看器", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="宵崎奏Bot 会话查看器", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def _error_page(title: str, detail: str, status: int) -> HTMLResponse:
@@ -996,7 +1086,7 @@ def blob(db: str = "", hash: str = "") -> Response:
 
 def main():
     global EXTRA_DIRS, PAGE_SIZE
-    parser = argparse.ArgumentParser(description="kanade 会话数据库查看器（只读）")
+    parser = argparse.ArgumentParser(description="宵崎奏Bot 会话数据库查看器（只读）")
     parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1）")
     parser.add_argument("--port", type=int, default=8770, help="监听端口（默认 8770）")
     parser.add_argument("--page-size", type=int, default=60, help="每页消息行数（默认 60）")
