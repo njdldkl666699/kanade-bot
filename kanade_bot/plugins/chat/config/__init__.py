@@ -9,10 +9,10 @@ from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.schema import ConfigRegistry
 
 from .agent import AgentConfig, ChatPromptConfig, ImageCaptionConfig, PromptSectionConfig, TTSConfig
-from .auto_reply import AutoReplyConfig, ReplyGateConfig, TimeWindow
 from .history import CompactionConfig, SessionConfig
 from .memes import StickerEmbeddingConfig, StickerMemeConfig, StickerTaggerConfig
 from .memory import MemoryConfig
+from .proactive import ProactiveConfig, ReplyGateConfig, TimeWindow
 from .rag import RAGConfig
 from .runtime import ChatConfig, ChatConfigs
 from .sandbox import SandboxConfig
@@ -26,7 +26,6 @@ from kanade_bot.plugins.model_updater import load_register_model_from_file
 
 __all__ = [
     "AgentConfig",
-    "AutoReplyConfig",
     "ChatConfig",
     "ChatConfigs",
     "ChatPromptConfig",
@@ -34,6 +33,7 @@ __all__ = [
     "Config",
     "ImageCaptionConfig",
     "MemoryConfig",
+    "ProactiveConfig",
     "PromptSectionConfig",
     "RAGConfig",
     "ReplyGateConfig",
@@ -78,7 +78,7 @@ class ScopedConfig(BaseModel):
     rag: RAGConfig = RAGConfig()
     tts: TTSConfig = TTSConfig()
 
-    auto_reply: AutoReplyConfig = AutoReplyConfig()
+    proactive: ProactiveConfig = ProactiveConfig()
     """主动回复配置"""
 
     billing: TokenBillingConfig = TokenBillingConfig()

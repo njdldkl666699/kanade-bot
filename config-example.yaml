@@ -59,7 +59,7 @@ chat:
     openai_model: BAAI/bge-m3
     openai_base_url: *siliconflow-base_url
     openai_api_key: *siliconflow-api_key
-  auto_reply:
+  proactive:
     enabled: true
     gate:
       <<: *sensenova-6-8-flash-lite

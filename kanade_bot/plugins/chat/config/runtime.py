@@ -11,7 +11,7 @@ class ChatConfig(AttrDocModel):
     """拉黑的用户ID列表"""
     banned_groups: set[str] = set()
     """拉黑的群ID列表"""
-    auto_reply_enabled_groups: set[str] = set()
+    proactive_enabled_groups: set[str] = set()
     """启用主动回复的群ID列表"""
 
 

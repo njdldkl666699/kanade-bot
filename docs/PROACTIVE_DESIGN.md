@@ -1,6 +1,7 @@
-# 主动回复（AutoReply）
+# 主动回复（Proactive）
 
-> 2026-10 设计，2026-10-26 实现落地，2026-10-27 增补每日清空与主动回复防重判
+> 2026-10 设计，2026-10-26 实现落地，2026-10-27 增补每日清空与主动回复防重判，
+> 2026-11-10 增补被动触发补记与调度重置、判回未发出补记与上下文护栏（决策模型窗口比例）
 > （本文档与代码实现现状保持一致）。参考 MaiBot 触发调度
 > （见 `cache/misc_not_plugin/MaiBot触发调度设计要点.md`）的防抖与时段思想，但不照搬其
 > Planner（发消息即工具）架构——本项目在主 Agent **之前**加一个轻量 LLM 决策节点。
@@ -23,7 +24,7 @@
 ```
 非@群消息 → add_message 进 buffer
           → buffer ≥ threshold 且 random() < probability
-             → send_message_in_chunks(auto_reply=True)   # 触发那条消息当 prompt
+             → send_message_in_chunks(proactive=True)   # 触发那条消息当 prompt
 ```
 
 问题：
@@ -51,9 +52,14 @@
 | 适用范围 | **仅群聊**——私聊不做主动回复（to_me 被动通道天然覆盖，见 §0） |
 | 许可合规 | 净室开发：MaiBot 为 GPL-3.0、本项目 MIT——思想可借鉴，实现独立编写，不复制其代码（见 §0） |
 | 尾部元信息 | 只报「最近 K 条」数量与时间元信息，**不复制消息内容**（历史已含，避免重复固化） |
-| 群黑名单 | 启用判定含群黑名单检查（`is_enabled`，延续旧 `should_auto_reply` 行为） |
-| 主动执行前检查 | `send_auto_reply` 锁外快查 + 会话锁内复检（`require_buffer`）：buffer 为空（被动轮已消费）则放弃，不凭空插话、不对同一批双回复 |
+| 群黑名单 | 启用判定含群黑名单检查（`is_enabled`，延续旧链路的启用判定行为） |
+| 主动执行前检查 | `send_proactive_reply` 锁外快查 + 会话锁内复检（`require_buffer`）：buffer 为空（被动轮已消费）则放弃，不凭空插话、不对同一批双回复 |
 | 决策上下文生命周期 | 每日 `daily_reset_time`（默认 04:00，Asia/Shanghai）自动清空内存生效序列；DB 全量决策保留，重启仅恢复当日（§4） |
+| 被动触发补记 | to_me 触发消息以 user 行补进决策历史（不进 gate/buffer），旁观流里 bot 不凭空说话（§4） |
+| 被动互动重置 | to_me 被动触发时清空该会话防抖批次/计时器与退避（取消延迟重查、计数清零）：被动互动说明话题在场，后续群消息大概率相关（§3/§7） |
+| 判回未发出补记 | 决策「回」但执行放弃（buffer 被被动轮消费/无产出）时补记未发出事实行，决策器不误以为说过话（§5） |
+| 上下文护栏 | 估算 tokens 超决策模型窗口的 `context_usage_threshold` 比例时截断内存生效序列，保留最近 `context_keep_decisions` 个判定轮（窗口解析失败时护栏关闭）（§4） |
+| 累积量递进触发 | 待判定消息量达 `buffer_gate_threshold` 整数倍（n、2n、3n…）时额外尝试一次决策（复用退避/概率闸链路，未抽中则继续累积到下一整数倍再试）：解决活跃群概率闸连续未抽中反而沉默（§2） |
 
 ## 总体架构
 
@@ -91,7 +97,7 @@ bot 发言（被动/主动）→ 以 user 消息 append 进决策历史
 ## 1. 消息防抖（写死 natural 档）
 
 `agent/proactive/debounce.py` 的 `MessageDebouncer`：纯内存状态机（不持久化、不用 asyncio 原语），
-只负责批次划分与到期时刻计算，到期唤醒由调用方（`AutoReplyRuntime`）安排；
+只负责批次划分与到期时刻计算，到期唤醒由调用方（`ProactiveRuntime`）安排；
 时间基准 `time.monotonic()`，参数写死不配置：
 
 | 参数 | 值 | 常量 | 说明 |
@@ -110,6 +116,10 @@ bot 发言（被动/主动）→ 以 user 消息 append 进决策历史
 `min(now + 续发等待, 首条时刻 + 整批上限)`——续发等待 15s 短于开批等待，首条后的消息会把
 过宽的开批等待收紧到续发节奏，此后每条消息再顺延，但永不超过整批上限。
 
+> **各档取值有意取平**（开批 20/20、续发 15/15）：安静/活跃开批与同人/换人续发的分档
+> 是供差异化调参的结构位，默认值相同是刻意的调参起点，不是行为差异——后续调参
+> 只改常量即可（如安静开批更短、换人收批更快），无需改逻辑。
+
 与 MaiBot 的差异（有意简化）：
 
 - **不做裸图/纯表情特判**：本项目消息进 buffer 前已文本化（图片是占位/述图文字），「纯表情包」判定不可靠，收益低；
@@ -117,7 +127,7 @@ bot 发言（被动/主动）→ 以 user 消息 append 进决策历史
 - **到期批次不被新消息延长**：到期即触发决策任务；决策期间到达的消息留在 buffer、开新批防抖，
   若决策通过则随 `send_and_wait` 一并消费。
 
-到期唤醒实现（`AutoReplyRuntime`）：每次 observe 后取消旧定时任务并重新安排
+到期唤醒实现（`ProactiveRuntime`）：每次 observe 后取消旧定时任务并重新安排
 session 级 `asyncio.Task: sleep(deadline - now)` 到期触发；consume / 被动回复消费
 buffer（`on_buffer_consumed`）时取消任务并重置批次。
 
@@ -173,6 +183,24 @@ time_windows:
 - 不计入退避计数（退避只统计「决策输出不回」，概率跳过根本没问 LLM）；
 - 跳过后下一批的边界就是自然消息流——无需任何补偿逻辑。
 
+### 累积量递进触发（2026-11-10）
+
+概率闸按批次独立抽签，活跃群批次频繁但连续未抽中的概率随批次指数增长（0.7⁵ ≈ 0.17），
+话题轮转快时等抽中已然过时——群越活跃反而越沉默。补一条**消息量驱动**的触发通道
+（`buffer_gate_threshold`，默认 15，0 = 关闭）：
+
+- **触发**：`new_messages`（自上次判定以来的新增群消息数）在 `on_group_message` 中
+  达到阈值的整数倍（n、2n、3n…，每条消息 +1 故倍数精确经过）时，取消挂起的防抖
+  到期任务并收束当前批次，立即走一次防抖到期编排（`_force_gate_attempt` →
+  `_on_debounce_due`）——退避检查、概率闸、防重入全链路复用；
+- **递进重试**：概率未抽中时 `new_messages` 不清零（既有语义），继续累积到下一
+  整数倍时再触发——每次重试的待判定范围更全，决策器更可能找到接话点；
+- **重置**：送审后 `new_messages` 清零，从 n 重新起算；决策失败不清零，下一整数倍
+  自然重试；退避中触发只确保延迟重查已安排（不重复安排），重查对着当前 buffer
+  全量评估；
+- 与防抖时间驱动通道并行互补：批次到期照常触发，本通道只在不等到期就能凑足
+  消息量时提前；两者经 `gate_running` 防重入自然互斥。
+
 ## 3. 连续不回退避
 
 MaiBot idle backoff 的变体，计数源是**决策节点的输出**：
@@ -192,6 +220,10 @@ MaiBot idle backoff 的变体，计数源是**决策节点的输出**：
 
 设计意图：连续被判「不回」说明群里没什么值得插话的，越久没事做就越少调决策 LLM（省钱）；
 一旦回了（说明话题热起来了）立即满血。退避期间决策日志仍持续累积，重查时上下文不缺。
+
+**被动互动同样清零（2026-11-10）**：to_me 被动触发时（`on_passive_trigger`，见 §7）取消挂起的
+延迟重查并把计数清零——被动互动说明用户提出了新话题或还需要继续解答，后续群消息大概率
+话题相关，与「决策回即清零」同一语义（话题在场即满血）；决策历史与统计计数不受影响。
 
 ## 4. LLM 决策节点
 
@@ -246,8 +278,9 @@ messages（append-only，前缀缓存主体，持久化 DB）
 | 消息 | 角色 | 来源 |
 |---|---|---|
 | 群消息 | user | `handle_chat_monitor`，一条消息一条 user（与 buffer 同格式 `[时间] 昵称(ID)：内容`） |
+| to_me 触发消息 | user | `send_message_in_chunks` 经 `on_passive_trigger` 补记（2026-11-10）：to_me 消息被 chat matcher 拦截走被动通道、不进 gate/buffer，但被动回复产出会 append——不补则决策器看到 bot 凭空说话；同时重置该会话主动调度（防抖/退避清空，见 §3/§7），不进 buffer |
 | 判定 | assistant | 以稳定 JSON 固化：`{"reply": ..., "reason": ...}`（`ensure_ascii=False`） |
-| bot 发言 | user | 判定为「回」后，主动/被动回复产出以 `[时间] {昵称}：内容` 逐段追加 |
+| bot 发言 | user | 判定为「回」后，主动/被动回复产出以 `[时间] {昵称}：内容` 逐段追加；判「回」未发出的场次补记事实行（见 §5） |
 
 顺序即因果：群消息批 → 判定 →（若回）bot 回复 → 后续群消息……
 「本批/历史」的区分就此消失——决策器看的是持续群聊流加自己的判定历史（能看到「我已连续潜水一阵」，与退避互为印证）。
@@ -289,6 +322,29 @@ CREATE TABLE gate_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 现阶段不可能触发，只徒增链路复杂度（摘要模型调用、锚点行、水位线）。历史版本的
 「截头 + 摘要锚点」机制（复用 `cfg.compaction` 摘要档配置）已整体移除，若未来
 单日上下文实际接近窗口上限再重新引入。
+
+### 上下文护栏（2026-11-10）
+
+每日清空承担规模约束，但超活跃群单日仍可能逼近模型窗口（日数千条消息 × ~50 tokens）。
+兜底护栏在**每次决策前**检查（`SessionGateHistory.enforce_context_guard`，`decide()`
+开头调用）：
+
+- **触发**：生效序列估算输入 tokens 超决策模型窗口的
+  `proactive.context_usage_threshold` 比例（0 = 关闭）。窗口口径与会话压缩一致
+  （`gate.gate_context_window`，进程内解析一次固化——与压缩阈值的固化同理，
+  避免 registry/网络状态漂移导致阈值漂移）：显式配置 > /models 元数据 >
+  genai-prices，`gate` 留空回退主模型时窗口一并继承；解析失败（None）时护栏
+  关闭（保守跳过，同压缩比例闸门口径）；
+- **动作**：截断内存生效序列，保留最近 `context_keep_decisions` 个**完整判定轮**
+  （以 assistant 判定行为锚：各轮 = 被判定消息 + `待判定：` 元信息 + 判定 + 其后
+  bot 发言，meta 所指「最近 K 条」完整在场）——决策器仍能看到较近上文与自己近期
+  的判定理由；DB 全量行不动，重启恢复口径不变（仍按当日边界截）；
+- **前缀缓存**：截断使请求前缀变化，下一次决策的前缀缓存失效一次（同每日清空
+  语义，属预期）；正常单日远达不到阈值，护栏不触发、不影响命中；
+- **边界**：判定轮不足 N 个时从首个判定轮的元信息行起保留（首轮 meta 缺失其
+  判定对象，属可接受的 dangling）；首个判定轮前无更早行时不截（记 warning），
+  不会为截而截丢全部上下文。
+
 ### 每日清空：决策上下文的当日边界（2026-10-27）
 
 决策器旁观的是「今天这个群在聊什么」——昨天的消息与判定对今天的插话判断几乎无用，
@@ -296,7 +352,7 @@ CREATE TABLE gate_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 | 项 | 设计 |
 |---|---|
-| 清空时刻 | `auto_reply.daily_reset_time`（默认 `04:00`，Asia/Shanghai，凌晨群聊最安静）；cron 任务在 `AutoReplyRuntime` 构造时注册，进程启动读配置，改动需重启生效 |
+| 清空时刻 | `proactive.daily_reset_time`（默认 `04:00`，Asia/Shanghai，凌晨群聊最安静）；cron 任务在 `ProactiveRuntime` 构造时注册，进程启动读配置，改动需重启生效 |
 | 当日边界 | `daily_reset_boundary()`：最近一次清空时刻（04:00 前属前一天，恰在边界属当天） |
 | 动作 | `_daily_reset()` 逐在线会话调 `SessionGateHistory.reset_context()`：内存 `rows` 归零；**不删 DB 行**。未加载的会话无内存态，无需处理 |
 | 重启恢复 | `_restore_state` → `restore_today()`：`load_gate_history(since=边界)` 按 `created_at` 过滤；bot 若在清空时刻停机错过 cron，边界过滤在恢复时天然补齐 |
@@ -341,45 +397,40 @@ logger.info("退避延迟 {} 计数={} 延迟={:.0f}s")  # 退避触发
 
 ## 5. 回复执行
 
-决策通过后，`AutoReplyRuntime` 调用 `executor.send_auto_reply(bot, session_info, reason=...)`：
+决策通过后，`ProactiveRuntime` 调用 `executor.send_proactive_reply(bot, session_info, reason=...)`：
 
 ```python
-# agent/proactive/executor.py: send_auto_reply（节选）
+# agent/proactive/executor.py: send_proactive_reply（节选）
 if not session.buffer:
     # 锁外快查（真正判定在锁内复检）：被动轮恰好先消费了 buffer，无新内容可说
-    return
-async with aclosing(
-    session.send_and_wait(
-        session_info,
-        "",
-        bot_id=bot.self_id,
-        system_notification=build_auto_reply_notification(reason),
-        require_buffer=True,
-    )
-) as contents:
-    async for content in contents:
-        await send_proactive(bot, session_info, content)  # 流式逐条发回原会话
-        await auto_reply_runtime.on_bot_message(session_id, content, proactive=True)
-        # 逐段以 user 消息追加进决策历史（[时间] {昵称}：内容）
+    return False
+...
+# 返回是否实际发出至少一条回复（False = 前置检查/锁内复检放弃，或本轮无产出）
 ```
 
 - **不借 matcher/event**：整批消息本就在 buffer 里，`prompt=""` + buffer 即全部内容
   （旧链路把触发消息当 prompt 的做法已废除）；
 - **执行前 buffer 双重检查（防双回复竞态，2026-10-27）**：非空的 `system_notification`
   会使 `send_and_wait` 的「空内容保护」失效（notice 单独视为可运行内容），故
-  `send_auto_reply` 先在锁外快查 buffer；`send_and_wait` 以 `require_buffer=True` 在
+  `send_proactive_reply` 先在锁外快查 buffer；`send_and_wait` 以 `require_buffer=True` 在
   **取得会话锁后复检**，为空即放弃（空生成器）。复检是必要的：锁外检查通过后、
   真正取得锁前，被动轮（to_me 触发）可能恰好消费同一批消息，此时若无复检，主动轮
   会仅凭插话说明对空 buffer 再生成一次——同一批消息连回两次。定时任务唤醒
   （`_wake_session`）不设 `require_buffer`（通知本身即内容），语义不变；
 - `system_notification` 显式参数已有先例（`schedule.py`），不占用排队通知槽位；
+- **判回未发出的补记（2026-11-10）**：`send_proactive_reply` 返回是否实际发出至少一条
+  回复；为 False（锁外快查/锁内复检放弃，或本轮无产出）时，`_execute_reply` 向
+  决策历史补记一行事实（`build_aborted_reply_note`：`[时间]（系统注：上一判定为
+  「回」，但主动插话未实际发出……）`）——判定行已固化 `reply: true` 却没有 bot 发言
+  行跟随时，决策器不误以为自己说过话。发送中途**异常不补记**：可能已发出部分
+  内容且已逐段 append，属实；统计计数「回」仍按决策输出计（含放弃场次）；
 - **决策理由随通知注入**：决策器判定「回」的 `reason` 附加在插话场景说明之后
-  （`build_auto_reply_notification(reason)`，无理由时仅场景说明），主 Agent 接话时
-  可参考决策器视角；reason 经 `_gate_flow → _execute_reply → send_auto_reply`
+  （`build_proactive_notification(reason)`，无理由时仅场景说明），主 Agent 接话时
+  可参考决策器视角；reason 经 `_gate_flow → _execute_reply → send_proactive_reply`
   传递；
 - 计费：`on_usage` 回调跳过（主动回复免费，延续现状）；发送链路复用 `deliver.py` 的
   分段/长文转图逻辑；
-- 执行异常由 `AutoReplyRuntime` 捕获记日志，不重试。
+- 执行异常由 `ProactiveRuntime` 捕获记日志，不重试。
 
 ## 6. 决策统计命令
 
@@ -418,19 +469,19 @@ SUPERUSER）：清空当前会话的决策消息历史——DB `gate_messages` �
 | 场景 | 行为 |
 |---|---|
 | 私聊消息 | **不做主动回复**：恒为 to_me 走被动通道，`not_to_me` 规则天然排除，无需配置 |
-| 用户 @ bot（to_me） | 被动通道必回，不经过本流水线；bot 回复产出 append 进决策日志 |
+| 用户 @ bot（to_me） | 被动通道必回，不经过本流水线；触发时补记决策历史并**重置该会话主动调度**（`on_passive_trigger`：防抖批次/计时器清空、新批从后续消息重新起算，退避计数清零并取消延迟重查——话题相关，满血送审），bot 回复产出 append 进决策日志 |
 | 被动回复消费了 buffer | `send_and_wait` 清空 buffer 处回调 `on_buffer_consumed(session_id)`：取消挂起的防抖任务、重置批次（退避计数与决策日志保留） |
-| 决策通过但用户恰好先 @ 了 | `send_and_wait` 排队等 `session.lock`，先到先得；若被动轮已消费 buffer，主动轮的锁外快查或锁内复检（`require_buffer`）不过 → 放弃本轮（见 §5），不会对同一批消息双回复 |
+| 决策通过但用户恰好先 @ 了 | `send_and_wait` 排队等 `session.lock`，先到先得；若被动轮已消费 buffer，主动轮的锁外快查或锁内复检（`require_buffer`）不过 → 放弃本轮（见 §5）并补记未发出事实行，不会对同一批消息双回复 |
 | 决策运行中 bot 被重启 | 决策消息历史从 DB 恢复**当日上下文**（每日清空边界，见 §4），当日内前缀缓存跨重启命中；防抖/退避/统计计数器为内存态，从零开始 |
 | 会话重置（`重置会话`） | 决策历史表与元信息 kv（`gate_messages` / `gate_state`）随主历史 `store.clear` 一并清空 |
 
-循环依赖注意：`auto_reply` 对 manager/chat 的引用一律函数内延迟导入，模块级依赖只含
+循环依赖注意：`proactive` 对 manager/chat 的引用一律函数内延迟导入，模块级依赖只含
 debounce/reply_gate/config；`session.py` 经回调属性挂钩（`on_buffer_consumed`）解耦，
 不反向依赖主动回复模块。
 
 ## 8. 配置结构
 
-仅全局，`ScopedConfig.auto_reply`（旧 per-group `AutoReplyConfig(threshold, probability)` 已废除）：
+仅全局，`ScopedConfig.proactive`（旧 per-group 阈值+概率抽签配置已废除）：
 
 ```python
 class ReplyGateConfig(BaseAgentConfig):
@@ -439,26 +490,30 @@ class ReplyGateConfig(BaseAgentConfig):
     system_prompt_file: str = "ReplyGate.md"  # 插话决策提示词文件，缺失回退内置默认
 
 
-class AutoReplyConfig(AttrDocModel):
+class ProactiveConfig(AttrDocModel):
     """主动回复（仅全局配置）"""
 
     enabled: bool = False  # 总开关
     gate: ReplyGateConfig = ReplyGateConfig()
     time_windows: list[TimeWindow] = []  # 默认空：任何时段每批必送
     daily_reset_time: time = time(4, 0)  # 每日决策上下文清空时刻（Asia/Shanghai），进程启动时读取
+    context_usage_threshold: float = 0.7  # 决策上下文护栏：估算超决策模型窗口此比例时截断（0 = 关闭；窗口 = 决策模型窗口，解析失败时护栏关闭）
+    context_keep_decisions: int = 6  # 护栏触发时保留的最近判定轮数
     backoff_start: int = 2  # 连续决策不回 N 次后开始退避
     backoff_base: float = 60.0  # 退避基准秒：base × 2^(n-start)
     backoff_cap: float = 1800.0  # 退避上限秒
     gate_timeout: float = 30.0  # 决策调用超时（秒）
+    buffer_gate_threshold: int = (
+        15  # 待判定消息量阈值：新增达 n、2n、3n… 条时额外尝试一次决策（0 = 关闭，见 §2）
+    )
 ```
 
-群的启用列表不在本配置，而是运行时配置 `ChatConfig.auto_reply_enabled_groups`
+群的启用列表不在本配置，而是运行时配置 `ChatConfig.proactive_enabled_groups`
 （`chat_configs.json`，与黑名单同源、按平台隔离），由 `/启用主动回复` `/禁用主动回复`
 命令（SUPERUSER）维护：`set_group_enabled(group_id, platform, enabled)`（`proactive/runtime.py`）
 改写列表并 `save_to_file()` 持久化，重启保留；`is_enabled` 每次现读，切换立即生效。
 
-旧 per-group `AutoReplyConfig(threshold, probability)` 与
-`ChatConfig.auto_reply_group_config: dict[str, AutoReplyConfig]` 字段均已移除，
+旧 per-group 阈值+概率抽签配置与对应 per-group 字段均已移除，
 console/onebot 平台结构保持 `get_by_platform` 不变。迁移：`chat_configs.json` 中的旧键
 `auto_reply_group_config` 被忽略（存量均为空 dict），可择机清理。
 
@@ -468,19 +523,19 @@ console/onebot 平台结构保持 `get_by_platform` 不变。迁移：`chat_conf
 |---|---|
 | `agent/proactive/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
 | `agent/proactive/debounce.py` | `MessageDebouncer`：纯内存防抖状态机（写死 natural 档，`monotonic` 时钟） |
-| `agent/proactive/gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 决策 Agent（进程级 lazy 单例）/ 决策模型配置 |
-| `agent/proactive/gate_history.py` | `SessionGateHistory`（内存+DB 同步、决策调用）、尾部元信息构建；每日清空边界（`daily_reset_boundary` / `restore_today` / `reset_context`） |
+| `agent/proactive/gate.py` | `GATE_SYSTEM_PROMPT` / `ReplyDecision` / 决策 Agent（进程级 lazy 单例）/ 决策模型配置与窗口解析（`gate_context_window`） |
+| `agent/proactive/gate_history.py` | `SessionGateHistory`（内存+DB 同步、决策调用）、尾部元信息构建、上下文护栏（`enforce_context_guard`）；每日清空边界（`daily_reset_boundary` / `restore_today` / `reset_context`） |
 | `agent/proactive/windows.py` | 时段窗口匹配与概率（`match_time_window` / `window_probability`） |
-| `agent/proactive/runtime.py` | `AutoReplyRuntime`：per-session 状态（防抖定时、退避、防重入、计数器）、概率闸、决策编排、回复执行调度、每日清空 cron（`_daily_reset`）、`on_group_message` / `on_bot_message` / `on_buffer_consumed` 入口、统计输出；对 manager/chat 延迟导入 |
-| `agent/proactive/executor.py` | `send_auto_reply`（流式主动发送 + 产出 append，`require_buffer` 防重判） |
+| `agent/proactive/runtime.py` | `ProactiveRuntime`：per-session 状态（防抖定时、退避、防重入、计数器）、概率闸、累积量递进触发（`_force_gate_attempt`）、决策编排、回复执行调度、每日清空 cron（`_daily_reset`）、`on_group_message` / `on_passive_trigger`（补记 + 调度重置）/ `on_bot_message` / `on_buffer_consumed` 入口、统计输出；对 manager/chat 延迟导入 |
+| `agent/proactive/executor.py` | `send_proactive_reply`（流式主动发送 + 产出 append，`require_buffer` 防重判） |
 | `agent/history/gate_store.py` | `gate_messages` / `gate_state` 表：全量 append、`since` 边界加载、kv 读写 |
 | `agent/session/` | `on_buffer_consumed` 回调属性：`send_and_wait` 轮末清 buffer 后触发（`reset` 丢弃不触发）；`require_buffer` 锁内复检（§5） |
 | `handler/chat_flow.py` | `handle_chat_monitor`：消息进 buffer → 启用群进入主动回复流水线；被动回复产出 append 进决策历史 |
-| `handler/auto_reply.py` | `决策统计`、`/启用主动回复` `/禁用主动回复` `/清空决策上下文`（SUPERUSER，运行时切换/维护） |
+| `handler/proactive.py` | `决策统计`、`/启用主动回复` `/禁用主动回复` `/清空决策上下文`（SUPERUSER，运行时切换/维护） |
 | `matcher.py` | `决策统计`、`启用主动回复`、`禁用主动回复`、`清空决策上下文` 命令注册 |
-| `config/auto_reply.py` | `TimeWindow` / `ReplyGateConfig` / `AutoReplyConfig`（§8） |
+| `config/proactive.py` | `TimeWindow` / `ReplyGateConfig` / `ProactiveConfig`（§8） |
 | `utils/billing.py` | `is_non_workday`：非工作日公共判定（峰谷与 `weekdays_only` 同源） |
-| `tests/chat/autoreply_smoke_test.py` | 冒烟：防抖断言、时段窗口、持久化往返、编排端到端（mock 决策 LLM，含退避触发、每日清空与统计输出） |
+| `tests/chat/proactive_smoke_test.py` | 冒烟：防抖断言、时段窗口、持久化往返、编排端到端（mock 决策 LLM，含退避触发、每日清空与统计输出） |
 | `tests/chat/test_pai_agent.py` | 单测：`ProactiveBufferGuardTest`（防重判竞态）、`GateDailyResetTest`（每日清空边界/恢复/内存重置） |
 
 ## 10. 时序示例

@@ -22,7 +22,7 @@ def match_time_window(at: datetime | None = None) -> TimeWindow | None:
     """
     at = at or asia_shanghai_now()
     current = at.time()
-    for window in cfg.auto_reply.time_windows:
+    for window in cfg.proactive.time_windows:
         if window.weekdays_only and is_non_workday(at):
             continue
         if time_in_window(current, window.start, window.end):

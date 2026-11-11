@@ -26,7 +26,7 @@ from kanade_bot.utils.parse import (
 from kanade_bot.utils.session import extract_session_info
 
 from ..agent.manager import chat_manager
-from ..agent.proactive import auto_reply_runtime
+from ..agent.proactive import proactive_runtime
 from ..config import cfg
 from ..deliver import parse_message_segments, send_segments
 from ..matcher import chat, chat_monitor
@@ -100,6 +100,13 @@ async def send_message_in_chunks(
 
     session_info = await extract_session_info(event, bot)
 
+    # to_me 被动触发：触发消息补进决策历史 + 重置该会话主动调度（未启用主动回复的会话 no-op）
+    if sender_info := build_sender_info(session_info.nickname, session_info.user_id):
+        await proactive_runtime.on_passive_trigger(
+            session_info.session_id,
+            f"[{asia_shanghai_now_str('%Y-%m-%d %H:%M')}] {sender_info}：{prompt}",
+        )
+
     turn_start = asia_shanghai_now()
     # 轮次正常结束时按实际usage计费（有文本产出才扣费，峰谷按本轮用户消息时间判定）
     bill_usage = make_turn_biller(get_platform_type(event), event.get_user_id(), turn_start)
@@ -140,7 +147,7 @@ async def send_message_in_chunks(
                 else:
                     await matcher.send(content)
                 # bot 发言 append 进主动回复决策历史
-                await auto_reply_runtime.on_bot_message(session_info.session_id, content)
+                await proactive_runtime.on_bot_message(session_info.session_id, content)
     except Exception as e:
         logger.exception("发送消息时发生错误: {}", e)
         # await _send_fail_message(matcher)
@@ -202,8 +209,8 @@ async def handle_chat_monitor(bot: Bot, event: Event):
     await chat_manager.get_session(session_id).add_message(message_str)
 
     # 主动回复流水线：消息 append 决策历史 + 防抖观察
-    if group_id and session_info.group_name and auto_reply_runtime.is_enabled(group_id, platform):
-        await auto_reply_runtime.on_group_message(
+    if group_id and session_info.group_name and proactive_runtime.is_enabled(group_id, platform):
+        await proactive_runtime.on_group_message(
             session_id,
             group_id,
             message_str,

@@ -4,7 +4,11 @@ from nonebot import logger
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
-from kanade_bot.utils.pai_runtime import build_model_settings, get_model
+from kanade_bot.utils.pai_runtime import (
+    build_model_settings,
+    get_model,
+    resolve_model_context_window,
+)
 from kanade_bot.utils.schema import BaseAgentConfig
 
 from ...config import cfg
@@ -31,11 +35,29 @@ class ReplyDecision(BaseModel):
 _gate_agent: Agent[None, ReplyDecision] | None = None
 """决策 Agent 进程级单例：系统提示与 output schema 恒定，保证前缀缓存命中"""
 
+_gate_context_window: int | None = None
+"""决策模型上下文窗口（进程内解析一次的固化值，见 `gate_context_window`）"""
+
+_gate_context_window_resolved: bool = False
+"""窗口是否已尝试解析（失败也固化，避免每次决策重试网络）"""
+
 
 def effective_gate_config() -> BaseAgentConfig:
     """决策节点生效模型配置：`gate` 留空（未配 model）时回退主模型 `cfg.agent`"""
-    gate = cfg.auto_reply.gate
+    gate = cfg.proactive.gate
     return gate if gate.model else cfg.agent
+
+
+def gate_context_window() -> int | None:
+    """决策模型上下文窗口：显式配置 > /models 元数据 > genai-prices（解析一次固化）
+
+    解析失败返回 None（护栏关闭）。
+    """
+    global _gate_context_window, _gate_context_window_resolved
+    if not _gate_context_window_resolved:
+        _gate_context_window = resolve_model_context_window(effective_gate_config())
+        _gate_context_window_resolved = True
+    return _gate_context_window
 
 
 def _substitute_bot_name(template: str) -> str:
@@ -54,7 +76,7 @@ def gate_system_prompt() -> str:
     `{{ bot_name }}` 占位符替换为 Bot 昵称；进程内首次构建 Agent 时读一次
     （提示词须逐字节稳定以保前缀缓存命中），后续修改文件需重启生效。
     """
-    path = cfg.auto_reply.gate.system_prompt_file_path
+    path = cfg.proactive.gate.system_prompt_file_path
     if path.is_file():
         if text := path.read_text(encoding="utf-8").strip():
             return _substitute_bot_name(text)

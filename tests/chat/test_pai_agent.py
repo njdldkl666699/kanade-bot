@@ -1763,7 +1763,7 @@ class ProactiveBufferGuardTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.store.count("c1"), 2)
 
     async def test_executor_wires_require_buffer(self):
-        """执行器接线：send_auto_reply 必须以 require_buffer=True 调用（防重判不失效）"""
+        """执行器接线：send_proactive_reply 必须以 require_buffer=True 调用（防重判不失效）"""
         recorded: dict = {}
 
         def fake_send_and_wait(session_info, prompt, bot_id, **kwargs):
@@ -1799,7 +1799,7 @@ class ProactiveBufferGuardTest(unittest.IsolatedAsyncioTestCase):
             ),
             mock.patch.object(proactive_executor, "send_proactive", fake_send_proactive),
         ):
-            await proactive_executor.send_auto_reply(
+            await proactive_executor.send_proactive_reply(
                 FakeBot(), STATS_SESSION_INFO, reason="有自然接话点", on_content=on_content
             )
         self.assertTrue(recorded.get("require_buffer"), "主动回复必须传 require_buffer=True")
@@ -2035,15 +2035,15 @@ class GateDailyResetTest(unittest.IsolatedAsyncioTestCase):
         # 时刻可配置：改 00:00 后以午夜为界
         from kanade_bot.plugins.chat.config import cfg as chat_cfg
 
-        saved = chat_cfg.auto_reply.daily_reset_time
-        chat_cfg.auto_reply.daily_reset_time = time(0, 0)
+        saved = chat_cfg.proactive.daily_reset_time
+        chat_cfg.proactive.daily_reset_time = time(0, 0)
         try:
             self.assertEqual(
                 daily_reset_boundary(datetime(2026, 10, 27, 2, 30, tzinfo=tz)),
                 datetime(2026, 10, 27, 0, 0, tzinfo=tz),
             )
         finally:
-            chat_cfg.auto_reply.daily_reset_time = saved
+            chat_cfg.proactive.daily_reset_time = saved
 
     async def test_restore_today_filters_old_rows(self):
         """当日恢复：边界前的行不进上下文；DB 全量保留"""
@@ -2087,6 +2087,163 @@ class GateDailyResetTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(history.rows, [], "昨日行不进当日上下文")
         await history.restore()
         self.assertEqual(len(history.rows), 3, "全量口径：DB 行完整保留")
+
+
+# ===== 决策上下文护栏（2026-11-10） =====
+
+
+class GateContextGuardTest(unittest.IsolatedAsyncioTestCase):
+    """护栏：估算超决策模型窗口比例阈值时截断内存生效序列，保留最近 N 个判定轮
+
+    生产语义：每日清空约束单日规模，超活跃群仍可能逼近模型窗口——决策前
+    兜底截断（阈值 = `context_usage_threshold` × 决策模型窗口，窗口解析失败时
+    护栏关闭）；保留较近上文与近期判定理由，DB 全量行不动。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = compaction_mod.GateStore(
+            SessionStore(Path(self.tmp.name) / "sessions").registry
+        )
+
+    @staticmethod
+    def _meta_prompt(n: int) -> str:
+        return f"待判定：最近 {n} 条消息（自上次判定以来的新增）。"
+
+    async def _make_history(self, rounds: int) -> SessionGateHistory:
+        """构造 rounds 个判定轮：每轮 = 群消息×2 + 元信息行 + 判定行（4 行）"""
+        history = SessionGateHistory(self.store, "s1")
+        for i in range(rounds):
+            await history.append("user", f"[10-26 14:0{i}] 用户A(123)：消息{i}a")
+            await history.append("user", f"[10-26 14:0{i}] 用户B(456)：消息{i}b")
+            await history.append("user", self._meta_prompt(2))
+            await history.append("assistant", '{"reply": false, "reason": "灌水"}')
+        return history
+
+    def _set_guard(self, threshold: float, keep: int, window: int | None):
+        """注入护栏阈值比例/保留轮数，并打桩决策模型窗口（隔离真实模型解析）"""
+        from kanade_bot.plugins.chat.agent.proactive import gate_history as gate_history_mod
+        from kanade_bot.plugins.chat.config import cfg as chat_cfg
+
+        saved = (
+            chat_cfg.proactive.context_usage_threshold,
+            chat_cfg.proactive.context_keep_decisions,
+        )
+        chat_cfg.proactive.context_usage_threshold = threshold
+        chat_cfg.proactive.context_keep_decisions = keep
+        self.addCleanup(setattr, chat_cfg.proactive, "context_usage_threshold", saved[0])
+        self.addCleanup(setattr, chat_cfg.proactive, "context_keep_decisions", saved[1])
+        patcher = mock.patch.object(gate_history_mod, "gate_context_window", return_value=window)
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    async def test_under_limit_noop(self):
+        """估算未超窗口比例：不截断，行数不变"""
+        self._set_guard(threshold=0.7, keep=3, window=10_000_000)
+        history = await self._make_history(5)
+        self.assertEqual(history.enforce_context_guard(), 0)
+        self.assertEqual(len(history.rows), 20)
+
+    async def test_disabled_or_unresolvable_window(self):
+        """阈值 0 关闭护栏；窗口解析失败（None）时同样不截（保守跳过）"""
+        history = await self._make_history(2)
+        self._set_guard(threshold=0, keep=3, window=100)
+        self.assertEqual(history.enforce_context_guard(), 0)
+        self._set_guard(threshold=0.7, keep=3, window=None)
+        self.assertEqual(history.enforce_context_guard(), 0)
+        self.assertEqual(len(history.rows), 8)
+
+    async def test_gate_window_falls_back_to_main_model(self):
+        """窗口解析：gate 留空回退主模型，主模型显式 context_window 生效且进程内固化"""
+        from kanade_bot.plugins.chat.agent.proactive import gate as gate_mod
+        from kanade_bot.plugins.chat.config import cfg as chat_cfg
+
+        self.assertFalse(chat_cfg.proactive.gate.model, "测试前提：gate 留空回退主模型")
+        saved_window = chat_cfg.agent.context_window
+        saved_cache = (gate_mod._gate_context_window, gate_mod._gate_context_window_resolved)
+        gate_mod._gate_context_window = None
+        gate_mod._gate_context_window_resolved = False
+        chat_cfg.agent.context_window = 4321
+        try:
+            self.assertEqual(gate_mod.gate_context_window(), 4321)
+            # 进程内解析一次：配置再变仍返回已固化值（与提示词/压缩窗口固化同语义）
+            chat_cfg.agent.context_window = 9999
+            self.assertEqual(gate_mod.gate_context_window(), 4321)
+        finally:
+            chat_cfg.agent.context_window = saved_window
+            gate_mod._gate_context_window, gate_mod._gate_context_window_resolved = saved_cache
+
+    async def test_over_limit_keeps_last_n_rounds(self):
+        """超窗口比例：保留最近 keep 个完整判定轮（含各轮被判定消息），DB 不动"""
+        self._set_guard(threshold=0.05, keep=3, window=100)  # limit=5，必然触发
+        history = await self._make_history(5)
+
+        dropped = history.enforce_context_guard()
+        self.assertEqual(dropped, 8, "截除前 2 轮（各 4 行）")
+        self.assertEqual(len(history.rows), 12, "保留 3 个完整判定轮 × 4 行")
+        # 保留序列以倒数第 3 轮的首条消息开头：meta 所指「最近 K 条」完整在场
+        self.assertIn("消息2a", history.rows[0].content)
+        self.assertTrue(history.rows[2].content.startswith("待判定："))
+        self.assertEqual(history.rows[3].role, "assistant")
+        # DB 全量行保留
+        snap = await self.store.load_gate_history("s1")
+        self.assertEqual(snap.total_rows, 20)
+
+    async def test_fewer_rounds_than_keep_cut_at_first_meta(self):
+        """判定轮不足 keep 个：从首个判定轮起保留（仅截其前的群消息）"""
+        self._set_guard(threshold=0.05, keep=10, window=100)
+        history = await self._make_history(2)
+
+        dropped = history.enforce_context_guard()
+        self.assertEqual(dropped, 2, "仅截第 1 轮判定前的 2 条群消息")
+        self.assertEqual(len(history.rows), 6)
+        self.assertTrue(history.rows[0].content.startswith("待判定："))
+
+    async def test_no_decision_rounds_no_cut(self):
+        """无判定轮（全是群消息）且行 0 起：不截，记 warning 保留全部"""
+        self._set_guard(threshold=0.05, keep=3, window=100)
+        history = SessionGateHistory(self.store, "s1")
+        await history.append("user", "[10-26 14:00] 用户A(123)：消息")
+        await history.append("user", "[10-26 14:01] 用户A(123)：消息")
+
+        self.assertEqual(history.enforce_context_guard(), 0)
+        self.assertEqual(len(history.rows), 2)
+
+    async def test_decide_applies_guard_before_request(self):
+        """decide() 在构建请求前应用护栏：发给模型的 message_history 已是截断后序列"""
+        from pydantic_ai.usage import RunUsage
+
+        from kanade_bot.plugins.chat.agent.proactive import gate_history as gate_history_mod
+        from kanade_bot.plugins.chat.agent.proactive.gate import ReplyDecision
+
+        seen: list[int] = []
+
+        class FakeAgent:
+            async def run(self, prompt, message_history=None):
+                seen.append(len(message_history or []))
+                return SimpleNamespace(
+                    output=ReplyDecision(reply=False, reason="mock"),
+                    usage=RunUsage(input_tokens=10),
+                )
+
+        self._set_guard(threshold=0.05, keep=3, window=100)
+        history = await self._make_history(5)
+        meta = gate_history_mod.GateMeta(
+            new_messages=2,
+            now=datetime(2026, 11, 10, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+            since_bot_s=None,
+            since_proactive_s=None,
+            silence_streak=0,
+        )
+        with mock.patch.object(gate_history_mod, "get_gate_agent", return_value=FakeAgent()):
+            outcome = await history.decide(meta, timeout=5)
+
+        self.assertIsNotNone(outcome)
+        self.assertFalse(outcome.decision.reply)
+        self.assertEqual(seen, [12], "护栏后保留 3 个完整判定轮 × 4 行 = 12 条消息")
+        # 判定轮固化后：12 行 + 元信息 + 判定 = 14 行
+        self.assertEqual(len(history.rows), 14)
 
 
 class WorkspaceTreeTest(unittest.TestCase):

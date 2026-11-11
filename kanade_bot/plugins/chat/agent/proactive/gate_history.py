@@ -15,19 +15,15 @@ from ...config import cfg
 from ..history import estimate_request_tokens
 from ..history.gate_store import GateStore
 from ..prompt import _bot_name
-from .gate import ReplyDecision, get_gate_agent
+from .gate import ReplyDecision, gate_context_window, get_gate_agent
 
 # ===== 每日清空（决策上下文的当日边界） =====
 
 
 def daily_reset_boundary(at: datetime | None = None) -> datetime:
-    """最近一次每日清空时刻：决策上下文的当日边界（Asia/Shanghai）
-
-    决策上下文的“一天”以 `auto_reply.daily_reset_time`（默认 04:00）为界：
-    到点清空内存生效序列，重启恢复只取该时刻之后的行。
-    """
+    """最近一次每日清空时刻：决策上下文的当日边界"""
     at = at or asia_shanghai_now()
-    reset = cfg.auto_reply.daily_reset_time
+    reset = cfg.proactive.daily_reset_time
     boundary = at.replace(hour=reset.hour, minute=reset.minute, second=0, microsecond=0)
     return boundary if boundary <= at else boundary - timedelta(days=1)
 
@@ -68,6 +64,9 @@ def format_duration(seconds: float) -> str:
 
 _WEEKDAY_ZH = "一二三四五六日"
 
+META_PROMPT_PREFIX = "待判定："
+"""判定轮尾部元信息 user 行的固定前缀（护栏定位判定轮用，见 enforce_context_guard）"""
+
 
 def build_meta_prompt(meta: GateMeta) -> str:
     """本次决策轮的 user 消息：待判定范围 + 时间元信息
@@ -77,7 +76,7 @@ def build_meta_prompt(meta: GateMeta) -> str:
     """
     name = _bot_name()
     lines = [
-        f"待判定：最近 {meta.new_messages} 条消息（自上次判定以来的新增）。",
+        f"{META_PROMPT_PREFIX}最近 {meta.new_messages} 条消息（自上次判定以来的新增）。",
         f"当前时间：{meta.now:%m-%d %H:%M}（周{_WEEKDAY_ZH[meta.now.weekday()]}）。",
         (
             f"{name} 上次发言距今：{format_duration(meta.since_bot_s)}。"
@@ -106,7 +105,7 @@ class GateRow:
     """DB 行号"""
 
     role: str
-    """'user'（群消息/kanade 发言）或 'assistant'（判定）"""
+    """'user'（群消息/bot 发言）或 'assistant'（判定）"""
 
     content: str
     """消息文本；判定行为 `{"reply": ..., "reason": ...}` JSON"""
@@ -134,7 +133,7 @@ class SessionGateHistory:
     重启按恢复口径加载普通行，请求前缀与关机前一致，前缀缓存跨重启命中。
     每日定时清空内存生效序列（`reset_context`，时刻见 `daily_reset_boundary`），
     重启经 `restore_today` 只取当日行；跨清空时刻的前缀缓存失效属预期。
-    上下文规模由每日清空约束（决策输出小、当日输入远达不到模型窗口），
+    上下文规模由每日清空约束，超限由护栏兑底截断（`enforce_context_guard`），
     不做摘要压缩。
     """
 
@@ -193,6 +192,55 @@ class SessionGateHistory:
         """（生效条数, 输入 token 估算）"""
         return len(self.rows), estimate_request_tokens(self.model_messages())
 
+    def enforce_context_guard(self) -> int:
+        """护栏：估算输入 tokens 超决策模型窗口的 `context_usage_threshold` 比例时，
+        截断内存生效序列，保留最近 `context_keep_decisions` 个完整判定轮
+
+        窗口解析失败或阈值 ≤ 0 时护栏关闭。返回截除的行数（未触发返回 0）。
+        """
+        threshold = cfg.proactive.context_usage_threshold
+        keep = cfg.proactive.context_keep_decisions
+        window = gate_context_window()
+        if window is None or window <= 0 or threshold <= 0 or keep <= 0 or not self.rows:
+            return 0
+        limit = int(window * threshold)
+        _, tokens = self.context_stats()
+        if tokens <= limit:
+            return 0
+        meta_rows = [
+            index
+            for index, row in enumerate(self.rows)
+            if row.role == "user" and row.content.startswith(META_PROMPT_PREFIX)
+        ]
+        assistant_rows = [index for index, row in enumerate(self.rows) if row.role == "assistant"]
+        if not meta_rows or not assistant_rows:
+            logger.warning(
+                f"决策上下文护栏未生效 {self.session_id}：估算 {tokens} 超限 {limit}，"
+                f"但生效序列中没有判定轮可定位，保留全部"
+            )
+            return 0
+        if len(assistant_rows) > keep:
+            # 最近 keep 个完整判定轮：自倒数第 keep+1 个判定行的下一行起保留
+            # （即倒数第 keep 轮的首条消息）
+            cut = assistant_rows[-keep - 1] + 1
+        else:
+            cut = meta_rows[0]
+        if cut <= 0:
+            logger.warning(
+                f"决策上下文护栏未生效 {self.session_id}：估算 {tokens} 超限 {limit}，"
+                f"但首个判定轮前无更早行可截，保留全部"
+            )
+            return 0
+        dropped = self.rows[:cut]
+        self.rows = self.rows[cut:]
+        kept_rounds = min(keep, len(assistant_rows))
+        logger.warning(
+            f"决策上下文护栏触发 {self.session_id}：估算 {tokens} 超限 {limit}"
+            f"（窗口 {window} × {threshold:.0%}），"
+            f"截除最旧 {len(dropped)} 行（保留最近 {kept_rounds} 个判定轮）"
+        )
+        return len(dropped)
+
     async def decide(self, meta: GateMeta, *, timeout: float) -> GateOutcome | None:
         """发起一次决策：LLM 调用 → 固化本轮 user/assistant 行
 
@@ -200,6 +248,7 @@ class SessionGateHistory:
         （不回、不计退避）；成功时本轮尾部元信息与判定已 append 进历史。
         """
         try:
+            self.enforce_context_guard()
             history = self.model_messages()
             prompt = build_meta_prompt(meta)
             result = await asyncio.wait_for(

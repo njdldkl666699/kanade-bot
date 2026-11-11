@@ -45,14 +45,13 @@ class TimeWindow(AttrDocModel):
     """该时段每批送决策的概率；0 = 关闭主动回复，1 = 每批必送"""
 
 
-class AutoReplyConfig(AttrDocModel):
+class ProactiveConfig(AttrDocModel):
     """主动回复配置
 
-    仅群聊生效
+    仅群聊生效，是否回复由 LLM 决策节点结合群聊内容判定；
 
-    是否回复由 LLM 决策节点结合群聊内容判定；
-
-    决策上下文每日定时清空，规模受当日边界约束，不做摘要压缩。
+    决策上下文每日定时清空，规模受当日边界约束；超活跃群单日超限时护栏
+    截断保留最近 N 个判定轮，不做摘要压缩。
     """
 
     enabled: bool = False
@@ -67,6 +66,12 @@ class AutoReplyConfig(AttrDocModel):
     daily_reset_time: Annotated[time, WithJsonSchema(_TIME_OF_DAY_SCHEMA)] = time(4, 0)
     """每日决策上下文清空时刻（Asia/Shanghai，进程启动时读取）：到点清空内存生效序列，DB 全量保留，重启仅恢复当日"""
 
+    context_usage_threshold: float = 0.7
+    """决策上下文护栏：估算 tokens 超决策模型上下文窗口此比例时截断内存生效序列，保留最近 N 个判定轮（0 = 关闭护栏）"""
+
+    context_keep_decisions: int = 6
+    """护栏触发时保留的最近判定轮数"""
+
     backoff_start: int = 2
     """连续决策不回 N 次后开始退避"""
 
@@ -78,3 +83,6 @@ class AutoReplyConfig(AttrDocModel):
 
     gate_timeout: float = 30.0
     """决策调用超时（秒），超时按不回复处理且不计退避"""
+
+    buffer_gate_threshold: int = 16
+    """待判定消息量阈值：自上次判定以来的新增群消息达到该条数的整数倍时额外尝试一次决策（0 = 关闭）"""

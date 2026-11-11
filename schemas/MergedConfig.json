@@ -133,73 +133,6 @@
       "title": "AgentConfig",
       "type": "object"
     },
-    "AutoReplyConfig": {
-      "description": "主动回复配置\n\n仅群聊生效\n\n是否回复由 LLM 决策节点结合群聊内容判定；\n\n决策上下文每日定时清空，规模受当日边界约束，不做摘要压缩。",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "description": "总开关",
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "gate": {
-          "$ref": "#/$defs/ReplyGateConfig",
-          "default": {
-            "model": "",
-            "provider": null,
-            "reasoning_effort": null,
-            "max_output_tokens": null,
-            "context_window": null,
-            "vision": false,
-            "mcp_servers": null,
-            "system_prompt_file": "ReplyGate.md"
-          },
-          "description": "决策节点模型配置，model留空回退主模型"
-        },
-        "time_windows": {
-          "default": [],
-          "description": "时段概率表：默认为空（任何时段每批必送）；多个窗口命中时取最先声明者，都不命中时概率为 1.0",
-          "items": {
-            "$ref": "#/$defs/TimeWindow"
-          },
-          "title": "Time Windows",
-          "type": "array"
-        },
-        "daily_reset_time": {
-          "default": "04:00:00",
-          "description": "每日决策上下文清空时刻（Asia/Shanghai，进程启动时读取）：到点清空内存生效序列，DB 全量保留，重启仅恢复当日",
-          "pattern": "^\\d{1,2}:\\d{2}(:\\d{1,2})?$",
-          "title": "Daily Reset Time",
-          "type": "string"
-        },
-        "backoff_start": {
-          "default": 2,
-          "description": "连续决策不回 N 次后开始退避",
-          "title": "Backoff Start",
-          "type": "integer"
-        },
-        "backoff_base": {
-          "default": 60.0,
-          "description": "退避基准秒：延迟 = base × 2^(count - start)",
-          "title": "Backoff Base",
-          "type": "number"
-        },
-        "backoff_cap": {
-          "default": 1800.0,
-          "description": "退避上限秒",
-          "title": "Backoff Cap",
-          "type": "number"
-        },
-        "gate_timeout": {
-          "default": 30.0,
-          "description": "决策调用超时（秒），超时按不回复处理且不计退避",
-          "title": "Gate Timeout",
-          "type": "number"
-        }
-      },
-      "title": "AutoReplyConfig",
-      "type": "object"
-    },
     "CacheSettings": {
       "additionalProperties": false,
       "description": "Sizing of the shared resource cache budget.",
@@ -951,6 +884,91 @@
         }
       },
       "title": "ObservabilitySettings",
+      "type": "object"
+    },
+    "ProactiveConfig": {
+      "description": "主动回复配置\n\n仅群聊生效，是否回复由 LLM 决策节点结合群聊内容判定；\n\n决策上下文每日定时清空，规模受当日边界约束；超活跃群单日超限时护栏\n截断保留最近 N 个判定轮，不做摘要压缩。",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "总开关",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "gate": {
+          "$ref": "#/$defs/ReplyGateConfig",
+          "default": {
+            "model": "",
+            "provider": null,
+            "reasoning_effort": null,
+            "max_output_tokens": null,
+            "context_window": null,
+            "vision": false,
+            "mcp_servers": null,
+            "system_prompt_file": "ReplyGate.md"
+          },
+          "description": "决策节点模型配置，model留空回退主模型"
+        },
+        "time_windows": {
+          "default": [],
+          "description": "时段概率表：默认为空（任何时段每批必送）；多个窗口命中时取最先声明者，都不命中时概率为 1.0",
+          "items": {
+            "$ref": "#/$defs/TimeWindow"
+          },
+          "title": "Time Windows",
+          "type": "array"
+        },
+        "daily_reset_time": {
+          "default": "04:00:00",
+          "description": "每日决策上下文清空时刻（Asia/Shanghai，进程启动时读取）：到点清空内存生效序列，DB 全量保留，重启仅恢复当日",
+          "pattern": "^\\d{1,2}:\\d{2}(:\\d{1,2})?$",
+          "title": "Daily Reset Time",
+          "type": "string"
+        },
+        "context_usage_threshold": {
+          "default": 0.7,
+          "description": "决策上下文护栏：估算 tokens 超决策模型上下文窗口此比例时截断内存生效序列，保留最近 N 个判定轮（0 = 关闭护栏）",
+          "title": "Context Usage Threshold",
+          "type": "number"
+        },
+        "context_keep_decisions": {
+          "default": 6,
+          "description": "护栏触发时保留的最近判定轮数",
+          "title": "Context Keep Decisions",
+          "type": "integer"
+        },
+        "backoff_start": {
+          "default": 2,
+          "description": "连续决策不回 N 次后开始退避",
+          "title": "Backoff Start",
+          "type": "integer"
+        },
+        "backoff_base": {
+          "default": 60.0,
+          "description": "退避基准秒：延迟 = base × 2^(count - start)",
+          "title": "Backoff Base",
+          "type": "number"
+        },
+        "backoff_cap": {
+          "default": 1800.0,
+          "description": "退避上限秒",
+          "title": "Backoff Cap",
+          "type": "number"
+        },
+        "gate_timeout": {
+          "default": 30.0,
+          "description": "决策调用超时（秒），超时按不回复处理且不计退避",
+          "title": "Gate Timeout",
+          "type": "number"
+        },
+        "buffer_gate_threshold": {
+          "default": 16,
+          "description": "待判定消息量阈值：自上次判定以来的新增群消息达到该条数的整数倍时额外尝试一次决策（0 = 关闭）",
+          "title": "Buffer Gate Threshold",
+          "type": "integer"
+        }
+      },
+      "title": "ProactiveConfig",
       "type": "object"
     },
     "PromptSectionConfig": {
@@ -2086,8 +2104,8 @@
             "voice": null
           }
         },
-        "auto_reply": {
-          "$ref": "#/$defs/AutoReplyConfig",
+        "proactive": {
+          "$ref": "#/$defs/ProactiveConfig",
           "default": {
             "enabled": false,
             "gate": {
@@ -2102,10 +2120,13 @@
             },
             "time_windows": [],
             "daily_reset_time": "04:00:00",
+            "context_usage_threshold": 0.7,
+            "context_keep_decisions": 6,
             "backoff_start": 2,
             "backoff_base": 60.0,
             "backoff_cap": 1800.0,
-            "gate_timeout": 30.0
+            "gate_timeout": 30.0,
+            "buffer_gate_threshold": 16
           }
         },
         "billing": {
@@ -2994,10 +3015,13 @@
           "model": null,
           "voice": null
         },
-        "auto_reply": {
+        "proactive": {
           "backoff_base": 60.0,
           "backoff_cap": 1800.0,
           "backoff_start": 2,
+          "buffer_gate_threshold": 16,
+          "context_keep_decisions": 6,
+          "context_usage_threshold": 0.7,
           "daily_reset_time": "04:00:00",
           "enabled": false,
           "gate": {

@@ -21,7 +21,7 @@ from ...util import is_banned
 from ..manager import chat_manager
 from ..prompt import _bot_name
 from .debounce import MessageDebouncer
-from .executor import send_auto_reply
+from .executor import build_aborted_reply_note, send_proactive_reply
 from .gate_history import GateMeta, SessionGateHistory, format_duration
 from .windows import describe_window, window_probability
 
@@ -31,7 +31,7 @@ class GateCounters:
     """内存态统计计数器（重启清零）"""
 
     replies: int = 0
-    """决策输出「回」并执行主动回复的次数"""
+    """决策输出「回」的次数（含执行放弃场次）"""
 
     silences: int = 0
     """决策输出「不回」的次数"""
@@ -95,13 +95,13 @@ def _format_k(tokens: int) -> str:
     return f"{tokens / 1000:.1f}k"
 
 
-class AutoReplyRuntime:
+class ProactiveRuntime:
     """主动回复运行时单例：消息观察入口、决策编排与统计"""
 
     def __init__(self):
         self._states: dict[str, SessionGateState] = {}
         # 每日定时清空决策上下文（时刻随配置，进程启动时读取，改动需重启生效）
-        reset = cfg.auto_reply.daily_reset_time
+        reset = cfg.proactive.daily_reset_time
         scheduler.add_job(
             self._daily_reset,
             "cron",
@@ -115,10 +115,10 @@ class AutoReplyRuntime:
 
     def is_enabled(self, group_id: str, platform: PlatformType) -> bool:
         """该群是否启用主动回复（总开关 + 运行时启用群列表 + 群黑名单）"""
-        if not cfg.auto_reply.enabled:
+        if not cfg.proactive.enabled:
             return False
         group_config = chat_configs.instance.get_by_platform(platform)
-        if group_config is None or group_id not in group_config.auto_reply_enabled_groups:
+        if group_config is None or group_id not in group_config.proactive_enabled_groups:
             return False
         return not is_banned(group_id, "group", platform)
 
@@ -189,10 +189,43 @@ class AutoReplyRuntime:
             state.new_messages += 1
             state.debouncer.observe(author)
             self._schedule_timer(session_id, state)
+            # 累积量递进触发：待判定消息量达阈值整数倍时额外尝试一次决策
+            threshold = cfg.proactive.buffer_gate_threshold
+            if threshold > 0 and state.new_messages % threshold == 0:
+                logger.info(
+                    f"待判定消息量达到 {state.new_messages} 条"
+                    f"（阈值 {threshold} 整数倍），触发决策尝试 {session_id}"
+                )
+                self._force_gate_attempt(session_id, state)
         except Exception as e:
             logger.opt(exception=e).warning(f"主动回复消息观察失败 {session_id}")
 
     # ===== bot 发言入口（被动/主动产出 append） =====
+
+    async def on_passive_trigger(self, session_id: str, text: str) -> None:
+        """to_me 被动触发：补记触发消息 + 重置该会话主动回复调度（未进入流水线的会话 no-op）
+
+        补记与重置不影响决策历史内容与统计计数。
+        """
+        state = self._states.get(session_id)
+        if state is None:
+            return
+        try:
+            await state.history.append("user", text)
+        except Exception as e:
+            logger.opt(exception=e).warning(f"被动触发消息补记失败 {session_id}")
+        self._reset_proactive_schedule(state)
+
+    def _reset_proactive_schedule(self, state: SessionGateState) -> None:
+        """重置单会话主动回复调度：防抖批次/计时器 + 退避（同步轻操作）"""
+        if state.timer is not None:
+            state.timer.cancel()
+            state.timer = None
+        state.debouncer.consume()
+        if state.backoff_timer is not None:
+            state.backoff_timer.cancel()
+            state.backoff_timer = None
+        state.backoff_count = 0
 
     async def on_bot_message(self, session_id: str, content: str, *, proactive: bool = False):
         """kanade 发言以 user 消息 append 进决策历史（未启用会话 no-op）
@@ -229,6 +262,20 @@ class AutoReplyRuntime:
         delay = max(0.0, deadline - monotonic())
         state.timer = asyncio.create_task(self._timer_fire(session_id, delay))
 
+    def _force_gate_attempt(self, session_id: str, state: SessionGateState) -> None:
+        """累积量阈值触发：收束当前批次并立即走一次防抖到期编排（不经防抖等待）"""
+        if state.timer is not None:
+            state.timer.cancel()
+            state.timer = None
+        state.debouncer.consume()
+        asyncio.create_task(self._gate_attempt_fire(session_id))
+
+    async def _gate_attempt_fire(self, session_id: str) -> None:
+        try:
+            await self._on_debounce_due(session_id)
+        except Exception as e:
+            logger.opt(exception=e).warning(f"累积量触发的决策尝试失败 {session_id}")
+
     async def _timer_fire(self, session_id: str, delay: float) -> None:
         try:
             await asyncio.sleep(delay)
@@ -253,7 +300,7 @@ class AutoReplyRuntime:
         if not self._still_enabled(state):
             return
 
-        auto_cfg = cfg.auto_reply
+        auto_cfg = cfg.proactive
         if state.backoff_count >= auto_cfg.backoff_start:
             # 退避中：到期不立即送审，延迟 base×2^n 秒后重走概率闸
             if state.backoff_timer is None:
@@ -310,7 +357,7 @@ class AutoReplyRuntime:
 
         outcome = await state.history.decide(
             self._build_meta(state, now),
-            timeout=cfg.auto_reply.gate_timeout,
+            timeout=cfg.proactive.gate_timeout,
         )
         if outcome is None:
             # 失败即放弃：不回、不计退避、不重试
@@ -325,7 +372,7 @@ class AutoReplyRuntime:
         state.new_messages = 0
         backoff_desc = (
             f"计数={state.backoff_count}"
-            if state.backoff_count >= cfg.auto_reply.backoff_start
+            if state.backoff_count >= cfg.proactive.backoff_start
             else "无"
         )
         logger.info(
@@ -369,10 +416,13 @@ class AutoReplyRuntime:
             return
 
         async def _record(content: str) -> None:
-            await auto_reply_runtime.on_bot_message(session_id, content, proactive=True)
+            await proactive_runtime.on_bot_message(session_id, content, proactive=True)
 
         try:
-            await send_auto_reply(bot, session_info, reason=reason, on_content=_record)
+            sent = await send_proactive_reply(bot, session_info, reason=reason, on_content=_record)
+            if not sent:
+                # 判「回」未发出：补记事实行（发送中途异常不补记）
+                await state.history.append("user", build_aborted_reply_note())
         except Exception as e:
             logger.opt(exception=e).warning(f"主动回复执行失败 {session_id}")
 
@@ -430,7 +480,7 @@ class AutoReplyRuntime:
             await state.load_task
             state.load_task = None
 
-        auto_cfg = cfg.auto_reply
+        auto_cfg = cfg.proactive
         probability, window = window_probability()
         lines = [
             f"📊 决策统计（群 {group_label}）",
@@ -476,20 +526,20 @@ class AutoReplyRuntime:
         return "\n".join(lines)
 
 
-auto_reply_runtime = AutoReplyRuntime()
+proactive_runtime = ProactiveRuntime()
 """主动回复运行时单例"""
 
 
 def set_group_enabled(group_id: str, platform: PlatformType, enabled: bool) -> None:
     """运行时启用/禁用某群的主动回复，并持久化到 `chat_configs.json`
 
-    启用群的存放位置与黑名单同源（`ChatConfig.auto_reply_enabled_groups`，
+    启用群的存放位置与黑名单同源（`ChatConfig.proactive_enabled_groups`，
     按平台隔离）；`is_enabled` 每次现读，切换立即生效。
     """
     group_config = chat_configs.instance.get_by_platform(platform)
     if group_config is None:
         raise ValueError(f"不支持的平台：{platform}")
-    groups = group_config.auto_reply_enabled_groups
+    groups = group_config.proactive_enabled_groups
     if enabled:
         groups.add(group_id)
     else:

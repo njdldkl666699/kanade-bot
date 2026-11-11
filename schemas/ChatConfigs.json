@@ -23,13 +23,13 @@
           "type": "array",
           "uniqueItems": true
         },
-        "auto_reply_enabled_groups": {
+        "proactive_enabled_groups": {
           "default": [],
           "description": "启用主动回复的群ID列表",
           "items": {
             "type": "string"
           },
-          "title": "Auto Reply Enabled Groups",
+          "title": "Proactive Enabled Groups",
           "type": "array",
           "uniqueItems": true
         }
@@ -45,7 +45,7 @@
       "default": {
         "banned_users": [],
         "banned_groups": [],
-        "auto_reply_enabled_groups": []
+        "proactive_enabled_groups": []
       }
     },
     "onebot": {
@@ -53,7 +53,7 @@
       "default": {
         "banned_users": [],
         "banned_groups": [],
-        "auto_reply_enabled_groups": []
+        "proactive_enabled_groups": []
       }
     }
   },

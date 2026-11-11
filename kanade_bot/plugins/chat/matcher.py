@@ -129,23 +129,23 @@ register_matcher(chat_unban, "聊天解除拉黑")
 
 ### 主动回复
 
-auto_reply_enable = on_command(
+proactive_enable = on_command(
     "启用主动回复",
-    aliases={"auto_reply_enable", "autoreplyenable"},
+    aliases={"proactive_enable", "proactiveenable"},
     priority=2,
     permission=SUPERUSER,
     block=True,
 )
-register_matcher(auto_reply_enable, "启用主动回复")
+register_matcher(proactive_enable, "启用主动回复")
 
-auto_reply_disable = on_command(
+proactive_disable = on_command(
     "禁用主动回复",
-    aliases={"auto_reply_disable", "autoreplydisable"},
+    aliases={"proactive_disable", "proactivedisable"},
     priority=2,
     permission=SUPERUSER,
     block=True,
 )
-register_matcher(auto_reply_disable, "禁用主动回复")
+register_matcher(proactive_disable, "禁用主动回复")
 
 decision_clear = on_command(
     "清空决策上下文",
