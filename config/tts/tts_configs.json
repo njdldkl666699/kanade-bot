@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/TTSConfigs.json",
+  "tts_emotions": {
+    "平静": {
+      "ref_audio_path": "/home/cola/Projects/GitHub/Kanade-GPT-SoVITS/dataset/kanade_val/audio/event_145_05_voice_ev_night_18_05_06_17.wav",
+      "prompt_text": "なんだか、タイトルからそれらしくていいね",
+      "prompt_lang": "ja"
+    }
+  }
+}

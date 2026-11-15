@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "TTSEmotionPreset": {
+      "description": "TTS情绪预设：情绪到参考音频的映射",
+      "properties": {
+        "ref_audio_path": {
+          "description": "参考音频在推理节点上的本地路径（音色与情感来源）",
+          "title": "Ref Audio Path",
+          "type": "string"
+        },
+        "prompt_text": {
+          "description": "参考音频的文字转写",
+          "title": "Prompt Text",
+          "type": "string"
+        },
+        "prompt_lang": {
+          "default": "ja",
+          "description": "参考音频语言（小写，如zh/ja/en）",
+          "title": "Prompt Lang",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref_audio_path",
+        "prompt_text"
+      ],
+      "title": "TTSEmotionPreset",
+      "type": "object"
+    }
+  },
+  "description": "TTS运行时配置文件（经model_updater热更新）",
+  "properties": {
+    "tts_emotions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TTSEmotionPreset"
+      },
+      "default": {},
+      "description": "情绪到参考音频、转写与语言的映射；键限固定情绪枚举，缺项情绪回退「平静」",
+      "title": "Tts Emotions",
+      "type": "object"
+    }
+  },
+  "title": "TTSConfigs",
+  "type": "object"
+}

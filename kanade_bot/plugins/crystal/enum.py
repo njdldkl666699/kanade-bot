@@ -14,6 +14,7 @@ class HandlerKeyEnum(Enum):
     IMAGE_GENERATION = "文生图"
     IMAGE_EDIT = "图片编辑"
     VIDEO_GENERATION = "视频生成"
+    TTS = "TTS语音"
 
 
 class DaypartEnum(Enum):

@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from httpx import AsyncClient, HTTPError, Timeout
-from nonebot import get_bot, logger
+from nonebot import get_bot, logger, require
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from pydantic_ai import RunContext
 
@@ -17,14 +17,15 @@ from kanade_bot.utils.onebot11 import (
 )
 from kanade_bot.utils.parse import format_forward_message_for_ai
 
-from ...config import cfg
+require("tts")
+from kanade_bot.plugins.tts.config import TTS_DEFAULT_EMOTION, Emotion, tts_configs
+from kanade_bot.plugins.tts.gateway import TTSError, synthesize
+
 from ..deps import ChatDeps
 from .common import get_sandbox
 
 _FORWARD_MARKER_RE = re.compile(r"\[forward:\s*id=([^\]\s]+)\s*\]")
 """消息文本中合并转发标记 `[forward:id=xxx]` 的匹配模式"""
-
-tts_client = AsyncClient(base_url=cfg.tts.base_url or "", timeout=180)
 
 download_client = AsyncClient(timeout=Timeout(30, read=300), follow_redirects=True)
 """文件下载专用客户端：长读超时 + 跟随重定向"""
@@ -95,30 +96,44 @@ async def get_forward_message(ctx: RunContext[ChatDeps], forward_id: str) -> str
     return text
 
 
-async def send_voice(ctx: RunContext[ChatDeps], text: str) -> str:
-    """向当前会话发送一段语音。将文本转换为语音后，自动返回给当前会话。
+async def send_voice(
+    ctx: RunContext[ChatDeps],
+    text: str,
+    emotion: Emotion = TTS_DEFAULT_EMOTION,
+    text_lang: str = "auto",
+) -> str:
+    """向当前会话发送一段语音。按情绪选择音色，将文本合成为语音后自动发送。
 
     Args:
-        text: 要发送为语音的文本内容。
+        text: 要合成语音的文本内容。
+        emotion: 语音情绪，决定音色与情感基调；该情绪未配置参考音频时回退使用「平静」。
+        text_lang: 文本语言id（小写，如auto/zh/ja/en），缺省auto自动检测。
     """
-    # OpenAI Speech接口
-    try:
-        r = await tts_client.post(
-            "/v1/audio/speech",
-            headers={"Content-Type": "application/json"},
-            json={
-                "input": text,
-                "model": cfg.tts.model,
-                "voice": cfg.tts.voice,
-            },
-        )
-    except HTTPError as e:
-        logger.exception("文本转语音请求失败: {}", e)
-        return f"文本转语音请求失败: {e}"
-    if r.status_code != 200:
-        return f"文本转语音请求失败，状态码: {r.status_code}"
+    if not text.strip():
+        return "文本为空，无法合成语音。"
+    # 容错：语言id统一小写（协议要求小写，大写会被节点拒绝）
+    text_lang = text_lang.strip().lower()
 
-    error = await send_to_session(ctx, Message(MessageSegment.record(r.content)))
+    # 缺项情绪回退「平静」；配置校验保证非空映射必含平静，
+    # 取不到说明完全未配置
+    emotions = tts_configs.instance.tts_emotions
+    preset = emotions.get(emotion) or emotions.get(TTS_DEFAULT_EMOTION)
+    if preset is None:
+        return "未配置任何语音情绪映射，无法合成语音。"
+
+    try:
+        audio = await synthesize(
+            text,
+            text_lang,
+            ref_audio_path=preset.ref_audio_path,
+            prompt_text=preset.prompt_text,
+            prompt_lang=preset.prompt_lang,
+        )
+    except TTSError as e:
+        logger.warning("语音合成失败: {}", e)
+        return f"语音合成失败: {e}"
+
+    error = await send_to_session(ctx, Message(MessageSegment.record(audio)))
     if error:
         return error
     return f"当前文本已转换为语音并发送给会话 {ctx.deps.session_info.session_id}。"

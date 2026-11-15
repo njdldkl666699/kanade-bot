@@ -1787,52 +1787,6 @@
       "title": "StickerTaggerConfig",
       "type": "object"
     },
-    "TTSConfig": {
-      "description": "文本转语音模型配置",
-      "properties": {
-        "base_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "TTS服务的Base URL，如果为None则不启用TTS",
-          "title": "Base Url"
-        },
-        "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "TTS使用的模型名称，不配置则使用服务端默认模型",
-          "title": "Model"
-        },
-        "voice": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "TTS使用的声音类型，不配置则使用服务端默认模型",
-          "title": "Voice"
-        }
-      },
-      "title": "TTSConfig",
-      "type": "object"
-    },
     "TemplateSettings": {
       "additionalProperties": false,
       "description": "Sizing of the template environment cache.",
@@ -2193,14 +2147,6 @@
             "openai_api_key": null,
             "openai_base_url": null,
             "openai_model": "text-embedding-3-small"
-          }
-        },
-        "tts": {
-          "$ref": "#/$defs/TTSConfig",
-          "default": {
-            "base_url": null,
-            "model": null,
-            "voice": null
           }
         },
         "proactive": {
@@ -2774,6 +2720,56 @@
       "title": "ScopedConfig",
       "type": "object"
     },
+    "kanade_bot__plugins__tts__config__ScopedConfig": {
+      "description": "TTS推理网关配置（tts-ws/1.0反向WebSocket，推理节点主动拨号接入）",
+      "properties": {
+        "auth_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "节点接入鉴权Bearer token；None表示不校验，仅建议回环/可信内网使用",
+          "title": "Auth Token"
+        },
+        "request_timeout_s": {
+          "default": 180.0,
+          "description": "单次合成请求整体超时（秒），超时后向节点发送取消",
+          "title": "Request Timeout S",
+          "type": "number"
+        },
+        "text_split_method": {
+          "default": "cut5",
+          "description": "文本切分方法：cut0不切/cut1凑四句一切/cut2凑约50字一切/cut3按中文句号/cut4按英文句号/cut5按标点",
+          "title": "Text Split Method",
+          "type": "string"
+        },
+        "speed_factor": {
+          "default": 1.0,
+          "description": "语速，建议0.5-2.0",
+          "title": "Speed Factor",
+          "type": "number"
+        },
+        "seed": {
+          "default": -1,
+          "description": "采样随机种子，-1为每次随机，固定值可复现",
+          "title": "Seed",
+          "type": "integer"
+        },
+        "configs_file": {
+          "default": "tts_configs.json",
+          "description": "运行时情绪映射配置文件名",
+          "title": "Configs File",
+          "type": "string"
+        }
+      },
+      "title": "ScopedConfig",
+      "type": "object"
+    },
     "scripts__github_watchdog__ScopedConfig": {
       "description": "Watchdog 配置模型，用于描述服务启动所需的环境参数。",
       "properties": {
@@ -3108,11 +3104,6 @@
           "openai_base_url": null,
           "openai_model": "text-embedding-3-small",
           "query_n_results": 3
-        },
-        "tts": {
-          "base_url": null,
-          "model": null,
-          "voice": null
         },
         "proactive": {
           "backoff_base": 60.0,
@@ -4049,6 +4040,17 @@
         "sensenova_api_key": null,
         "agnes_api_key": null,
         "agnes_base_url": "https://api.agnes-ai.cn/v1"
+      }
+    },
+    "tts": {
+      "$ref": "#/$defs/kanade_bot__plugins__tts__config__ScopedConfig",
+      "default": {
+        "auth_token": null,
+        "request_timeout_s": 180.0,
+        "text_split_method": "cut5",
+        "speed_factor": 1.0,
+        "seed": -1,
+        "configs_file": "tts_configs.json"
       }
     },
     "uninfo_cache": {

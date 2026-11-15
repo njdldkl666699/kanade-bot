@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from nonebot import get_driver, logger
+from nonebot import get_driver, logger, require
 from pydantic_ai import InstructionPart
 
 from kanade_bot.utils.parse import build_sender_info
@@ -13,6 +13,9 @@ from kanade_bot.utils.parse import build_sender_info
 from ..config import ChatPromptConfig, ScopedConfig, cfg
 from ..memes import memes_available
 from .deps import ChatDeps
+
+require("tts")
+from kanade_bot.plugins.tts.config import tts_configs
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 """模板占位符
@@ -218,7 +221,7 @@ class ChatPrompt:
             "mcp_enabled": _bool_str(self._mcp_available),
             "vision_enabled": _bool_str(self._agent_cfg.vision),
             "memories_enabled": _bool_str(bool(memory_context and memory_context.scopes())),
-            "tts_enabled": _bool_str(bool(cfg.tts.base_url)),
+            "tts_enabled": _bool_str(bool(tts_configs.instance.tts_emotions)),
             "memes_enabled": _bool_str(memes_available()),
             "rag_enabled": _bool_str(cfg.rag.enabled),
         }

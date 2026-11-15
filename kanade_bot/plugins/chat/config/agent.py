@@ -1,5 +1,3 @@
-"""聊天 Agent 图片转述 TTS 配置"""
-
 from pathlib import Path
 
 from nonebot import require
@@ -90,14 +88,3 @@ class ImageCaptionConfig(BaseAgentConfig):
     def system_prompt_file_path(self) -> Path:
         """系统提示词文件路径"""
         return get_plugin_config_file(self.system_prompt_file)
-
-
-class TTSConfig(AttrDocModel):
-    """文本转语音模型配置"""
-
-    base_url: str | None = None
-    """TTS服务的Base URL，如果为None则不启用TTS"""
-    model: str | None = None
-    """TTS使用的模型名称，不配置则使用服务端默认模型"""
-    voice: str | None = None
-    """TTS使用的声音类型，不配置则使用服务端默认模型"""

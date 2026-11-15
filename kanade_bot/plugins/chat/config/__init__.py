@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from kanade_bot.utils.billing import TokenBillingConfig
 from kanade_bot.utils.schema import ConfigRegistry
 
-from .agent import AgentConfig, ChatPromptConfig, ImageCaptionConfig, PromptSectionConfig, TTSConfig
+from .agent import AgentConfig, ChatPromptConfig, ImageCaptionConfig, PromptSectionConfig
 from .history import CompactionConfig, SessionConfig
 from .memes import StickerEmbeddingConfig, StickerMemeConfig, StickerTaggerConfig
 from .memory import MemoryConfig
@@ -44,7 +44,6 @@ __all__ = [
     "StickerEmbeddingConfig",
     "StickerMemeConfig",
     "StickerTaggerConfig",
-    "TTSConfig",
     "TimeWindow",
     "cfg",
     "chat_configs",
@@ -76,7 +75,6 @@ class ScopedConfig(BaseModel):
     """
 
     rag: RAGConfig = RAGConfig()
-    tts: TTSConfig = TTSConfig()
 
     proactive: ProactiveConfig = ProactiveConfig()
     """主动回复配置"""

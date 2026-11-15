@@ -14,7 +14,9 @@ You have access to several tools. Below are additional guidelines on how to use 
 <send_voice>
 使用send_voice工具可以将文本转换为符合角色语音的音频，并发送到当前会话。
 
-目前语音模型只支持日文，只需传入日文文本即可，工具会自动发送到当前会话。
+- 依据说话内容的情感选择合适的情绪（emotion），使语音情感与文本匹配。
+- text_lang为文本语言id（小写，如auto/zh/ja/en），缺省auto自动检测；与文本实际语言不符会严重影响合成质量。
+- 语音模型对日文效果最佳，角色日常语音尽量使用日文文本。
 </send_voice>
 
 <render_html_image>
