@@ -120,6 +120,7 @@ async def handle_chat_stats(event: Event):
     if comp := result.get("compaction"):
         label = {
             "clear_tool_results": "清除工具结果",
+            "remove_thinking": "删除思考",
             "summarizing": "摘要压缩",
         }.get(comp["latest_strategy"], comp["latest_strategy"])
         latest_at = datetime.fromtimestamp(comp["latest_at"]).strftime("%m-%d %H:%M")

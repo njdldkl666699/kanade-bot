@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from nonebot import logger
@@ -13,12 +13,13 @@ from pydantic_ai import (
     ModelMessagesTypeAdapter,
     ModelRequest,
     ModelRequestContext,
+    ModelResponse,
     ModelSettings,
     RunContext,
     SystemPromptPart,
 )
 from pydantic_ai.capabilities import AbstractCapability
-from pydantic_ai.messages import CompactionPart
+from pydantic_ai.messages import CompactionPart, ThinkingPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import ClearToolResults, SummarizingCompaction, TieredCompaction
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
     # 仅类型标注使用；运行时导入会造成 compaction 和 store 循环导入
     from .store import SessionStore
 
-type CompactionStrategy = Literal["clear_tool_results", "summarizing"]
+type CompactionStrategy = Literal["clear_tool_results", "remove_thinking", "summarizing"]
 
 
 @dataclass
@@ -77,7 +78,7 @@ class CompactionMark:
 
 
 def build_clear(params: CompactionConfig, *, online: bool) -> ClearToolResults:
-    """构造零成本档策略（恢复重放时忽略 `min_clear_tokens`）"""
+    """构造旧清理档策略（迁移重放专用；重放时忽略 `min_clear_tokens`）"""
 
     return ClearToolResults(
         max_fraction=params.trigger_fraction,
@@ -88,9 +89,92 @@ def build_clear(params: CompactionConfig, *, online: bool) -> ClearToolResults:
 
 
 def build_clear_mark(params: CompactionConfig) -> CompactionMark:
-    """按当前参数构造一条零成本档 mark（参数漂移后从全量重放用）"""
+    """按当前参数构造一条清理档 mark（迁移重放专用：存量 marks 补写与参数漂移后的全量重放）"""
     return CompactionMark(
         strategy="clear_tool_results",
+        params=params.model_dump(),
+        result=None,
+        fingerprint=params.fingerprint(),
+        applied_at=time.time(),
+    )
+
+
+@dataclass
+class RemoveThinking[AgentDepsT](AbstractCapability[AgentDepsT]):
+    """删除思考档：移除历史中全部思考输出（`ThinkingPart`），其余内容原样保留
+
+    取代 `ClearToolResults` 的零成本档地位（2026-11）：推理模型的思考输出
+    会随 `reasoning_content` 字段在每次请求中重发，是长会话上下文的主要
+    增长源之一。本策略是确定性 + 幂等的纯函数，mark 只存参数即可重放：
+
+    - 用户输入、assistant 文本输出、工具调用/结果全部原样保留；
+    - 含其它内容的响应仅摘除思考 part（消息位置不变，前缀缓存自首个
+      被改写消息起失效——由触发阈值保证只在确有回收时执行）；
+    - 仅含思考的响应整条删除（思考之外无任何保留物）；
+    - 不设保留名额，最近一轮的思考同样删除。签名思考（Anthropic /
+      Gemini 需回放 signature 才能续接工具链）不适用本策略；生产环境为
+      OpenAI 兼容端点，思考删除后无需回放。
+
+    触发判断由调用方负责（`TieredCompaction` 直接驱动 `compact`，
+    `compact_between_turns` 自行过闸），未实现 `before_model_request`，
+    不可单独挂载到 agent。
+    """
+
+    min_reclaim_tokens: int | None = field(default=None, kw_only=True)
+    """在线清理收益下限：删除思考预计回收不足此 token 数则跳过
+
+    仅在线路径生效；恢复重放（`online=False` 构造）恒为 None——mark
+    记录的是「确实删除过」的事实，无条件重放。
+    """
+
+    def __post_init__(self) -> None:
+        if self.min_reclaim_tokens is not None and self.min_reclaim_tokens < 0:
+            raise ValueError("min_reclaim_tokens must be non-negative.")
+
+    async def compact(
+        self,
+        messages: list[ModelMessage],
+        ctx: RunContext[AgentDepsT],
+    ) -> list[ModelMessage]:
+        """删除全部思考输出；无思考时原样返回（对象同一性便于调用方判空）"""
+        if not any(
+            isinstance(part, ThinkingPart)
+            for msg in messages
+            if isinstance(msg, ModelResponse)
+            for part in msg.parts
+        ):
+            return messages
+
+        rebuilt: list[ModelMessage] = []
+        for msg in messages:
+            if not (
+                isinstance(msg, ModelResponse)
+                and any(isinstance(part, ThinkingPart) for part in msg.parts)
+            ):
+                rebuilt.append(msg)
+                continue
+            kept = [part for part in msg.parts if not isinstance(part, ThinkingPart)]
+            if kept:
+                # 保留响应消息本身：usage 锚点、finish_reason 等随之保留
+                rebuilt.append(replace(msg, parts=kept))
+            # 仅含思考的响应：整条删除
+        if self.min_reclaim_tokens is not None:
+            reclaimed = estimate_token_count(messages) - estimate_token_count(rebuilt)
+            if reclaimed < self.min_reclaim_tokens:
+                return messages
+        return rebuilt
+
+
+def build_remove_thinking(params: CompactionConfig, *, online: bool) -> RemoveThinking[Any]:
+    """构造删除思考档策略（现行零成本档；恢复重放时忽略 `min_clear_tokens`）"""
+
+    return RemoveThinking(min_reclaim_tokens=params.min_clear_tokens if online else None)
+
+
+def build_remove_thinking_mark(params: CompactionConfig) -> CompactionMark:
+    """按当前参数构造一条删除思考档 mark（重放结果与参数无关，参数仅随指纹口径记录）"""
+    return CompactionMark(
+        strategy="remove_thinking",
         params=params.model_dump(),
         result=None,
         fingerprint=params.fingerprint(),
@@ -217,8 +301,13 @@ async def apply_strategy(
         # 摘要档：LLM 非确定性，直接用存下来的产物，不重新生成
         return ModelMessagesTypeAdapter.validate_json(mark.result)
 
-    # 零成本档：确定性 + 幂等的纯函数，用记录参数重跑
-    strategy = build_clear(params, online=False)
+    # 可重放档：确定性 + 幂等的纯函数，按 mark 策略用记录参数重跑
+    if mark.strategy == "remove_thinking":
+        # 删除思考档（现行零成本档）：删除全部思考，重放结果与参数无关
+        strategy = build_remove_thinking(params, online=False)
+    else:
+        # 清理工具调用档（旧零成本档）：仅存量 marks 迁移重放，新压缩不再产生
+        strategy = build_clear(params, online=False)
     return await compact_now(strategy, messages, model=model if model is not None else TestModel())
 
 
@@ -325,8 +414,8 @@ async def persist_run(
 
     mark = build_summary_mark(capability.params, snapshot)
     if not rewritten and len(events) == 1:
-        # 自验证：零成本档重放能复现快照则只存参数（零额外存储）
-        candidate = build_clear_mark(capability.params)
+        # 自验证：零成本档（删除思考）重放能复现快照则只存参数（零额外存储）
+        candidate = build_remove_thinking_mark(capability.params)
         if messages_fingerprint(await apply_strategy(events[0].pre, candidate)) == (
             messages_fingerprint(snapshot)
         ):
@@ -462,7 +551,7 @@ async def compact_between_turns(
         gate = params.summary_target_fraction
         strategy: AbstractCapability[Any] = TieredCompaction(
             tiers=[
-                build_clear(params, online=True),
+                build_remove_thinking(params, online=True),
                 build_summary(
                     params,
                     model_settings=model_settings,
@@ -474,7 +563,7 @@ async def compact_between_turns(
         )
     else:
         gate = params.trigger_fraction
-        strategy = build_clear(params, online=True)
+        strategy = build_remove_thinking(params, online=True)
 
     est = estimate_context_tokens(messages)
     if est <= gate * params.context_window:
@@ -486,10 +575,10 @@ async def compact_between_turns(
 
     # mark 类型自验证（与 persist_run 同一判定）
     mark: CompactionMark = build_summary_mark(params, compacted)
-    if messages_fingerprint(await apply_strategy(messages, build_clear_mark(params))) == (
+    if messages_fingerprint(await apply_strategy(messages, build_remove_thinking_mark(params))) == (
         messages_fingerprint(compacted)
     ):
-        mark = build_clear_mark(params)
+        mark = build_remove_thinking_mark(params)
     total = await store.count(session_id)
     mark.up_to_seq = total - 1
     await store.add_compaction_mark(session_id, mark)
@@ -529,17 +618,17 @@ def build_compaction_capability(
         strategy: AbstractCapability[Any] = _NoopCapability()
         return RecordingCompaction(strategy=strategy, params=params)
 
-    clear = build_clear(params, online=True)
+    remove_thinking = build_remove_thinking(params, online=True)
     if not params.summary_target_fraction:
         strategy = TieredCompaction(
-            tiers=[clear],
+            tiers=[remove_thinking],
             target_fraction=params.online_valve_fraction,
             context_window=params.context_window,
         )
     else:
         strategy = TieredCompaction(
             tiers=[
-                clear,
+                remove_thinking,
                 build_summary(
                     params,
                     model_settings=model_settings,

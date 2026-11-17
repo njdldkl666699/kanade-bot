@@ -34,7 +34,7 @@ CREATE TABLE messages (
 
 CREATE TABLE compaction_marks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    strategy TEXT NOT NULL,        -- clear_tool_results | summarizing
+    strategy TEXT NOT NULL,        -- clear_tool_results | remove_thinking | summarizing
     params TEXT NOT NULL,          -- 压缩参数 JSON（重放依据）
     result BLOB,                   -- 摘要快照（可重放策略为 NULL）
     fingerprint TEXT NOT NULL,     -- 参数指纹，检测配置漂移
@@ -110,7 +110,7 @@ $kanade-blob:{sha256(media_type + \0 + data)}:{media_type}
 ### 关键决策：marks 重放始终在真实形态上执行
 
 缓存与快路径加载可以存占位形态，但**参与策略决策的消息必须是真实形态**：
-clear 段在进入 `apply_strategy` 前经 blob LRU 还原，摘要快照在采用前还原。
+clear / remove_thinking 段在进入 `apply_strategy` 前经 blob LRU 还原，摘要快照在采用前还原。
 原因：`ClearToolResults` 等策略内部依赖 token 估算做清理决策，占位形态会使估算
 严重失真（base64 巨串 → 几十字节），重放结果与在线压缩时的决策分歧，破坏
 「恢复历史 == 关闭前发送内容」这一核心不变量。被支配前缀与被摘要档丢弃的

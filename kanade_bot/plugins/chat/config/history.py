@@ -39,8 +39,11 @@ class SessionConfig(AttrDocModel):
 REPLAY_RELEVANT_FIELDS = {"trigger_fraction", "keep_pairs", "context_window"}
 """决定压缩 mark 重放确定性的参数字段（进入 `CompactionConfig.fingerprint`）
 
-- clear 档重放（`build_clear(online=False)`）只消费这三个字段；
+- clear 档重放（`build_clear(online=False)`，迁移重放专用）消费 `keep_pairs`；
+- remove_thinking 档重放删除全部思考，与参数无关；
 - summarizing 档重放直接使用存储的 result，与参数无关；
+- 三字段口径自 clear 档时代沿用不改：改动指纹公式会使全部存量 marks
+  判漂移，触发一次无谓的全量重放与缓存失效；
 - 其余字段只影响未来压缩的生成，不参与指纹。
 """
 
@@ -49,19 +52,24 @@ class CompactionConfig(AttrDocModel):
     """会话压缩配置"""
 
     trigger_fraction: float = 0.7
-    """零成本档（清理工具结果）的触发比例
+    """零成本档（删除思考）的触发比例
 
     摘要档启用时，轮末压缩由`summary_target_fraction`驱动，本值不参与；
-    仅摘要档未启用时，轮末零成本档清理以本值为闸门。
+    仅摘要档未启用时，轮末删除思考以本值为闸门。
     """
 
     keep_pairs: NonNegativeInt = 3
-    """`ClearToolResults` 保留的最近工具调用对数"""
+    """`ClearToolResults` 保留的最近工具调用对数
+
+    仅迁移重放消费（存量清理档 marks 与参数漂移后的全量重放）；
+    新压缩已改用删除思考档，不再清理工具调用。
+    """
 
     min_clear_tokens: NonNegativeInt | None = None
-    """清理收益低于此 token 数则跳过；**仅在线生效**
+    """零成本档（删除思考）收益低于此 token 数则跳过；**仅在线生效**
     
-    `None` 表示不启用最小清理阈值。
+    `None` 表示不启用最小清理阈值。字段名自清理工具结果档沿用：
+    存量 marks 的参数字典含此键，改名会破坏重放时的参数校验。
     """
 
     context_window: int | None = None

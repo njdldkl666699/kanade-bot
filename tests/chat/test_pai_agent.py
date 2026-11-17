@@ -78,6 +78,18 @@ _manager_stub = types.ModuleType("kanade_bot.plugins.chat.agent.manager")
 _manager_stub.chat_manager = SimpleNamespace()  # type: ignore[attr-defined]
 sys.modules.setdefault("kanade_bot.plugins.chat.agent.manager", _manager_stub)
 
+# `chat/agent/prompt.py` 顶层 require("tts") 后导入 tts 配置；tts 插件本体又
+# require("crystal")（链式本地插件），单测起不来。这里把 tts 做成壳模块（子
+# 模块 config 按路径导入、不执行插件 __init__），并在 nonebot 登记占位
+# Plugin 使 require("tts") 可解析（私有内部接口，nonebot 无公开的登记入口）。
+_tts_pkg = types.ModuleType("kanade_bot.plugins.tts")
+_tts_pkg.__path__ = [str(REPO_ROOT / "kanade_bot" / "plugins" / "tts")]  # type: ignore[attr-defined]
+sys.modules.setdefault("kanade_bot.plugins.tts", _tts_pkg)
+from nonebot.plugin import _new_plugin
+from nonebot.plugin.manager import PluginManager
+
+_new_plugin("kanade_bot.plugins.tts", _tts_pkg, PluginManager())
+
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import PrepareTools
 from pydantic_ai.messages import (
@@ -87,6 +99,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -292,13 +305,56 @@ def make_history(n_pairs: int, tag: str = "old") -> list[ModelMessage]:
     return msgs
 
 
-def resp_text(text: str) -> ModelResponse:
-    return ModelResponse(parts=[TextPart(content=text)], finish_reason="stop")
+def make_thinking_history(n_pairs: int, tag: str = "old") -> list[ModelMessage]:
+    """构造带思考输出与工具调用对的历史
+
+    每轮：用户提问 → 思考 + 文本 + 工具调用 → 工具结果；末尾再补一条
+    仅含思考的响应（验证删除思考档对纯思考响应的整条删除）。
+    """
+    msgs: list[ModelMessage] = []
+    for i in range(n_pairs):
+        msgs.append(ModelRequest(parts=[UserPromptPart(content=f"{tag}q{i}")]))
+        msgs.append(
+            ModelResponse(
+                parts=[
+                    ThinkingPart(content=f"{tag}think{i}" + "深度推理" * 60),
+                    TextPart(content=f"{tag}a{i}"),
+                    ToolCallPart(tool_name="t", args={"i": i}, tool_call_id=f"{tag}c{i}"),
+                ],
+                finish_reason="stop",
+            )
+        )
+        msgs.append(
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        tool_name="t",
+                        content=f"{tag}result{i}" * 80,
+                        tool_call_id=f"{tag}c{i}",
+                    )
+                ]
+            )
+        )
+    msgs.append(ModelResponse(parts=[ThinkingPart(content=f"{tag}only-think" + "剪枝" * 60)]))
+    return msgs
 
 
-def resp_tool(name: str, args: dict, call_id: str) -> ModelResponse:
+def _thinking_texts(messages) -> list[str]:
+    """历史中全部思考输出的文本集合"""
+    return [
+        p.content for m in messages for p in getattr(m, "parts", []) if isinstance(p, ThinkingPart)
+    ]
+
+
+def resp_text(text: str, *, thinking: str | None = None) -> ModelResponse:
+    parts: list = [] if thinking is None else [ThinkingPart(content=thinking)]
+    return ModelResponse(parts=[*parts, TextPart(content=text)], finish_reason="stop")
+
+
+def resp_tool(name: str, args: dict, call_id: str, *, thinking: str | None = None) -> ModelResponse:
+    parts: list = [] if thinking is None else [ThinkingPart(content=thinking)]
     return ModelResponse(
-        parts=[ToolCallPart(tool_name=name, args=args, tool_call_id=call_id)],
+        parts=[*parts, ToolCallPart(tool_name=name, args=args, tool_call_id=call_id)],
         finish_reason="stop",
     )
 
@@ -422,7 +478,7 @@ DEPS_C1 = SimpleNamespace(session_info=SimpleNamespace(session_id="c1"))
 
 
 class CompactionDeterminismTest(unittest.IsolatedAsyncioTestCase):
-    """`ClearToolResults` 的确定性 + 幂等"""
+    """`ClearToolResults`（迁移重放专用的旧清理档）的确定性 + 幂等"""
 
     async def test_replay_equals_online(self):
         """从原始全量重放 == 在线压缩结果（逐字节）"""
@@ -474,6 +530,72 @@ class CompactionDeterminismTest(unittest.IsolatedAsyncioTestCase):
             if isinstance(p, ToolReturnPart)
         }
         self.assertEqual(calls, returns, "不应出现孤儿 call/return")
+
+
+class RemoveThinkingTest(unittest.IsolatedAsyncioTestCase):
+    """删除思考档（现行零成本档）：确定性 + 内容保留 + 收益下限"""
+
+    async def test_replay_equals_online_and_idempotent(self):
+        """重放确定性：从原始全量重放 == 在线压缩结果，重复应用幂等"""
+        history = make_thinking_history(3)
+        mark = compaction_mod.build_remove_thinking_mark(TEST_PARAMS)
+
+        first = await compaction_mod.apply_strategy(history, mark)
+        second = await compaction_mod.apply_strategy(first, mark)
+
+        self.assertEqual(_thinking_texts(first), [], "思考输出应全部删除")
+        self.assertEqual(fp(first), fp(second), "重复应用应幂等（无思考可删）")
+
+    async def test_keeps_everything_but_thinking(self):
+        """仅删除思考：用户输入、assistant 输出、工具调用/结果原样保留"""
+        history = make_thinking_history(3)
+        result = await compaction_mod.apply_strategy(
+            history, compaction_mod.build_remove_thinking_mark(TEST_PARAMS)
+        )
+
+        def contents(msgs, kind):
+            return [p.content for m in msgs for p in getattr(m, "parts", []) if isinstance(p, kind)]
+
+        self.assertEqual(contents(result, UserPromptPart), contents(history, UserPromptPart))
+        self.assertEqual(contents(result, TextPart), contents(history, TextPart))
+        self.assertEqual(_uncleared(result), _uncleared(history), "工具结果内容不受影响")
+        self.assertEqual(len(result), len(history) - 1, "仅纯思考响应被整条删除")
+
+    async def test_tool_pairing_preserved(self):
+        """删除思考后工具调用/返回仍配对（provider 会拒绝孤儿）"""
+        result = await compaction_mod.apply_strategy(
+            make_thinking_history(3), compaction_mod.build_remove_thinking_mark(TEST_PARAMS)
+        )
+        calls = {
+            p.tool_call_id
+            for m in result
+            for p in getattr(m, "parts", [])
+            if isinstance(p, ToolCallPart)
+        }
+        returns = {
+            p.tool_call_id
+            for m in result
+            for p in getattr(m, "parts", [])
+            if isinstance(p, ToolReturnPart)
+        }
+        self.assertEqual(calls, returns, "不应出现孤儿 call/return")
+
+    async def test_min_reclaim_floor_online_only(self):
+        """收益下限仅在线生效：不足时原样跳过；重放构造无条件执行"""
+        history = make_thinking_history(1)
+        model, _ = _make_model([resp_text("ok")])
+
+        floored = compaction_mod.build_remove_thinking(
+            CompactionParams(min_clear_tokens=10**9), online=True
+        )
+        self.assertIs(await compact_now(floored, history, model=model), history, "收益不足应跳过")
+
+        replay = compaction_mod.build_remove_thinking(
+            CompactionParams(min_clear_tokens=10**9), online=False
+        )
+        self.assertIsNot(
+            await compact_now(replay, history, model=model), history, "重放构造不受下限影响"
+        )
 
 
 # ===== SessionStore =====
@@ -690,8 +812,8 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         """记录「关闭前实际发送的消息指纹」→ 重启 → 重建 → 指纹必须相同"""
         store = SessionStore(self.db)
 
-        # ---- 关闭前：跑一轮（工具调用 + 收尾），期间触发压缩 ----
-        history = make_history(4)
+        # ---- 关闭前：跑一轮（工具调用 + 收尾），期间触发压缩（历史含思考输出） ----
+        history = make_thinking_history(4)
         await store.append("c1", history)
 
         recorder = compaction_mod.build_compaction_capability(TEST_PARAMS)
@@ -827,10 +949,13 @@ class RestoreConsistencyTest(unittest.IsolatedAsyncioTestCase):
         history: list[ModelMessage] = []
         await store.append("c1", history)
 
-        # 5 轮对话，每轮带工具调用；窗口 200 token ⇒ 每轮都触发压缩
+        # 5 轮对话，每轮带思考输出与工具调用；窗口 200 token ⇒ 每轮都触发压缩
         for turn in range(5):
             agent, _ = build_agent(
-                [resp_tool("t", {"i": turn}, f"n{turn}"), resp_text(f"第{turn}轮回答")],
+                [
+                    resp_tool("t", {"i": turn}, f"n{turn}", thinking=f"第{turn}轮思考" * 40),
+                    resp_text(f"第{turn}轮回答", thinking=f"第{turn}轮收尾思考" * 40),
+                ],
                 recorder,
             )
             result = await agent.run(f"第{turn}轮问题", message_history=history, deps=DEPS_C1)
@@ -1005,6 +1130,22 @@ class PrunedReplayTest(unittest.IsolatedAsyncioTestCase):
         restored = await self.store.restore("c1", params=TEST_PARAMS)
         self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")))
         self.assertLess(_uncleared(restored), _uncleared([*snapshot, *mid]), "clear 段应被清理")
+
+    async def test_remove_thinking_after_summary_replays_segment(self):
+        """summarizing 之后的 remove_thinking mark：覆盖段重放删除全部思考"""
+        await self.store.append("c1", make_thinking_history(4))  # seq 0..12
+        snapshot = make_history(1, "s")
+        await self.store.add_compaction_mark("c1", self._sum_mark(snapshot, 12))
+        mid = make_thinking_history(2, "mid")  # seq 13..19，含思考输出
+        await self.store.append("c1", mid)
+        mark = compaction_mod.build_remove_thinking_mark(TEST_PARAMS)
+        mark.up_to_seq = 19
+        await self.store.add_compaction_mark("c1", mark)
+
+        restored = await self.store.restore("c1", params=TEST_PARAMS)
+        self.assertEqual(fp(restored), fp(await self._legacy_replay("c1")))
+        self.assertEqual(_thinking_texts(restored), [], "remove_thinking 段思考应被删除")
+        self.assertLess(len(restored), len(snapshot) + len(mid), "纯思考响应应整条删除")
 
     async def test_multi_message_row_falls_back(self):
         """一行多消息的旧布局：快路径回退保守全量重放，输出仍与基准一致"""
@@ -1267,23 +1408,33 @@ class SummaryKeepUserMessagesTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self._user_texts(compacted), [])
 
     async def test_keeps_recent_user_messages_within_budget(self):
-        """保留用户消息：被摘要范围内最近 N 条用户消息以副本形态保留"""
+        """保留用户消息：副本形态保留扩大后摘要范围内最新的 N 条用户消息"""
         history = make_history(6)  # 18 条：u0..u5 共 6 条用户消息
         compacted = await self._compact(
             history,
             CompactionParams(summary_keep_messages=4, summary_keep_user_messages=True),
         )
         user_texts = self._user_texts(compacted)
-        # 被摘要范围内的用户消息优先占满全部 4 个名额 → 原始尾部被挤空，
-        # 产物 = 摘要 + 最近的 q1..q4 副本 + 尾部安全截止（upstream 耦合预算语义）
-        self.assertEqual(user_texts, ["oldq1", "oldq2", "oldq3", "oldq4"])
+        # harness ≥0.68 耦合预算语义：副本挤占尾部名额 → 被挤出的尾部消息并入
+        # 摘要范围 → 副本重取为扩大后范围内**最新**的 4 条用户消息（q2..q5，
+        # 含最后一轮的 q5），原始尾部只剩最后一轮工具配对（响应 + 工具结果）
+        self.assertEqual(user_texts, ["oldq2", "oldq3", "oldq4", "oldq5"])
+        self.assertEqual(
+            [
+                (type(p).__name__, getattr(p, "tool_call_id", None))
+                for m in compacted[5:]
+                for p in m.parts
+            ],
+            [("TextPart", None), ("ToolCallPart", "oldc5"), ("ToolReturnPart", "oldc5")],
+            "尾部应只剩最后一轮工具配对",
+        )
 
 
 # ===== 轮末自动压缩 =====
 
 
 class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
-    """`compact_between_turns`：轮末单闸（clear→summary 升级）+ mark 落库"""
+    """`compact_between_turns`：轮末单闸（remove_thinking→summary 升级）+ mark 落库"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -1339,12 +1490,12 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-    async def test_clear_tier_records_replayable_mark(self):
-        """仅零成本档生效：落可重放 clear mark，restore 重放结果一致"""
+    async def test_remove_thinking_tier_records_replayable_mark(self):
+        """仅零成本档（删除思考）生效：落可重放 mark，restore 重放结果一致"""
         store = SessionStore(self.db)
-        history = make_history(3)  # 约 614 tokens（纯启发式，无 usage 锚点）
+        history = make_thinking_history(3)  # 含思考输出，估算约 900 tokens
         await store.append("c1", history)
-        # 摘要档未启用：闸门 = trigger_fraction（0.8×700=560 < 614 → 触发清理）
+        # 摘要档未启用：闸门 = trigger_fraction（0.8×700=560 < 估算 → 触发删除思考）
         params = CompactionParams(
             trigger_fraction=0.8,
             context_window=700,
@@ -1354,24 +1505,26 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
         model, _ = _make_model([resp_text("这是摘要")])
         info = await compaction_mod.compact_between_turns(store, "c1", params, history, model=model)
         self.assertIsNotNone(info)
-        self.assertEqual(info["strategy"], "clear_tool_results")
+        self.assertEqual(info["strategy"], "remove_thinking")
         marks = await store.load_compaction_marks("c1")
         self.assertEqual(len(marks), 1)
-        self.assertEqual(marks[0].strategy, "clear_tool_results")
-        self.assertIsNone(marks[0].result, "零成本档 mark 只存参数，可重放")
+        self.assertEqual(marks[0].strategy, "remove_thinking")
+        self.assertIsNone(marks[0].result, "删除思考档 mark 只存参数，可重放")
         self.assertEqual(marks[0].up_to_seq, len(history) - 1)
         restored = await SessionStore(self.db).restore("c1", params=params)
         expected = await compaction_mod.apply_strategy(
-            history, compaction_mod.build_clear_mark(params)
+            history, compaction_mod.build_remove_thinking_mark(params)
         )
         self.assertEqual(fp(restored), fp(expected), "恢复重放应重现轮末压缩结果")
+        self.assertEqual(_thinking_texts(restored), [], "思考输出应全部删除")
+        self.assertLess(len(restored), len(history), "纯思考响应应整条删除")
 
     async def test_summary_tier_records_snapshot_mark(self):
         """零成本档无事可做时升摘要档：落快照 mark，恢复直接用快照"""
         store = SessionStore(self.db)
         history = make_history(3)
         await store.append("c1", history)
-        # keep_pairs=3 → 3 对全在保护内，clear 无事可做 → 直接升摘要
+        # 历史无思考输出 → 删除思考档无事可做 → 直接升摘要
         params = CompactionParams(
             trigger_fraction=0.8,
             context_window=600,  # 0.9×600=540 < 614 → 过闸
@@ -1404,8 +1557,8 @@ class TurnEndCompactionTest(unittest.IsolatedAsyncioTestCase):
             )
         )
         await store.append("c1", history)
-        # 0.9×100_000=90_000 < 90_500 → 过闸；keep_pairs=3 保护后 3 对 →
-        # 清理档回收不足 → 升摘要档（锚点响应落在摘要档保留尾部内）
+        # 0.9×100_000=90_000 < 90_500 → 过闸；历史无思考 → 零成本档回收为 0 →
+        # 升摘要档（锚点响应落在摘要档保留尾部内）
         params = CompactionParams(
             trigger_fraction=0.8,
             context_window=100_000,
@@ -1443,7 +1596,7 @@ class OnlineValveTest(unittest.IsolatedAsyncioTestCase):
         )
         recorder = compaction_mod.build_compaction_capability(params)
         agent, _ = build_agent([resp_text("ok")], recorder, params=params)
-        history = make_history(3)  # 远超 trigger_fraction，但在线压缩已关闭
+        history = make_thinking_history(3)  # 远超 trigger_fraction，但在线压缩已关闭
         result = await agent.run("问题", message_history=history, deps=DEPS_C1)
         self.assertEqual(recorder.take_events("c1"), [])
         self.assertFalse(
@@ -1454,6 +1607,11 @@ class OnlineValveTest(unittest.IsolatedAsyncioTestCase):
                 if isinstance(p, ToolReturnPart)
             ),
             "在线压缩关闭时工具结果应原样保留",
+        )
+        self.assertEqual(
+            len(_thinking_texts(result.all_messages())),
+            len(_thinking_texts(history)),
+            "在线压缩关闭时思考输出应原样保留",
         )
 
     async def test_valve_fires_over_threshold(self):
@@ -1467,7 +1625,7 @@ class OnlineValveTest(unittest.IsolatedAsyncioTestCase):
         )
         recorder = compaction_mod.build_compaction_capability(params)
         agent, _ = build_agent([resp_text("ok")], recorder, params=params)
-        await agent.run("问题", message_history=make_history(3), deps=DEPS_C1)
+        await agent.run("问题", message_history=make_thinking_history(3), deps=DEPS_C1)
         self.assertTrue(recorder.take_events("c1"), "超过应急阈值应记录压缩事件")
 
 

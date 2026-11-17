@@ -67,7 +67,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 | 会话并发模型 | 每会话一把锁串行化；`ChatDeps` 每次 run 重建，Agent 与工具静态化；工具循环无请求数上限（`REQUEST_LIMIT=None`，默认 50 不适用长工具链） |
 | 会话对象模型 | 全局单 `ChatSessionManager`（`manager.py`）持有重量级共享资源（Agent、会话/记忆存储、MCP 连接、沙箱池、压缩配置、提示词渲染），会话级运行时状态（消息缓冲区、通知槽、流中断引用、会话锁、记忆上下文）内聚到每会话一个的 `ChatSession`（`session/runtime.py`）。会话对象经 `get_session` 注册表获取：get-or-create 为纯同步代码，事件循环内无协程切换、无需锁；`current_stream` 同理为普通属性赋值，`interrupt` 无锁读取。由此每会话仅一把语义纯粹的锁，无全局锁与锁序约束。依赖方向恒为 session → 共享设施：`SandboxManager._sessions`、`ConvDBRegistry._convs` 这类资源域的每会话分片留在各自模块内部（其生命周期锚点是宿主工作区目录/进程级缓存，而非会话运行时对象，随 ChatSession 重建会丢沙箱 shell 状态与缓存收益）。沿革：Copilot SDK 时期为单 Client 多 Session，迁移 Pydantic AI 后长期残留「5 个平行 dict + 全局锁 + 双层锁序」形态，2026-10 拆分；调用方经 `get_session()` 获取会话对象直接调用 |
 | 历史与压缩 | DB 保留全量原始消息，压缩事件以 marks 落库、恢复时重放——内存与磁盘上永远是可重放的确定性状态，且保护上游 KV 前缀缓存（详见 `SESSION_STORE_DESIGN.md`） |
-| 压缩策略 | TieredCompaction：先 `ClearToolResults`（零成本、前缀缓存友好），不够再 `SummarizingCompaction`；轮末例行压缩 + 在线应急阀（详见 `COMPACTION_DESIGN.md`） |
+| 压缩策略 | TieredCompaction：先删除思考（`RemoveThinking`，移除全部思考输出，零成本），不够再 `SummarizingCompaction`；旧清理档 `ClearToolResults` 仅保留迁移重放；轮末例行压缩 + 在线应急阀（详见 `COMPACTION_DESIGN.md`） |
 | 沙箱 | mirage 进程内 VFS（约 0.1MB/会话）+ sandlock（Landlock/seccomp）做边界，取代 Docker；`KanadeWorkspace` 把相对路径绑定到每会话工作区根；低内核自动降级 Landlock ABI（详见 `SANDBOX_DESIGN.md`） |
 | 工具体系 | 宿主工具为普通可调用对象，经 `RunContext[ChatDeps]` 取上下文；MCP 工具集（搜索类）per-run 挂载（`Agent.toolsets` 只读，不能运行期改） |
 | 记忆 | 自研 SQLite MemoryStore，`(platform, user_id)` / `(platform, group_id)` 作用域隔离；SDK 原生记忆无法表达此边界，不混用（详见 `MEMORY_DESIGN.md`） |

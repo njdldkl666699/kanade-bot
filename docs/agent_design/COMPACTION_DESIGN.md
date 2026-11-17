@@ -17,10 +17,12 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 
 | 档位 | 策略 | 性质 | mark 存储 |
 | --- | --- | --- | --- |
-| 零成本档 | `ClearToolResults` | 确定性 + 幂等的纯函数：就地清空旧工具返回内容，消息条数与位置不变，配对完整性由官方保证 | 只存参数，恢复时重放（`clear_tool_results`） |
+| 零成本档 | `RemoveThinking`（本地实现） | 确定性 + 幂等的纯函数：移除历史中全部思考输出（`ThinkingPart`），用户输入、assistant 输出、工具调用/结果原样保留；仅含思考的响应整条删除 | 只存参数，恢复时重放（`remove_thinking`；重放结果与参数无关） |
 | 摘要档 | `SummarizingCompaction` | LLM 生成摘要，非确定性，无法重放 | 必须存完整产物快照（`summarizing`） |
 
-两档的设计取向都是**前缀缓存友好**：清工具结果不删消息（打点之后的缓存才失效）；摘要只在零成本档回收不够时才启用。`min_clear_tokens`（生产 2000）在零成本档在线生效——清理收益太小则跳过，避免白白弄坏缓存；恢复重放时忽略该阈值（重放没有 usage 锚点，mark 记录的是「确实清理过」的事实，无条件执行）。
+零成本档自 2026-11 起由「清理工具调用」改为「删除思考」：推理模型（DeepSeek）的思考输出经 `reasoning_content` 字段随每次请求重发，是长会话上下文与请求体的主要增长源之一；而旧工具结果常是模型要回看的信息，清理它们损失更大。两者都是确定性纯函数、无 LLM 成本；差异在缓存损耗面：删除思考必然改写最早的含思考消息（前缀缓存自该点失效，无保留名额，最近一轮的思考同样删除），旧清理档就地清空、消息位置不变。由触发阈值与 `min_clear_tokens`（生产 2000，字段名沿用）保证只在确有回收时执行——回收收益太小则跳过，避免白白弄坏缓存；恢复重放时忽略该阈值（mark 记录的是「确实删过」的事实，无条件执行）。
+
+**旧清理档（`ClearToolResults`）保留作迁移重放**：新压缩不再产生 `clear_tool_results` mark，但 restore 重放按 mark 自带策略执行，存量清理档 marks 照常重放；参数漂移后的全量重放（`_restore_after_drift`）也仍以清理档执行——历史 marks 的累积效果是「清理」，清理档重放最接近该状态（漂移后缓存本就失效，重放残留的思考由下一轮轮末闸门自愈）。另注：签名思考（Anthropic/Gemini 需回放 signature 才能续接工具链）不适用删除思考档，生产环境为 OpenAI 兼容端点，无此约束。
 
 摘要档两个关键参数：`preserve_first_user_message=False`（长期群聊第一条用户消息无意义——历史上曾因 upstream 默认 True 导致「喵喵」复读事故）；`keep_user_messages=True` 时保留被摘要范围内最近的用户消息，`summary_keep_messages` 是用户消息与原样保留的尾部消息共享的名额（用户消息优先）。
 
@@ -44,7 +46,7 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 
 - **轮末压缩**是常规路径：在 `send_and_wait` 的 finally 里执行，传入 run 结束时的完整历史（避免重复 restore），失败只记日志不影响会话状态。此时 usage 锚点就是最终响应、其后没有新消息，天然免疫 run 内「锚点后字符启发式」的误估。
 - **在线应急阀**仅防单轮内上下文暴涨（如工具返回巨型内容）击穿窗口：`RecordingCompaction` 包住分层策略，按会话记录 run 内每次压缩的前后快照，run 结束由 `persist_run` 落库。`online_valve_fraction=None` 时用 `_NoopCapability` 占位，记录路径保持统一。记录前后快照必须各自拷贝：`TieredCompaction` 以 `ctx.messages[:] = ...` 原地替换列表，直接引用同一对象会让前后指纹永远相等、压缩事件静默丢失。
-- 手动压缩命令（`/压缩`）经 `compact_now` 直接执行，不经过触发判断；`build_summary` 构造中 `max_fraction` 仅为满足构造校验（摘要档未启用时以 1.0 占位）。轮末、应急阀与手动三路共用 `build_clear` / `build_summary` 同一构造，保证策略行为与 mark 重放一致。
+- 手动压缩命令（`/压缩`）经 `compact_now` 直接执行，不经过触发判断；`build_summary` 构造中 `max_fraction` 仅为满足构造校验（摘要档未启用时以 1.0 占位）。轮末、应急阀与手动三路共用 `build_remove_thinking` / `build_summary` 同一构造，保证策略行为与 mark 重放一致。
 
 ## 4. Token 估算
 
@@ -83,9 +85,9 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 
 | 字段 | 默认 | 生产值 | 说明 |
 | --- | --- | --- | --- |
-| `trigger_fraction` | 0.7 | 0.7 | 零成本档触发比例；摘要档启用时不参与 |
-| `keep_pairs` | 3 | 3 | 保留最近 N 组工具调用对 |
-| `min_clear_tokens` | None | 2000 | 清理收益下限（仅在线生效，重放忽略） |
+| `trigger_fraction` | 0.7 | 0.7 | 零成本档（删除思考）触发比例；摘要档启用时不参与 |
+| `keep_pairs` | 3 | 3 | 保留最近 N 组工具调用对；仅迁移重放消费（存量清理档 marks 与漂移全量重放），新压缩不使用 |
+| `min_clear_tokens` | None | 2000 | 零成本档（删除思考）回收收益下限（仅在线生效，重放忽略）；字段名自清理档沿用 |
 | `context_window` | None | None | 窗口覆盖值；None 时启动解析并固化 |
 | `message_list_byte_budget` | 44 MiB | 44 MiB | 消息列表请求体字节预算；超限触发摘要压缩，压缩后仍超则本地拒绝；None 关闭 |
 | `summary_target_fraction` | None | 0.8 | 摘要档预算比例；None = 不启用摘要档 |
@@ -95,7 +97,7 @@ DB 保留全量原始消息，压缩以事件（mark）形式落库、恢复时�
 | `summary_prompt_file` | CompactionSummary.md | 同默认 | 摘要档提示词模板（相对插件配置目录）；缺失/非法回退 harness 默认 |
 | `online_valve_fraction` | 0.92 | 0.92 | 应急阀阈值；None 完全关闭 |
 
-参数指纹（`fingerprint()`）仅覆盖重放相关字段 `trigger_fraction`/`keep_pairs`/`context_window`：它们决定 clear 档重放结果（`min_clear_tokens` 仅在线生效，重放本就忽略）；summarizing 档重放直接用存储的 result，与参数无关。生成期字段不进指纹，schema 演进与生成期调参不触发漂移重放。
+参数指纹（`fingerprint()`）仅覆盖重放相关字段 `trigger_fraction`/`keep_pairs`/`context_window`：清理档重放消费 `keep_pairs`（另两字段自清理档时代一并纳入，口径保持不变——改动公式会使全部存量 marks 判漂移，触发一次无谓的全量重放与缓存失效）；删除思考档重放结果与参数无关；summarizing 档重放直接用存储的 result，与参数无关（`min_clear_tokens` 仅在线生效，重放本就忽略）。生成期字段不进指纹，schema 演进与生成期调参不触发漂移重放。
 
 阈值约束（1M 窗口实测）：最小 ≥0.7（最大群常态占用 66.8%）；在线阀须低于预算拒绝线 ≈0.945。
 
