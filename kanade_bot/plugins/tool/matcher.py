@@ -128,6 +128,14 @@ send_face_from_msg_emoji_likes = on_command(
 )
 register_matcher(send_face_from_msg_emoji_likes, "发送贴的表情")
 
+security_daily = on_command(
+    "网络安全日报",
+    aliases={"网安日报", "security_daily"},
+    priority=2,
+    block=True,
+)
+register_matcher(security_daily, "网络安全日报")
+
 ### 图片创作与视频生成
 
 image_generation = on_command(

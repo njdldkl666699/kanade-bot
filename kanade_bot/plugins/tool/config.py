@@ -19,8 +19,10 @@ class ScopedConfig(AttrDocModel):
     """服务器图标加载失败时的替代图标名，支持PNG格式。"""
     template_file: str = "mcstatus_template.html"
     """服务器状态渲染使用的HTML模板文件名，支持HTML格式。"""
+
     schedule_configs_file: str = "schedule_configs.json"
     """定时任务配置文件名。暂仅支持OneBot v11群聊。"""
+
     preset_reaction_config_file: str = "preset_reaction_config.json"
     """预设反应配置文件名"""
 
@@ -32,6 +34,9 @@ class ScopedConfig(AttrDocModel):
     """Agnes AI API Key，用于图片创作和视频生成。"""
     agnes_base_url: str = "https://api.agnes-ai.cn/v1"
     """Agnes AI API Base URL，需以`/v1`结尾。"""
+
+    security_daily_cache_file: str = "security_daily_cache.json"
+    """网络安全日报缓存文件名"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
@@ -52,6 +57,11 @@ class ScopedConfig(AttrDocModel):
     def preset_reaction_config_file_path(self) -> Path:
         """预设反应配置文件路径"""
         return get_plugin_config_file(self.preset_reaction_config_file)
+
+    @property
+    def security_daily_cache_file_path(self) -> Path:
+        """网络安全日报缓存文件路径"""
+        return get_plugin_config_file(self.security_daily_cache_file)
 
 
 class Config(BaseModel):

@@ -16,7 +16,7 @@ from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg, EventMessage
 from nonebot.typing import T_State
 
-from kanade_bot.utils.common import HTTPX_CLIENT
+from kanade_bot.utils.common import HTTPX_CLIENT, asia_shanghai_now
 from kanade_bot.utils.onebot11 import get_msg_emoji_likes, send_poke, set_msg_emoji_like
 from kanade_bot.utils.parse import parse_arg_message
 
@@ -31,6 +31,7 @@ from .matcher import (
     pjsk_skill_multiplier,
     receive_poke,
     remove_a_schedule,
+    security_daily,
     send_a_poke,
     send_face,
     send_face_from_msg_emoji_likes,
@@ -53,6 +54,7 @@ from .media import (
     parse_video_args,
 )
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
+from .security_daily import download_daily_images, get_latest_security_daily
 
 require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import get_plugin_cache_file
@@ -449,3 +451,35 @@ async def _(state: T_State, bot: OneBot, event: OneBotMessageEvent):
     except CreationError as exc:
         await video_generation.finish(str(exc))
     await video_generation.finish(message)
+
+
+@security_daily.handle()
+async def _(event: Event):
+    daily = await get_latest_security_daily()
+    if daily is None:
+        await security_daily.finish("最近两天的网络安全日报都未找到，稍后再试试吧")
+
+    today = asia_shanghai_now().date()
+    header = (
+        daily.text
+        if daily.date == today
+        else f"今日日报还未发布，先看看 {daily.date} 的\n{daily.text}"
+    )
+
+    footer_parts = [f"动态: {daily.dynamic_url}"]
+    if daily.top_comment_url:
+        footer_parts.insert(0, f"详情: {daily.top_comment_url}")
+    footer = "\n".join(footer_parts)
+
+    if isinstance(event, OneBotMessageEvent):
+        message = OneBotMessage(header)
+        try:
+            for image in await download_daily_images(daily):
+                message += MessageSegment.image(image)
+        except Exception:
+            logger.exception("下载网络安全日报图片失败")
+            await security_daily.finish(f"{header}\n{footer}")
+        message += OneBotMessage(f"\n{footer}")
+        await security_daily.finish(message)
+
+    await security_daily.finish(f"{header}\n{footer}")
