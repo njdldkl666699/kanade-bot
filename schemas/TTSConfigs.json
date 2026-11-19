@@ -28,14 +28,14 @@
       "type": "object"
     }
   },
-  "description": "TTS运行时配置文件（经model_updater热更新）",
+  "description": "TTS运行时配置文件",
   "properties": {
     "tts_emotions": {
       "additionalProperties": {
         "$ref": "#/$defs/TTSEmotionPreset"
       },
       "default": {},
-      "description": "情绪到参考音频、转写与语言的映射；键限固定情绪枚举，缺项情绪回退「平静」",
+      "description": "情绪到参考音频、转写与语言的映射；键限固定情绪枚举，缺项情绪回退默认",
       "title": "Tts Emotions",
       "type": "object"
     }

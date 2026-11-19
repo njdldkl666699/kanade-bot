@@ -81,6 +81,7 @@ Agent 框架采用 **Pydantic AI**（`pydantic-ai-slim[mcp,openai]` + `pydantic-
 - **无应用层超时**：模型可能长时间推理或执行工具而不输出事件，首字与流内间隔由网络层（HTTP client 的 read timeout）兕底，应用层不对流事件间隔计时
 - **异常终止落库**：网络错误/手动中断等异常终止的运行同样把已完成的消息（含工具往返）落库，下一轮用户请求从断点继续，而非整轮丢弃
 - **用量回调**：仅轮次正常结束时回调 `on_usage`（累计含重发与续写），供计费与统计
+- **重置/压缩后首请求免费**：重置与压缩都会改写会话历史，之后的第一条模型请求前缀缓存必然未命中、按全量输入计费。`first_request_free` capability（`agent/first_request_free.py`，挂在主 Agent 上）按会话维护待兑现的免费名额，五个登记点：会话重置、手动压缩、轮末自动压缩、请求前字节预算压缩、run 内应急压缩（`RecordingCompaction.on_compacted` 回调）。登记后下一次模型请求在 `after_model_request` 兑现（单次 HTTP 请求粒度）：该次请求的 usage 计入轮内 `deps.waived_usage`，轮末 `on_usage` 收到的计费量已扣除豁免部分；全轮被抵扣为空时免单（`has_billable_usage`）。名额为进程内内存态：跨轮保留直至兑现，多次登记幂等（同一会话仍只免一次）；主动回复轮本身不计费，但同样兑现名额（严格意义的第一条模型请求，不分被动/定时/主动触发线）
 
 ## 6. 子 Agent 与生态
 

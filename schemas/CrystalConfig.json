@@ -174,9 +174,7 @@
           }
         ]
       },
-      "default": {
-        "TTS语音": 50
-      },
+      "default": {},
       "description": "每个命令的处理函数消耗的水晶，键为唯一ID\n\n值为 `int` 时按固定数值预检查并扣除；\n值为 `str` 时视为文字描述，表示该功能由插件自行按量计费",
       "propertyNames": {
         "$ref": "#/$defs/HandlerKeyEnum"

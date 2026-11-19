@@ -20,6 +20,7 @@ from kanade_bot.utils.session import SessionInfo
 
 from ..config import cfg
 from .deps import ChatDeps
+from .first_request_free import first_request_free
 from .history import RequestBudgetCapability, SessionStore, build_compaction_capability
 from .history.gate_store import GateStore
 from .memory import MemoryStore
@@ -61,6 +62,7 @@ class ChatSessionManager:
             self.compaction_params,
             output_upper_tokens=self.output_upper_tokens,
             model_settings=self.model_settings,
+            on_compacted=first_request_free.arm,
         )
         self.request_budget = RequestBudgetCapability(
             context_window=self.compaction_params.context_window,
@@ -78,7 +80,11 @@ class ChatSessionManager:
         """MCP 工具集"""
         self.sandbox_manager: SandboxManager | None = None
 
-        capabilities: list[AbstractCapability] = [self.compaction, self.request_budget]
+        capabilities: list[AbstractCapability] = [
+            self.compaction,
+            self.request_budget,
+            first_request_free,
+        ]
         if cfg.sandbox.enabled:
             self.sandbox_manager = SandboxManager()
             capabilities.extend(

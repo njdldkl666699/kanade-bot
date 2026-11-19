@@ -114,6 +114,7 @@ from pydantic_ai_harness.compaction import (
 )
 
 from kanade_bot.plugins.chat.agent import history as compaction_mod
+from kanade_bot.plugins.chat.agent.first_request_free import first_request_free
 from kanade_bot.plugins.chat.agent.history.store import SessionStore
 from kanade_bot.plugins.chat.agent.proactive import executor as proactive_executor
 from kanade_bot.plugins.chat.agent.proactive.gate_history import (
@@ -1798,6 +1799,136 @@ class SessionCacheStatsTest(unittest.IsolatedAsyncioTestCase):
         stats = await session.stats()
         assert stats is not None
         self.assertNotIn("cache", stats)
+
+
+# ===== 重置/压缩后首次模型请求免费 =====
+
+
+class FirstRequestFreeTest(unittest.IsolatedAsyncioTestCase):
+    """`first_request_free`：压缩/重置登记 → 下一条模型请求usage豁免 → 轮末扣除后回调计费
+
+    名额不分被动/定时/主动触发线（严格意义的第一条模型请求，谁先来谁兑现）；
+    全轮被豁免抵扣为空时由 `has_billable_usage` 免单。本类直接断言 `on_usage`
+    收到的扣除后 usage，与 `make_turn_biller` 的扣费解耦。
+    """
+
+    def setUp(self):
+        first_request_free.clear()
+        self.addCleanup(first_request_free.clear)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SessionStore(Path(self.tmp.name) / "sessions")
+
+    def _make_session(self, script: list[tuple[ModelResponse, RequestUsage]]) -> ChatSession:
+        """与 SessionCacheStatsTest 同构的最小 ChatSession，额外挂载免费名额 capability"""
+        recorder = compaction_mod.build_compaction_capability(NOOP_PARAMS)
+        agent = Agent(
+            UsageScriptedModel(script),
+            capabilities=[recorder, first_request_free, PrepareTools(lambda ctx, defs: defs)],
+        )
+        mgr = SimpleNamespace(
+            store=self.store,
+            agent=agent,
+            compaction=recorder,
+            compaction_params=NOOP_PARAMS,
+            model_settings={},
+            output_upper_tokens=None,
+            mcp_toolsets=[],
+            sandbox_manager=None,
+            memory_store=None,
+        )
+        return ChatSession("c1", manager=mgr)
+
+    async def _turn(self, session: ChatSession, prompt: str):
+        """跑一轮被动语义的轮次，返回 on_usage 收到的（扣除豁免后的）usage"""
+        billed = []
+        async for _ in session.send_and_wait(
+            STATS_SESSION_INFO, prompt, bot_id="b1", on_usage=lambda u, p: billed.append(u)
+        ):
+            pass
+        self.assertEqual(len(billed), 1)
+        return billed[0]
+
+    async def test_no_freebie_without_arm(self):
+        """未登记名额：全额计费，行为与改动前一致"""
+        session = self._make_session([resp_usage("回答1", input_tokens=500, cache_read_tokens=100)])
+        usage = await self._turn(session, "问题1")
+        self.assertEqual(usage.input_tokens, 500)
+        # FunctionModel 会为每个响应合成 +1 输出的 usage 锚点，输出精确值不作断言
+        self.assertGreater(usage.output_tokens, 0)
+
+    async def test_armed_first_request_fully_waived(self):
+        """登记后下一轮首个（也是唯一）请求全额豁免，兑现后恢复全额计费"""
+        session = self._make_session(
+            [
+                resp_usage("回答1", input_tokens=500, cache_read_tokens=100),
+                resp_usage("免费轮", input_tokens=1000, cache_read_tokens=800),
+                resp_usage("回答3", input_tokens=300, cache_read_tokens=0),
+            ]
+        )
+        await self._turn(session, "问题1")
+
+        first_request_free.arm("c1")  # 模拟压缩/重置事件登记
+        usage = await self._turn(session, "问题2")
+        self.assertEqual(usage.input_tokens, 0)
+        self.assertEqual(usage.output_tokens, 0)
+        self.assertFalse(first_request_free.is_armed("c1"), "名额应已兑现")
+
+        usage = await self._turn(session, "问题3")
+        self.assertEqual(usage.input_tokens, 300, "名额已消耗，恢复全额计费")
+
+    async def test_empty_response_retry_waives_first_attempt(self):
+        """空响应重发：被回退的首个请求是被豁免的那个，重发请求正常计费"""
+        empty = (
+            ModelResponse(parts=[]),
+            RequestUsage(input_tokens=800, cache_read_tokens=0, output_tokens=0),
+        )
+        session = self._make_session(
+            [empty, resp_usage("重发成功", input_tokens=600, cache_read_tokens=0)]
+        )
+        first_request_free.arm("c1")
+        usage = await self._turn(session, "问题")
+        # 计费量 = (800+600) 输入 - 800 豁免 = 600；输出侧两请求各含合成锚点，
+        # 但被豁免请求与计入侧同源，扣除后仅余重发请求的输出（>0）
+        self.assertEqual(usage.input_tokens, 600)
+        self.assertGreater(usage.output_tokens, 0)
+
+    async def test_unbilled_turn_consumes_freebie(self):
+        """不计费轮（主动接话语义：无 on_usage）同样兑现名额"""
+        session = self._make_session(
+            [
+                resp_usage("主动接话", input_tokens=900, cache_read_tokens=0),
+                resp_usage("被动回答", input_tokens=400, cache_read_tokens=0),
+            ]
+        )
+        first_request_free.arm("c1")
+        async for _ in session.send_and_wait(
+            STATS_SESSION_INFO,
+            "",
+            bot_id="b1",
+            system_notification="你刚刚在旁观群聊，现在决定主动插话。",
+        ):
+            pass
+        self.assertFalse(first_request_free.is_armed("c1"), "名额应被不计费轮兑现")
+
+        usage = await self._turn(session, "被动问题")
+        self.assertEqual(usage.input_tokens, 400, "名额已消耗，恢复全额计费")
+
+    async def test_reset_arms_freebie_for_next_turn(self):
+        """会话重置：清空历史成功后登记名额，下一轮首请求免费"""
+        session = self._make_session(
+            [
+                resp_usage("重置前", input_tokens=500, cache_read_tokens=0),
+                resp_usage("重置后", input_tokens=700, cache_read_tokens=0),
+            ]
+        )
+        await self._turn(session, "问题1")
+        await session.reset()
+        self.assertTrue(first_request_free.is_armed("c1"))
+
+        usage = await self._turn(session, "问题2")
+        self.assertEqual(usage.input_tokens, 0)
+        self.assertEqual(usage.output_tokens, 0)
 
 
 # ===== 主动回复防重判（2026-10-27 双回复竞态修复） =====

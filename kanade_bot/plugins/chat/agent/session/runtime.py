@@ -34,6 +34,7 @@ from kanade_bot.utils.session import SessionInfo
 
 from ...config import cfg
 from ..deps import ChatDeps
+from ..first_request_free import first_request_free
 from ..history import (
     build_summary,
     build_summary_mark,
@@ -245,6 +246,8 @@ class ChatSession:
                     if budget_result is not None:
                         history, info = budget_result
                         logger.info(f"会话{session_id}请求前消息列表预算压缩完成：{info}")
+                        # 压缩改写了历史：本轮首个模型请求免费
+                        first_request_free.arm(session_id)
 
             try:
                 total_usage = RunUsage()
@@ -339,7 +342,8 @@ class ChatSession:
 
                     if produced or tool_called:
                         if on_usage is not None:
-                            on_usage(total_usage, produced)
+                            # 重置/压缩后的首次请求免费：先扣除被豁免请求的usage再计费
+                            on_usage(total_usage - deps.waived_usage, produced)
                         return
 
                     # 整轮空响应：回退本轮写入的消息后重发
@@ -375,6 +379,8 @@ class ChatSession:
                         output_upper_tokens=mgr.output_upper_tokens,
                     ):
                         logger.info(f"会话{session_id}轮末压缩完成：{info}")
+                        # 压缩改写了历史：下一轮首个模型请求免费
+                        first_request_free.arm(session_id)
                 except Exception as e:
                     logger.warning(f"会话{session_id}轮末压缩失败（不影响会话状态）：{e}")
                 # 清空消息缓冲区
@@ -444,6 +450,9 @@ class ChatSession:
                 await mgr.store.clear(self.session_id)
             except Exception as e:
                 logger.warning(f"清空会话{self.session_id}历史时发生错误: {e}")
+            else:
+                # 历史已清空：重建上下文的首次模型请求免费
+                first_request_free.arm(self.session_id)
 
             if mgr.sandbox_manager is not None:
                 await mgr.sandbox_manager.close(self.session_id)
@@ -503,6 +512,8 @@ class ChatSession:
             mark = build_summary_mark(mgr.compaction_params, compacted)
             mark.up_to_seq = total - 1
             await mgr.store.add_compaction_mark(self.session_id, mark)
+            # 手动压缩同样适用：下一次模型请求免费
+            first_request_free.arm(self.session_id)
             est = estimate_context_tokens(messages)
             logger.info(f"会话{self.session_id}手动压缩完成：{before}条 → {len(compacted)}条")
             return {

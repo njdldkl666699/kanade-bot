@@ -8,6 +8,7 @@ from pydantic_ai.usage import RunUsage
 from kanade_bot.utils.billing import (
     TokenBillingConfig,
     compute_token_cost,
+    has_billable_usage,
     is_peak_hours,
 )
 
@@ -46,6 +47,27 @@ class TestIsPeakHours:
 
     def test_holiday_weekday_is_off_peak(self):
         assert is_peak_hours(NATIONAL_DAY) is False
+
+
+class TestHasBillableUsage:
+    """是否存在可计费内容：全轮被豁免抵扣为空时免单的判定"""
+
+    def test_default_empty(self):
+        assert has_billable_usage(RunUsage()) is False
+
+    def test_zeroed_after_waiver(self):
+        # 首请求免费全额抵扣后的形态：input/output 均为 0
+        assert has_billable_usage(RunUsage(input_tokens=0, output_tokens=0)) is False
+
+    def test_input_only(self):
+        assert has_billable_usage(RunUsage(input_tokens=10)) is True
+
+    def test_output_only(self):
+        assert has_billable_usage(RunUsage(output_tokens=1)) is True
+
+    def test_fully_cached_input_still_billable(self):
+        # 全缓存命中的输入仍视为有可计费内容（维持单轮最低消耗语义）
+        assert has_billable_usage(RunUsage(input_tokens=100, cache_read_tokens=100)) is True
 
 
 class TestComputeTokenCost:

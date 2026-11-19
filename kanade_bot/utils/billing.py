@@ -20,6 +20,15 @@ type UsageCallback = Callable[[RunUsage, bool], None]
 """轮次结束回调：`(累计usage, 是否有文本产出)`，供按Token计费的调用方扣费"""
 
 
+def has_billable_usage(usage: RunUsage) -> bool:
+    """是否存在可计费内容（有任何输入或输出token）
+
+    全轮计费usage被豁免额度抵扣为空（或模型未回报usage）时为 False，
+    调用方应跳过计费，而不是按单轮最低消耗收费。
+    """
+    return bool(usage.input_tokens or usage.output_tokens)
+
+
 def is_non_workday(at: datetime | None = None) -> bool:
     """判断北京时间 `at` 是否为非工作日（周六日或法定节假日）
 

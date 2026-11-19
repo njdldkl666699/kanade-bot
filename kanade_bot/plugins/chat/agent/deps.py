@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from pydantic_ai import RunUsage
+
 from kanade_bot.utils.session import SessionInfo
 
 from .memory import MemoryContext, MemoryStore
@@ -27,6 +29,9 @@ class ChatDeps:
 
     sandbox_root: str | None = None
     """沙箱工作区根的绝对路径"""
+
+    waived_usage: RunUsage = field(default_factory=RunUsage)
+    """本轮被豁免计费的usage：重置/压缩后首请求免费额度在本轮内累计，轮末从计费量中扣除"""
 
     extra: dict = field(default_factory=dict)
     """扩展数据槽"""

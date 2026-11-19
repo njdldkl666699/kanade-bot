@@ -346,6 +346,9 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
     events: dict[str, list[CompactionEvent]] = field(default_factory=dict)
     """会话 → 本 run 内的压缩事件"""
 
+    on_compacted: Callable[[str], None] | None = field(default=None)
+    """在线压缩实际发生时的回调（参数为会话ID）：重置/压缩后首请求免费的登记"""
+
     async def before_model_request(
         self,
         ctx: RunContext[AgentDepsT],
@@ -360,6 +363,8 @@ class RecordingCompaction[AgentDepsT](AbstractCapability[AgentDepsT]):
             self.events.setdefault(session_id, []).append(
                 CompactionEvent(pre=before, post=list(ctx.messages))
             )
+            if self.on_compacted is not None:
+                self.on_compacted(session_id)
         return result
 
     def take_events(self, session_id: str) -> list[CompactionEvent]:
@@ -612,11 +617,12 @@ def build_compaction_capability(
     *,
     output_upper_tokens: int | None = None,
     model_settings: ModelSettings | None = None,
+    on_compacted: Callable[[str], None] | None = None,
 ):
     """构造 run 内应急压缩 capability（仅防单轮内上下文暴涨击穿窗口）"""
     if params.online_valve_fraction is None:
         strategy: AbstractCapability[Any] = _NoopCapability()
-        return RecordingCompaction(strategy=strategy, params=params)
+        return RecordingCompaction(strategy=strategy, params=params, on_compacted=on_compacted)
 
     remove_thinking = build_remove_thinking(params, online=True)
     if not params.summary_target_fraction:
@@ -638,4 +644,4 @@ def build_compaction_capability(
             target_fraction=params.online_valve_fraction,
             context_window=params.context_window,
         )
-    return RecordingCompaction(strategy=strategy, params=params)
+    return RecordingCompaction(strategy=strategy, params=params, on_compacted=on_compacted)

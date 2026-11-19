@@ -5,7 +5,12 @@ from nonebot import require
 from nonebot.adapters import Event
 from pydantic_ai.usage import RunUsage
 
-from kanade_bot.utils.billing import UsageCallback, compute_token_cost, is_peak_hours
+from kanade_bot.utils.billing import (
+    UsageCallback,
+    compute_token_cost,
+    has_billable_usage,
+    is_peak_hours,
+)
 from kanade_bot.utils.common import PlatformType
 from kanade_bot.utils.session import extract_session_info_sync
 
@@ -40,13 +45,16 @@ def is_banned(id: str, ban_type: BanType, platform: PlatformType) -> bool:
 def make_turn_biller(
     platform: PlatformType | None, user_id: str | None, turn_start: datetime
 ) -> UsageCallback:
-    """构造轮次计费回调：有文本产出才扣费（扣费允许至负数）
+    """构造轮次计费回调：有文本产出且余下usage非空才扣费（扣费允许至负数）
 
-    被动回复与定时任务主动唤醒共用；峰谷按轮次开始时刻判定。
+    被动回复与定时任务主动唤醒共用；峰谷按轮次开始时刻判定。重置/压缩后
+    首请求免费的豁免量已由调用方在传入前扣除，全轮被豁免抵扣为空时免单。
     """
 
     def bill(usage: RunUsage, produced: bool) -> None:
         if not produced or not platform or not user_id:
+            return
+        if not has_billable_usage(usage):
             return
         cost = compute_token_cost(usage, cfg.billing, peak=is_peak_hours(turn_start))
         consume_crystal(platform, user_id, cost)
