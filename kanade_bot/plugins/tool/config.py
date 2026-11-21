@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from kanade_bot.utils.schema import AttrDocModel, ConfigRegistry, generate_schema
 
 require("nonebot_plugin_localstore")
-from nonebot_plugin_localstore import get_plugin_config_file
+from nonebot_plugin_localstore import get_plugin_cache_file, get_plugin_config_file
 
 require("model_updater")
 from kanade_bot.plugins.model_updater import load_register_model_from_file
@@ -61,7 +61,7 @@ class ScopedConfig(AttrDocModel):
     @property
     def security_daily_cache_file_path(self) -> Path:
         """网络安全日报缓存文件路径"""
-        return get_plugin_config_file(self.security_daily_cache_file)
+        return get_plugin_cache_file(self.security_daily_cache_file)
 
 
 class Config(BaseModel):
