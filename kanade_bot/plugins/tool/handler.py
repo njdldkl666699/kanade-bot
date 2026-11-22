@@ -498,11 +498,7 @@ async def _(event: Event):
         await security_weekly.finish("最近一期网络安全周报都未找到，稍后再试试吧")
 
     header = weekly.text
-
-    footer_parts = [f"动态: {weekly.dynamic_url}"]
-    if weekly.top_comment_url:
-        footer_parts.insert(0, f"详情: {weekly.top_comment_url}")
-    footer = "\n".join(footer_parts)
+    footer = f"动态: {weekly.dynamic_url}"
 
     if isinstance(event, OneBotMessageEvent):
         message = OneBotMessage(header)

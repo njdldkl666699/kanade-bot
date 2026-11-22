@@ -1,9 +1,12 @@
+import asyncio
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 import nonebot
+from bilibili_api.video import Video
+from msgspec import convert
 from nonebot import logger
 from nonebot.adapters.console import Adapter as ConsoleAdapter
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
@@ -250,6 +253,88 @@ def patch_foreign_plugins():
             raise error
 
     DefaultRenderer.render_messages = _parser_render_messages
+
+    # 覆盖 BilibiliParser.parse_video:
+    # 在视频简介前附加视频统计信息
+    from nonebot_plugin_parser.parsers.base import IgnoreException, pconfig
+    from nonebot_plugin_parser.parsers.bilibili import BilibiliParser
+    from nonebot_plugin_parser.parsers.bilibili.video import AIConclusion, VideoInfo
+
+    async def _bili_parse_video(
+        self: BilibiliParser,
+        *,
+        bvid: str | None = None,
+        avid: int | None = None,
+        page_num: int = 1,
+    ):
+        """解析视频信息（简介前附加统计信息）"""
+        video = Video(bvid=bvid, aid=avid, credential=await self.credential)
+        video_info = convert(await video.get_info(), VideoInfo)
+        # UP
+        author = self.create_author(video_info.owner.name, video_info.owner.face)
+        # 处理分 p
+        page_info = video_info.extract_info_with_page(page_num)
+
+        # 获取 AI 总结
+        if self._credential:
+            cid = await video.get_cid(page_info.index)
+            ai_conclusion = await video.get_ai_conclusion(cid)
+            ai_conclusion = convert(ai_conclusion, AIConclusion)
+            ai_summary = ai_conclusion.summary
+        else:
+            ai_summary: str = "哔哩哔哩 cookie 未配置或失效, 无法使用 AI 总结"
+
+        url = f"https://bilibili.com/{video_info.bvid}"
+        url += f"?p={page_info.index + 1}" if page_info.index > 0 else ""
+
+        # 视频下载 task
+        async def download_video():
+            output_path = pconfig.cache_dir / f"{video_info.bvid}-{page_num}.mp4"
+            if output_path.exists():
+                return output_path
+            v_url, a_url = await self.extract_download_urls(video=video, page_index=page_info.index)
+            if page_info.duration > pconfig.duration_maximum:
+                logger.warning(
+                    f"视频时长 {page_info.duration} 秒, 超过 {pconfig.duration_maximum} 秒, 取消下载"
+                )
+                raise IgnoreException
+            if a_url is not None:
+                path = await self.downloader.download_av_and_merge(
+                    v_url,
+                    a_url,
+                    output_path=output_path,
+                    ext_headers=self.headers,
+                )
+            else:
+                path = await self.downloader._download_file(
+                    v_url,
+                    file_name=output_path.name,
+                    ext_headers=self.headers,
+                )
+            return path
+
+        video_content = self.create_video(
+            asyncio.create_task(download_video()),
+            page_info.cover,
+            page_info.duration,
+        )
+
+        # 简介前附加统计信息
+        text = video_info.formatted_stats_info
+        if video_info.desc:
+            text += f"\n{video_info.desc}"
+
+        return self.result(
+            url=url,
+            title=page_info.title,
+            timestamp=page_info.timestamp,
+            text=text,
+            author=author,
+            contents=[video_content],
+            extra={"info": ai_summary},
+        )
+
+    BilibiliParser.parse_video = _bili_parse_video
 
 
 def register_other_configs_and_generate_schema():

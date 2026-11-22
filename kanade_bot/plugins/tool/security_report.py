@@ -82,10 +82,6 @@ class SecurityWeekly(BaseModel):
     """动态正文"""
     images: list[str]
     """动态图片 url 列表"""
-    top_comment: str | None = None
-    """置顶评论原文"""
-    top_comment_url: str | None = None
-    """从置顶评论中提取的第一个 url"""
 
 
 def _dynamic_text(item: dict) -> str:
@@ -330,15 +326,9 @@ def _parse_weekly_range(text: str) -> tuple[date, date] | None:
     return (start, end) if start <= end else None
 
 
-async def _build_weekly(
-    item: dict, text: str, rng: tuple[date, date], credential: Credential | None
-) -> SecurityWeekly:
-    """由动态条目构造 SecurityWeekly（置顶评论获取失败时降级为无评论）"""
+def _build_weekly(item: dict, text: str, rng: tuple[date, date]) -> SecurityWeekly:
+    """由动态条目构造 SecurityWeekly"""
     dynamic_id = item.get("id_str") or str(item.get("id") or "")
-    top_comment, top_comment_url = await fetch_top_comment(
-        dynamic_id, item.get("basic") or {}, credential
-    )
-
     return SecurityWeekly(
         start_date=rng[0],
         end_date=rng[1],
@@ -346,8 +336,6 @@ async def _build_weekly(
         dynamic_url=f"https://www.bilibili.com/opus/{dynamic_id}",
         text=text.strip(),
         images=_dynamic_images(item),
-        top_comment=top_comment,
-        top_comment_url=top_comment_url,
     )
 
 
@@ -363,7 +351,7 @@ async def _fetch_security_weekly(
         for item in page.get("items") or []:
             text = _dynamic_text(item)
             if rng := _parse_weekly_range(text):
-                return await _build_weekly(item, text, rng, credential)
+                return _build_weekly(item, text, rng)
 
         if str(page.get("has_more")).lower() not in ("1", "true"):
             break
