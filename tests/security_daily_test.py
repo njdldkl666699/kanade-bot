@@ -13,7 +13,7 @@ nonebot.load_from_toml("pyproject.toml")
 
 from bilibili_api import Credential
 
-from kanade_bot.plugins.tool import security_daily as sd
+from kanade_bot.plugins.tool import security_report as sd
 
 assert os.environ.get("SESSDATA"), "请先设置环境变量 SESSDATA"
 SESSDATA = os.environ["SESSDATA"]
@@ -39,7 +39,7 @@ async def main():
 
     images = await sd.download_daily_images(daily)
     print("images:", [len(img) for img in images])
-    print("cache file:", sd._CACHE_FILE, sd._CACHE_FILE.exists())
+    print("cache file:", sd._daily_cache_file, sd._daily_cache_file.exists())
 
 
 asyncio.run(main())

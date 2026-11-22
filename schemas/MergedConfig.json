@@ -2721,6 +2721,12 @@
           "description": "网络安全日报缓存文件名",
           "title": "Security Daily Cache File",
           "type": "string"
+        },
+        "security_weekly_cache_file": {
+          "default": "security_weekly_cache.json",
+          "description": "网络安全周报缓存文件名",
+          "title": "Security Weekly Cache File",
+          "type": "string"
         }
       },
       "title": "ScopedConfig",
@@ -4052,7 +4058,8 @@
         "sensenova_api_key": null,
         "agnes_api_key": null,
         "agnes_base_url": "https://api.agnes-ai.cn/v1",
-        "security_daily_cache_file": "security_daily_cache.json"
+        "security_daily_cache_file": "security_daily_cache.json",
+        "security_weekly_cache_file": "security_weekly_cache.json"
       }
     },
     "tts": {

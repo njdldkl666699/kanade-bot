@@ -136,6 +136,14 @@ security_daily = on_command(
 )
 register_matcher(security_daily, "网络安全日报")
 
+security_weekly = on_command(
+    "网络安全周报",
+    aliases={"网安周报", "security_weekly"},
+    priority=2,
+    block=True,
+)
+register_matcher(security_weekly, "网络安全周报")
+
 ### 图片创作与视频生成
 
 image_generation = on_command(

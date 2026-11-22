@@ -37,6 +37,8 @@ class ScopedConfig(AttrDocModel):
 
     security_daily_cache_file: str = "security_daily_cache.json"
     """网络安全日报缓存文件名"""
+    security_weekly_cache_file: str = "security_weekly_cache.json"
+    """网络安全周报缓存文件名"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
@@ -62,6 +64,11 @@ class ScopedConfig(AttrDocModel):
     def security_daily_cache_file_path(self) -> Path:
         """网络安全日报缓存文件路径"""
         return get_plugin_cache_file(self.security_daily_cache_file)
+
+    @property
+    def security_weekly_cache_file_path(self) -> Path:
+        """网络安全周报缓存文件路径"""
+        return get_plugin_cache_file(self.security_weekly_cache_file)
 
 
 class Config(BaseModel):

@@ -32,6 +32,7 @@ from .matcher import (
     receive_poke,
     remove_a_schedule,
     security_daily,
+    security_weekly,
     send_a_poke,
     send_face,
     send_face_from_msg_emoji_likes,
@@ -54,7 +55,12 @@ from .media import (
     parse_video_args,
 )
 from .schedule import add_schedule, print_schedules_pretty, remove_schedule
-from .security_daily import download_daily_images, get_latest_security_daily
+from .security_report import (
+    download_daily_images,
+    download_weekly_images,
+    get_latest_security_daily,
+    get_latest_security_weekly,
+)
 
 require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import get_plugin_cache_file
@@ -483,3 +489,30 @@ async def _(event: Event):
         await security_daily.finish(message)
 
     await security_daily.finish(f"{header}\n{footer}")
+
+
+@security_weekly.handle()
+async def _(event: Event):
+    weekly = await get_latest_security_weekly()
+    if weekly is None:
+        await security_weekly.finish("最近一期网络安全周报都未找到，稍后再试试吧")
+
+    header = weekly.text
+
+    footer_parts = [f"动态: {weekly.dynamic_url}"]
+    if weekly.top_comment_url:
+        footer_parts.insert(0, f"详情: {weekly.top_comment_url}")
+    footer = "\n".join(footer_parts)
+
+    if isinstance(event, OneBotMessageEvent):
+        message = OneBotMessage(header)
+        try:
+            for image in await download_weekly_images(weekly):
+                message += MessageSegment.image(image)
+        except Exception:
+            logger.exception("下载网络安全周报图片失败")
+            await security_weekly.finish(f"{header}\n{footer}")
+        message += OneBotMessage(f"\n{footer}")
+        await security_weekly.finish(message)
+
+    await security_weekly.finish(f"{header}\n{footer}")
