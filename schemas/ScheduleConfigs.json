@@ -1,10 +1,10 @@
 {
   "$defs": {
     "ScheduleConfig": {
-      "description": "定时任务配置",
+      "description": "定时消息配置",
       "properties": {
         "cron": {
-          "description": "定时任务的Cron表达式",
+          "description": "定时消息的Cron表达式",
           "title": "Cron",
           "type": "string"
         },
@@ -49,7 +49,7 @@
               "type": "array"
             }
           ],
-          "description": "定时任务发送的消息内容",
+          "description": "定时消息发送的内容",
           "title": "Message"
         }
       },
@@ -61,7 +61,7 @@
       "type": "object"
     }
   },
-  "description": "定时任务配置字典",
+  "description": "定时消息配置字典",
   "properties": {
     "configs": {
       "additionalProperties": {
@@ -71,7 +71,7 @@
         "type": "object"
       },
       "default": {},
-      "description": "定时任务配置字典，键为群号，值为该群的定时任务列表\n\n定时任务列表的键为定时任务名称，每个群内不可重复，值为定时任务配置",
+      "description": "定时消息配置字典，键为群号，值为该群的定时消息列表\n\n定时消息列表的键为定时消息名称，每个群内不可重复，值为定时消息配置",
       "title": "Configs",
       "type": "object"
     }

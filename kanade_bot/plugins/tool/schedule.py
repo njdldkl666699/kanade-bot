@@ -16,12 +16,12 @@ def _schedule_id(group_id: int, schedule_name: str) -> str:
 
 
 def print_schedules_pretty(group_id: int) -> str | None:
-    """列出指定群的定时任务列表"""
+    """列出指定群的定时消息列表"""
     group_schedules = schedules.instance.configs.get(group_id, {})
     if not group_schedules:
         return None
 
-    lines = [f"群 {group_id} 的定时任务列表："]
+    lines = [f"群 {group_id} 的定时消息列表："]
     for name, config in group_schedules.items():
         lines.append(f"- {name}: {config.cron} -> {config.message.to_rich_text()}")
 
@@ -36,10 +36,10 @@ async def _send_scheduled_message(bot: Bot, group_id: int, message: Message):
 
 
 def add_schedule(bot: Bot, group_id: int, name: str, cron: str, message: Message):
-    """添加定时任务"""
+    """添加定时消息"""
     job_id = _schedule_id(group_id, name)
     if scheduler.get_job(job_id):
-        raise ValueError(f"定时任务 {name} 已存在")
+        raise ValueError(f"定时消息 {name} 已存在")
 
     # 添加到调度器
     scheduler.add_job(
@@ -53,14 +53,14 @@ def add_schedule(bot: Bot, group_id: int, name: str, cron: str, message: Message
     group_schedules = schedules.instance.configs.setdefault(group_id, {})
     group_schedules[name] = ScheduleConfig(cron=cron, message=message)
     schedules.save_to_file()
-    logger.info(f"已添加群 {group_id} 的定时任务 {name}: {cron} -> {message.to_rich_text()}")
+    logger.info(f"已添加群 {group_id} 的定时消息 {name}: {cron} -> {message.to_rich_text()}")
 
 
 def remove_schedule(group_id: int, name: str):
-    """移除定时任务"""
+    """移除定时消息"""
     job_id = _schedule_id(group_id, name)
     if not scheduler.get_job(job_id):
-        raise ValueError(f"定时任务 {name} 不存在")
+        raise ValueError(f"定时消息 {name} 不存在")
 
     # 从调度器移除
     scheduler.remove_job(job_id)
@@ -70,7 +70,7 @@ def remove_schedule(group_id: int, name: str):
     if name in group_schedules:
         del group_schedules[name]
         schedules.save_to_file()
-        logger.info(f"已移除群 {group_id} 的定时任务 {name}")
+        logger.info(f"已移除群 {group_id} 的定时消息 {name}")
 
 
 driver = get_driver()
@@ -87,7 +87,7 @@ def on_bot_connect(bot: Bot):
                 id=job_id,
                 args=[bot, group_id, schedule.message],
             )
-        logger.info(f"已加载群 {group_id} 的 {len(schedule_list)} 个定时任务")
+        logger.info(f"已加载群 {group_id} 的 {len(schedule_list)} 个定时消息")
 
 
 @driver.on_bot_disconnect
@@ -98,4 +98,4 @@ def on_bot_disconnect(bot: Bot):
         if job.id.startswith(TOOL_SCHEDULE_JOB_PREFIX):
             scheduler.remove_job(job.id)
             count += 1
-    logger.info(f"Bot已断开连接，已移除 {count} 个定时任务")
+    logger.info(f"Bot已断开连接，已移除 {count} 个定时消息")

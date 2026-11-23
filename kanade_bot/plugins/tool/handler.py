@@ -173,7 +173,7 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
 @list_schedules.handle()
 async def _(event: OneBotGroupMessageEvent):
     group_id = event.group_id
-    pretty_list = print_schedules_pretty(group_id) or "当前没有定时任务"
+    pretty_list = print_schedules_pretty(group_id) or "当前没有定时消息"
     await list_schedules.finish(pretty_list)
 
 
@@ -184,12 +184,12 @@ async def _(state: T_State, event: OneBotGroupMessageEvent, arg_msg: Message = C
     name: str | None = args["name"]
     cron: str | None = args["cron"]
     if not all([name, cron]):
-        await add_a_schedule.finish("请重新提供定时任务名称、Cron表达式")
+        await add_a_schedule.finish("请重新提供定时消息名称、Cron表达式")
 
     state["group_id"] = group_id
     state["name"] = name
     state["cron"] = cron
-    await add_a_schedule.pause("请发送定时任务消息内容：")
+    await add_a_schedule.pause("请发送定时消息内容：")
 
 
 @add_a_schedule.handle()
@@ -198,7 +198,7 @@ async def _(state: T_State, bot: OneBot, message: OneBotMessage = EventMessage()
         add_schedule(bot, state["group_id"], state["name"], state["cron"], message)
     except ValueError as e:
         await add_a_schedule.finish(str(e))
-    await add_a_schedule.finish(f"已添加定时任务 {state['name']}")
+    await add_a_schedule.finish(f"已添加定时消息 {state['name']}")
 
 
 @remove_a_schedule.handle()
@@ -206,13 +206,13 @@ async def _(event: OneBotGroupMessageEvent, arg_msg: Message = CommandArg()):
     group_id = event.group_id
     name = arg_msg.extract_plain_text().strip()
     if not name:
-        await remove_a_schedule.finish("请提供定时任务名称")
+        await remove_a_schedule.finish("请提供定时消息名称")
 
     try:
         remove_schedule(group_id, name)
     except ValueError as e:
         await remove_a_schedule.finish(str(e))
-    await remove_a_schedule.finish(f"已移除定时任务 {name}")
+    await remove_a_schedule.finish(f"已移除定时消息 {name}")
 
 
 def parse_emoji_id_from_message(message: OneBotMessage) -> int | None:

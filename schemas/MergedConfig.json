@@ -2664,7 +2664,7 @@
         },
         "schedule_configs_file": {
           "default": "schedule_configs.json",
-          "description": "定时任务配置文件名。暂仅支持OneBot v11群聊。",
+          "description": "定时消息配置文件名。暂仅支持OneBot v11群聊。",
           "title": "Schedule Configs File",
           "type": "string"
         },
@@ -2726,6 +2726,12 @@
           "default": "security_weekly_cache.json",
           "description": "网络安全周报缓存文件名",
           "title": "Security Weekly Cache File",
+          "type": "string"
+        },
+        "gpu_daily_cache_file": {
+          "default": "gpu_daily_cache.json",
+          "description": "显卡日报缓存文件名",
+          "title": "Gpu Daily Cache File",
           "type": "string"
         }
       },
@@ -4059,7 +4065,8 @@
         "agnes_api_key": null,
         "agnes_base_url": "https://api.agnes-ai.cn/v1",
         "security_daily_cache_file": "security_daily_cache.json",
-        "security_weekly_cache_file": "security_weekly_cache.json"
+        "security_weekly_cache_file": "security_weekly_cache.json",
+        "gpu_daily_cache_file": "gpu_daily_cache.json"
       }
     },
     "tts": {

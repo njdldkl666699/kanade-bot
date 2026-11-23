@@ -38,33 +38,33 @@ mc_skin = on_command(
 )
 register_matcher(mc_skin, "我的世界皮肤")
 
-### 定时任务
+### 定时消息
 
 list_schedules = on_command(
-    "定时任务列表",
+    "定时消息列表",
     aliases={"schedule_list"},
     priority=2,
     block=True,
 )
-register_matcher(list_schedules, "定时任务列表")
+register_matcher(list_schedules, "定时消息列表")
 
 add_a_schedule = on_command(
-    "添加定时任务",
+    "添加定时消息",
     aliases={"schedule_add"},
     priority=2,
     permission=SUPERUSER,
     block=True,
 )
-register_matcher(add_a_schedule, "添加定时任务")
+register_matcher(add_a_schedule, "添加定时消息")
 
 remove_a_schedule = on_command(
-    "移除定时任务",
+    "移除定时消息",
     aliases={"schedule_remove"},
     priority=2,
     permission=SUPERUSER,
     block=True,
 )
-register_matcher(remove_a_schedule, "移除定时任务")
+register_matcher(remove_a_schedule, "移除定时消息")
 
 ### QQ功能
 

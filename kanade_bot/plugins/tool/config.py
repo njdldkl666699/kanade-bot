@@ -21,7 +21,7 @@ class ScopedConfig(AttrDocModel):
     """服务器状态渲染使用的HTML模板文件名，支持HTML格式。"""
 
     schedule_configs_file: str = "schedule_configs.json"
-    """定时任务配置文件名。暂仅支持OneBot v11群聊。"""
+    """定时消息配置文件名。暂仅支持OneBot v11群聊。"""
 
     preset_reaction_config_file: str = "preset_reaction_config.json"
     """预设反应配置文件名"""
@@ -54,7 +54,7 @@ class ScopedConfig(AttrDocModel):
 
     @property
     def schedule_configs_file_path(self) -> Path:
-        """定时任务配置文件路径"""
+        """定时消息配置文件路径"""
         return get_plugin_config_file(self.schedule_configs_file)
 
     @property
@@ -88,21 +88,21 @@ cfg = get_plugin_config(Config).tool
 
 
 class ScheduleConfig(AttrDocModel):
-    """定时任务配置"""
+    """定时消息配置"""
 
     cron: str
-    """定时任务的Cron表达式"""
+    """定时消息的Cron表达式"""
     message: Message
-    """定时任务发送的消息内容"""
+    """定时消息发送的内容"""
 
 
 class ScheduleConfigs(AttrDocModel):
-    """定时任务配置字典"""
+    """定时消息配置字典"""
 
     configs: dict[int, dict[str, ScheduleConfig]] = {}
-    """定时任务配置字典，键为群号，值为该群的定时任务列表
+    """定时消息配置字典，键为群号，值为该群的定时消息列表
 
-    定时任务列表的键为定时任务名称，每个群内不可重复，值为定时任务配置
+    定时消息列表的键为定时消息名称，每个群内不可重复，值为定时消息配置
     """
 
 
