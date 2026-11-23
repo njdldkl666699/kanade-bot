@@ -38,6 +38,8 @@ mc_skin = on_command(
 )
 register_matcher(mc_skin, "我的世界皮肤")
 
+### 定时任务
+
 list_schedules = on_command(
     "定时任务列表",
     aliases={"schedule_list"},
@@ -128,22 +130,6 @@ send_face_from_msg_emoji_likes = on_command(
 )
 register_matcher(send_face_from_msg_emoji_likes, "发送贴的表情")
 
-security_daily = on_command(
-    "网络安全日报",
-    aliases={"网安日报", "security_daily"},
-    priority=2,
-    block=True,
-)
-register_matcher(security_daily, "网络安全日报")
-
-security_weekly = on_command(
-    "网络安全周报",
-    aliases={"网安周报", "security_weekly"},
-    priority=2,
-    block=True,
-)
-register_matcher(security_weekly, "网络安全周报")
-
 ### 图片创作与视频生成
 
 image_generation = on_command(
@@ -169,3 +155,29 @@ video_generation = on_command(
     block=True,
 )
 register_matcher(video_generation, "视频生成")
+
+### 资讯
+
+security_daily = on_command(
+    "网络安全日报",
+    aliases={"网安日报", "security_daily"},
+    priority=2,
+    block=True,
+)
+register_matcher(security_daily, "网络安全日报")
+
+security_weekly = on_command(
+    "网络安全周报",
+    aliases={"网安周报", "security_weekly"},
+    priority=2,
+    block=True,
+)
+register_matcher(security_weekly, "网络安全周报")
+
+gpu_daily = on_command(
+    "显卡日报",
+    aliases={"gpu_daily"},
+    priority=2,
+    block=True,
+)
+register_matcher(gpu_daily, "显卡日报")

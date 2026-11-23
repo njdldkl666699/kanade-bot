@@ -21,8 +21,10 @@ from kanade_bot.utils.onebot11 import get_msg_emoji_likes, send_poke, set_msg_em
 from kanade_bot.utils.parse import parse_arg_message
 
 from .config import preset_reaction_cfg
+from .gpu_daily import download_gpu_daily_images, get_latest_gpu_daily, render_gpu_daily
 from .matcher import (
     add_a_schedule,
+    gpu_daily,
     image_edit,
     image_generation,
     list_schedules,
@@ -512,3 +514,40 @@ async def _(event: Event):
         await security_weekly.finish(message)
 
     await security_weekly.finish(f"{header}\n{footer}")
+
+
+@gpu_daily.handle()
+async def _(event: Event):
+    report = await get_latest_gpu_daily()
+    if report is None:
+        await gpu_daily.finish("未获取到显卡日报，稍后再试试吧")
+
+    header = (
+        report.title
+        if report.is_fresh()
+        else f"今日日报还未发布，先看看 {report.created.month}月{report.created.day}日 的\n{report.title}"
+    )
+    footer = f"原文: {report.url}"
+
+    if isinstance(event, OneBotMessageEvent):
+        try:
+            image = await render_gpu_daily(report)
+        except Exception:
+            logger.exception("渲染显卡日报图片失败")
+        else:
+            await gpu_daily.finish(MessageSegment.image(image))
+
+        # 渲染失败时降级为文本 + 正文图片分图发送
+        try:
+            images = await download_gpu_daily_images(report)
+        except Exception:
+            logger.exception("下载显卡日报图片失败")
+            images = []
+        if images:
+            message = OneBotMessage(f"{header}\n")
+            for image in images:
+                message += MessageSegment.image(image)
+            message += OneBotMessage(f"\n{footer}")
+            await gpu_daily.finish(message)
+
+    await gpu_daily.finish(f"{header}\n{footer}")
