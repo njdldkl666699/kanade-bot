@@ -1,14 +1,16 @@
-"""显卡日报：定位知乎专栏最新一期文章，取其正文 HTML 自行渲染为图片
+"""显卡日报：定位知乎专栏最新文章，取其正文 HTML 自行渲染为图片
 
-数据源为知乎移动端接口（免登录）：列表按发布时间倒序，首个标题含「显卡日报」的条目即最新一期。
-正文中的图片为知乎图床外链，仅校验 User-Agent（浏览器/渲染时的 Chromium 天然满足）。
+数据源为知乎移动端接口（免登录）：列表按发布时间倒序，标题含「显卡日报」的条目即日报。
+发布者每天最多两篇（中午偶尔加更 + 23:00 左右日常必发），发布时刻不固定，
+因此新鲜度以「距上次向接口确认不足 CHECK_TTL」为准，而非按发布时刻表推断；
+同时缓存最近多期，支持回看上一期。
+正文中的图片为知乎图床外链，仅校验 User-Agent（渲染时的 Chromium 天然满足）。
 """
 
 import asyncio
 import json
 import re
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -45,14 +47,14 @@ BROWSER_UA = (
 )
 """知乎图床仅放行浏览器 User-Agent，下载正文图片时使用"""
 
-PUBLISH_TIME = (23, 30)
-"""日报的惯常发布时刻（时, 分），用于判断缓存的新鲜度"""
+CHECK_TTL = 30 * 60.0
+"""距上次向接口确认的时长小于该值时直接使用缓存（秒），兼作接口失败后的防抖间隔"""
 
-FRESH_SLACK = timedelta(hours=2)
-"""发布时刻的容差：发布偏早或查询略晚时也视为最新"""
+FETCH_LIMIT = 10
+"""单次请求拉取并缓存的文章条数（一天最多两篇，可覆盖数天）"""
 
-MISS_CACHE_TTL = 10 * 60.0
-"""确认无更新后的内存负缓存时长（秒），避免高频命令重复请求接口"""
+MAX_LOOKBACK = 5
+"""命令允许回看的最大期数（0 为最新一期）"""
 
 KEEP_COUNT = 7
 """持久化缓存保留的日报期数"""
@@ -90,14 +92,6 @@ class GpuDailyReport(BaseModel):
     content: str
     """正文 HTML（知乎图床外链原样保留）"""
 
-    def is_fresh(self, now: datetime | None = None) -> bool:
-        """是否为当前应看到的最新一期（发布时刻已过则要求当天已更新）"""
-        now = now or asia_shanghai_now()
-        cutoff = now.replace(hour=PUBLISH_TIME[0], minute=PUBLISH_TIME[1], second=0, microsecond=0)
-        if now < cutoff:
-            cutoff -= timedelta(days=1)
-        return self.created >= cutoff - FRESH_SLACK
-
 
 def _build_report(item: dict) -> GpuDailyReport:
     """由接口条目构造 GpuDailyReport"""
@@ -123,8 +117,8 @@ def _build_report(item: dict) -> GpuDailyReport:
     )
 
 
-async def _fetch_latest_report() -> GpuDailyReport | None:
-    """请求专栏列表接口，返回最新一期日报（列表倒序，跳过少量非日报文章）
+async def _fetch_latest_reports() -> list[GpuDailyReport]:
+    """请求专栏列表接口，返回最近的日报列表（倒序，跳过少量非日报文章）
 
     使用专用客户端：与全局客户端隔离 cookie（知乎会下发 _xsrf/BEC 等访客 cookie，
     稳定携带可降低被限流概率），UA 固定为移动端。
@@ -132,32 +126,42 @@ async def _fetch_latest_report() -> GpuDailyReport | None:
     global _api_client
     if _api_client is None:
         _api_client = AsyncClient(timeout=20, headers={"User-Agent": MOBILE_UA})
-    resp = await _api_client.get(API_URL, params={"limit": 5, "offset": 0})
+    resp = await _api_client.get(API_URL, params={"limit": FETCH_LIMIT, "offset": 0})
     resp.raise_for_status()
-    for item in resp.json().get("data") or []:
-        if TITLE_KEYWORD in (item.get("title") or ""):
-            return _build_report(item)
-    return None
+    return [
+        _build_report(item)
+        for item in resp.json().get("data") or []
+        if TITLE_KEYWORD in (item.get("title") or "")
+    ]
 
 
 # ---------- 缓存 ----------
 
 _cache_file: Path = cfg.gpu_daily_cache_file_path
-"""持久化缓存文件（键为文章 id）"""
+"""持久化缓存文件（含 last_check 与最近几期日报）"""
 _cache: dict[str, GpuDailyReport] = {}
-_miss_ts: float | None = None
+_last_check: datetime | None = None
+"""上次向接口确认（无论成败）的时间，重启后从缓存文件恢复"""
 _fetch_lock = asyncio.Lock()
 
 
 def _load_cache() -> None:
+    global _last_check
+    _cache.clear()
+    _last_check = None
     if not _cache_file.exists():
         return
     try:
         data = json.loads(_cache_file.read_text(encoding="utf-8"))
-        _cache.update({key: GpuDailyReport.model_validate(value) for key, value in data.items()})
+        # 兼容旧格式（纯 {id: report} 字典，无 last_check）
+        reports = data.get("reports", data)
+        _cache.update({key: GpuDailyReport.model_validate(value) for key, value in reports.items()})
+        if last := data.get("last_check"):
+            _last_check = datetime.fromisoformat(last)
     except Exception:
         logger.exception(f"加载显卡日报缓存失败: {_cache_file}")
         _cache.clear()
+        _last_check = None
 
 
 def _save_cache() -> None:
@@ -165,50 +169,54 @@ def _save_cache() -> None:
     newest = sorted(_cache.values(), key=lambda r: r.created, reverse=True)[:KEEP_COUNT]
     _cache.clear()
     _cache.update({r.article_id: r for r in newest})
-    payload = {key: value.model_dump(mode="json") for key, value in _cache.items()}
+    payload = {
+        "last_check": _last_check.isoformat() if _last_check else None,
+        "reports": {key: value.model_dump(mode="json") for key, value in _cache.items()},
+    }
     atomic_write_text(_cache_file, json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 _load_cache()
 
 
-def _newest_cached() -> GpuDailyReport | None:
-    """缓存中发布时间最新的一期"""
-    return max(_cache.values(), key=lambda r: r.created) if _cache else None
+def _sorted_reports() -> list[GpuDailyReport]:
+    """缓存中的日报，按发布时间倒序（第 0 期最新）"""
+    return sorted(_cache.values(), key=lambda r: r.created, reverse=True)
 
 
-async def get_latest_gpu_daily() -> GpuDailyReport | None:
-    """获取最新一期显卡日报：缓存仍新鲜时直接使用，否则请求接口确认"""
-    global _miss_ts
-    report = _newest_cached()
-    if report and report.is_fresh():
-        return report
-    if _miss_ts is not None and time.monotonic() - _miss_ts < MISS_CACHE_TTL:
-        return report
+def _checked_recently(now: datetime) -> bool:
+    """距上次接口确认是否在 TTL 内"""
+    return _last_check is not None and (now - _last_check).total_seconds() < CHECK_TTL
+
+
+async def get_gpu_daily_reports() -> list[GpuDailyReport]:
+    """获取最近几期显卡日报（倒序，第 0 期最新）
+
+    距上次接口确认不足 CHECK_TTL 时直接使用缓存，否则请求一次接口刷新。
+    发布时刻不固定（中午加更/晚间日常），因此不按时刻表推断新鲜度。
+    """
+    global _last_check
+    now = asia_shanghai_now()
+    if _cache and _checked_recently(now):
+        return _sorted_reports()
 
     async with _fetch_lock:
-        report = _newest_cached()  # 双重检查，避免并发重复抓取
-        if report and report.is_fresh():
-            return report
+        now = asia_shanghai_now()  # 双重检查，避免并发重复抓取
+        if _cache and _checked_recently(now):
+            return _sorted_reports()
         try:
-            fetched = await _fetch_latest_report()
+            fetched = await _fetch_latest_reports()
         except Exception:
             logger.exception("获取显卡日报接口失败")
-            _miss_ts = time.monotonic()
-            return report  # 接口失败时降级返回过期缓存
-
-        if fetched is None:
-            logger.warning(f"显卡日报接口返回数据中未找到含「{TITLE_KEYWORD}」的文章")
-            _miss_ts = time.monotonic()
-            return report
-        if report is None or fetched.article_id != report.article_id:
-            _cache[fetched.article_id] = fetched
-            _save_cache()
         else:
-            # 接口确认暂无更新（当天尚未发布），记录负缓存
-            _miss_ts = time.monotonic()
-            logger.info(f"显卡日报暂无更新，最新一期仍为 {report.created:%Y-%m-%d %H:%M} 发布")
-        return fetched
+            if fetched:
+                _cache.update({r.article_id: r for r in fetched})
+            else:
+                logger.warning(f"显卡日报接口返回数据中未找到含「{TITLE_KEYWORD}」的文章")
+        # 无论成败都记录确认时间：成功=已确认最新；失败=TTL 内降级使用缓存并防抖
+        _last_check = now
+        _save_cache()
+        return _sorted_reports()
 
 
 # ---------- 渲染 ----------

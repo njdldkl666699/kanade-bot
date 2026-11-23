@@ -21,7 +21,12 @@ from kanade_bot.utils.onebot11 import get_msg_emoji_likes, send_poke, set_msg_em
 from kanade_bot.utils.parse import parse_arg_message
 
 from .config import preset_reaction_cfg
-from .gpu_daily import download_gpu_daily_images, get_latest_gpu_daily, render_gpu_daily
+from .gpu_daily import (
+    MAX_LOOKBACK,
+    download_gpu_daily_images,
+    get_gpu_daily_reports,
+    render_gpu_daily,
+)
 from .matcher import (
     add_a_schedule,
     gpu_daily,
@@ -517,15 +522,30 @@ async def _(event: Event):
 
 
 @gpu_daily.handle()
-async def _(event: Event):
-    report = await get_latest_gpu_daily()
-    if report is None:
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    raw_arg = arg_msg.extract_plain_text().strip().lower()
+    if raw_arg in ("", "0", "最新", "latest"):
+        offset = 0
+    elif raw_arg in ("上一期", "上期", "prev", "previous"):
+        offset = 1
+    elif raw_arg.isdigit() and int(raw_arg) <= MAX_LOOKBACK:
+        offset = int(raw_arg)
+    else:
+        await gpu_daily.finish(
+            f"参数无效：留空看最新一期，或用「上一期」/0~{MAX_LOOKBACK} 的期数回看"
+        )
+
+    reports = await get_gpu_daily_reports()
+    if not reports:
         await gpu_daily.finish("未获取到显卡日报，稍后再试试吧")
+    if offset >= len(reports):
+        await gpu_daily.finish(f"暂时只能回看最近 {len(reports) - 1} 期（留空或 0 为最新一期）")
+    report = reports[offset]
 
     header = (
         report.title
-        if report.is_fresh()
-        else f"今日日报还未发布，先看看 {report.created.month}月{report.created.day}日 的\n{report.title}"
+        if offset == 0
+        else f"往前第 {offset} 期（{report.created:%m月%d日 %H:%M} 发布）：{report.title}"
     )
     footer = f"原文: {report.url}"
 
