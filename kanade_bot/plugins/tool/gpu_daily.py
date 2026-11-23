@@ -19,7 +19,7 @@ from nonebot import logger, require
 from pydantic import BaseModel
 
 from kanade_bot.utils.common import HTTPX_CLIENT, asia_shanghai_now
-from kanade_bot.utils.persistence import atomic_write_text
+from kanade_bot.utils.persistence import atomic_write_bytes, atomic_write_text
 
 from .config import cfg
 
@@ -223,6 +223,19 @@ async def get_gpu_daily_reports() -> list[GpuDailyReport]:
 
 _IMG_SRC_RE = re.compile(r"<img\b[^>]*?\bsrc=\"([^\"]+)\"", re.IGNORECASE)
 
+_render_cache_dir = cfg.gpu_daily_image_cache_dir_path
+"""渲染图缓存目录"""
+
+
+def _render_cache_path(report: GpuDailyReport) -> Path:
+    """渲染图缓存路径：文件名含文章 id、编辑时间戳与渲染参数，文章被编辑或参数变更后自动失效"""
+    render_key = f"{RENDER_VIEWPORT_WIDTH}x{RENDER_DEVICE_SCALE_FACTOR:.0f}q{RENDER_JPEG_QUALITY}"
+    return (
+        _render_cache_dir
+        / f"{report.article_id}_{int(report.updated.timestamp())}_{render_key}.jpg"
+    )
+
+
 _TEMPLATE = """<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -319,7 +332,14 @@ def _build_html(report: GpuDailyReport) -> str:
 
 
 async def render_gpu_daily(report: GpuDailyReport) -> bytes:
-    """将日报渲染为 JPEG 图片（浏览器直接加载正文中的知乎图床外链）"""
+    """将日报渲染为 JPEG 图片（按文章与编辑时间缓存，命中时不再启动浏览器）
+
+    浏览器直接加载正文中的知乎图床外链。
+    """
+    cache_path = _render_cache_path(report)
+    if cache_path.is_file():
+        return cache_path.read_bytes()
+
     html = _build_html(report)
     app = get_default_application()
     async with app.extensions.playwright.page(
@@ -328,7 +348,21 @@ async def render_gpu_daily(report: GpuDailyReport) -> bytes:
     ) as page:
         # networkidle 等待正文外链图片全部加载完成
         await page.set_content(html, wait_until="networkidle")
-        return await page.screenshot(full_page=True, type="jpeg", quality=RENDER_JPEG_QUALITY)
+        image = await page.screenshot(full_page=True, type="jpeg", quality=RENDER_JPEG_QUALITY)
+
+    atomic_write_bytes(cache_path, image)
+    _prune_render_cache()
+    return image
+
+
+def _prune_render_cache() -> None:
+    """清理不再对应缓存中日报的渲染图（含旧编辑版本与过期期数的图）"""
+    if not _cache or not _render_cache_dir.is_dir():
+        return
+    expected = {_render_cache_path(report).name for report in _cache.values()}
+    for file in _render_cache_dir.iterdir():
+        if file.name not in expected:
+            file.unlink(missing_ok=True)
 
 
 async def download_gpu_daily_images(report: GpuDailyReport) -> list[bytes]:

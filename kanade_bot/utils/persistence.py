@@ -8,12 +8,16 @@ from threading import RLock
 
 def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
     """Write a text file completely, then atomically replace the destination."""
+    atomic_write_bytes(path, content.encode(encoding))
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Write a binary file completely, then atomically replace the destination."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding=encoding,
+            mode="wb",
             dir=path.parent,
             prefix=f".{path.name}.",
             suffix=".tmp",

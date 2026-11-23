@@ -41,6 +41,8 @@ class ScopedConfig(AttrDocModel):
     """网络安全周报缓存文件名"""
     gpu_daily_cache_file: str = "gpu_daily_cache.json"
     """显卡日报缓存文件名"""
+    gpu_daily_image_cache_dir: str = "gpu_daily_images"
+    """显卡日报渲染图缓存目录名"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
@@ -76,6 +78,11 @@ class ScopedConfig(AttrDocModel):
     def gpu_daily_cache_file_path(self) -> Path:
         """显卡日报缓存文件路径"""
         return get_plugin_cache_file(self.gpu_daily_cache_file)
+
+    @property
+    def gpu_daily_image_cache_dir_path(self) -> Path:
+        """显卡日报渲染图缓存目录路径"""
+        return get_plugin_cache_file(self.gpu_daily_image_cache_dir)
 
 
 class Config(BaseModel):

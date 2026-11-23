@@ -59,10 +59,24 @@ async def main():
     assert gpu_daily._last_check is not None, "last_check 未持久化"
     print("persist round-trip: ok, last_check:", gpu_daily._last_check)
 
-    # 渲染上一期（前一晚的日常日报）验证回看路径
+    # 渲染上一期（前一晚的日常日报）验证回看路径与渲染图缓存
     image = await gpu_daily.render_gpu_daily(reports[1])
     assert image[:3] == b"\xff\xd8\xff", "渲染结果不是 JPEG"
     print("rendered jpeg bytes:", len(image))
+
+    cache_path = gpu_daily._render_cache_path(reports[1])
+    assert cache_path.is_file(), "渲染图未写入缓存"
+    assert await gpu_daily.render_gpu_daily(reports[1]) == image, "渲染缓存未命中"
+    print("render cache hit: ok")
+
+    # 不再对应缓存中日报的渲染图应被清理
+    stale = cache_path.with_name("stale_0.jpg")
+    await asyncio.to_thread(stale.write_bytes, b"x")
+    gpu_daily._prune_render_cache()
+    assert not stale.exists(), "陈旧渲染图未被清理"
+    assert cache_path.is_file(), "清理误删了有效渲染图"
+    print("render cache prune: ok")
+
     out = "/tmp/gpu_daily_prev.jpg"
     await asyncio.to_thread(Path(out).write_bytes, image)
     print("saved to:", out)
