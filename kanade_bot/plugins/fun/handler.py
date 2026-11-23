@@ -1,7 +1,7 @@
 from typing import cast
 
 from httpx import HTTPError
-from nonebot import get_driver, get_plugin_config, require
+from nonebot import get_driver, get_plugin_config, logger, require
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.console import Bot as ConsoleBot
 from nonebot.adapters.console import MessageEvent as ConsoleMessageEvent
@@ -215,16 +215,13 @@ async def _(arg_msg: Message = CommandArg()):
 
 
 async def _random_loli_waifu_with_retry(retries: int = 3) -> tuple[str, bytes]:
-    """获取随机老婆图片，失败时重试"""
+    """获取随机老婆图片，失败时重试（含链接返回 200 但数据无效的情况）"""
     ex = ValueError("达到最大重试次数，仍然无法获取图片")
     for _ in range(retries):
         try:
             url = await random_loli_waifu()
             image = await get_compressed_image(url)
-            if image:
-                return url, image
-            else:
-                raise ValueError("图片链接内容无效")
+            return url, image
         except (HTTPError, ValueError) as e:
             ex = e
             continue
@@ -240,7 +237,8 @@ async def _get_send_waifu_onebot(matcher: type[Matcher]) -> bytes:
 
     try:
         await matcher.send(MessageSegment.image(image))
-    except ActionFailed:
+    except ActionFailed as e:
+        logger.warning(f"发送老婆图片失败，改发链接：{url}（{e}）")
         await matcher.send(f"发送图片失败，图片链接：{url}")
     return image
 

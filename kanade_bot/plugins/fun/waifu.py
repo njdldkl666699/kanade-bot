@@ -1,7 +1,9 @@
 import asyncio
+from io import BytesIO
 from typing import Literal
 
 from nonebot import get_plugin_config
+from PIL import Image as PILImage
 from pydantic import BaseModel
 
 from kanade_bot.utils.common import HTTPX_CLIENT
@@ -137,17 +139,34 @@ async def random_loli_waifu() -> str:
     return resp.text
 
 
+def _validate_image(data: bytes) -> None:
+    """校验字节流是可完整解码的图片
+
+    部分失效链接会返回 200，但内容为空、截断或并非图片，需在此拦截。
+    """
+
+    try:
+        with PILImage.open(BytesIO(data)) as image:
+            image.load()
+    except Exception as e:
+        raise ValueError(f"图片数据无效：{e}") from e
+
+
 async def get_compressed_image(url: str) -> bytes:
-    """下载图片并在超过 2MB 时压缩为 WebP（不缩放，保留原图尺寸）"""
+    """下载图片，校验数据有效，超过 2MB 时压缩为 WebP（不缩放，保留原图尺寸）"""
 
     resp = await HTTPX_CLIENT.get(url)
     resp.raise_for_status()
     media_type = (resp.headers.get("Content-Type") or "").split(";")[0] or None
-    compressed, _ = await asyncio.to_thread(
-        compress_image,
-        resp.content,
-        media_type,
-        max_edge=None,
-        min_size=2 * 1024 * 1024,
-    )
-    return compressed
+
+    def _process() -> bytes:
+        compressed, _ = compress_image(
+            resp.content,
+            media_type,
+            max_edge=None,
+            min_size=2 * 1024 * 1024,
+        )
+        _validate_image(compressed)
+        return compressed
+
+    return await asyncio.to_thread(_process)
