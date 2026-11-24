@@ -889,6 +889,7 @@ PAGE_VIEW = r"""{% extends "base" %}
   <details class="marks">
     <summary>⚙ 压缩事件时间线（{{ marks | length }}）
       <span class="sub">{{ marks | selectattr('strategy', 'equalto', 'summarizing') | list | length }} 条摘要 ·
+      {{ marks | selectattr('strategy', 'equalto', 'remove_thinking') | list | length }} 条删思考 ·
       {{ marks | selectattr('strategy', 'equalto', 'clear_tool_results') | list | length }} 条清理</span>
     </summary>
     {% for mk in marks %}
@@ -949,7 +950,7 @@ PAGE_VIEW = r"""{% extends "base" %}
     {% for mk in banners.get(rv.seq, []) %}
     <div class="banner">⚙ 压缩事件 #{{ mk.id }} · {{ mk.strategy }}
       <span class="sub">覆盖至 seq {{ mk.up_to_seq }}（含）· 恢复时将
-      {% if mk.strategy == 'clear_tool_results' %}按参数重放清理{% else %}使用以下快照替换{% endif %}</span>
+      {% if mk.strategy == 'summarizing' %}使用以下快照替换{% elif mk.strategy == 'remove_thinking' %}按参数重放删除思考{% else %}按参数重放清理（旧档迁移）{% endif %}</span>
     </div>
     {% endfor %}
   </div>
