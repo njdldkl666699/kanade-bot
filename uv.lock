@@ -2067,7 +2067,7 @@ wheels = [
 
 [[package]]
 name = "kanade-bot"
-version = "6.8.3"
+version = "6.9.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anyconfig" },

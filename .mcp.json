@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"Mirage": {
+			"type": "http",
+			"url": "https://docs.mirage.strukto.ai/mcp"
+		}
+	}
+}
