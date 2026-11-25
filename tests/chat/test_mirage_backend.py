@@ -1,6 +1,6 @@
 """mirage 官方 Pydantic AI 集成（`KanadeWorkspace`）的行为测试。
 
-mirage（PyPI 0.0.7）经 `mirage.agents.pydantic_ai` 提供官方
+mirage（PyPI 0.1.0）经 `mirage.agents.pydantic_ai` 提供官方
 `MirageWorkspaceBackend`（`pydantic_ai.workspaces` 协议实现），本项目在其上
 加**工作区根绑定**（免 FUSE 布局下相对路径会落到 VFS 根 `/`）。这里验证
 官方 backend 的行为契约 + 本项目特有的**隔离边界**（模型读不到 bot 的

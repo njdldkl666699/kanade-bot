@@ -9,11 +9,11 @@ Agent 需要读写文件、执行命令（渲染 HTML、跑 Python 脚本、分�
 
 | 组件 | 角色 | 关键事实 |
 | --- | --- | --- |
-| [mirage](https://github.com/strukto-ai/mirage)（PyPI 0.0.7） | 进程内虚拟文件系统（VFS）+ 会话 shell | 每活跃 workspace 约 0.1MB RSS；官方提供 `MirageWorkspaceBackend`（Pydantic AI workspace 协议实现） |
+| [mirage](https://github.com/strukto-ai/mirage)（PyPI 0.1.0） | 进程内虚拟文件系统（VFS）+ 会话 shell | 每活跃 workspace 约 30KB RSS；官方提供 `MirageWorkspaceBackend`（Pydantic AI workspace 协议实现） |
 | [sandlock](https://github.com/multikernel/sandlock) CLI | 受限子进程的 OS 级边界 | Landlock（文件系统）+ seccomp（系统调用/网络）；每次执行 spawn 新 sandlock 进程 |
 | Pydantic AI `workspaces` | 工具协议 | ConsoleCapability 提供 shell/read/write/edit/grep/glob 等客户端工具，经 `get_workspace` 取后端 |
 
-不用 bubblewrap（实测沙箱内可读到 bot 的 `config.yaml` 含密钥）。mirage 依赖演进：早期 PyPI 0.0.7a2 相对 git main 有 3 个缺陷（cwd 不传、相对路径读写落根、sandlock 子进程 cwd 错误）而临时改用 git main；0.0.7 正式版已包含全部修复（2026-10-21 实测确认），依赖已切回 PyPI。
+不用 bubblewrap（实测沙箱内可读到 bot 的 `config.yaml` 含密钥）。mirage 依赖演进：早期 PyPI 0.0.7a2 相对 git main 有 3 个缺陷（cwd 不传、相对路径读写落根、sandlock 子进程 cwd 错误）而临时改用 git main；0.0.7 正式版已包含全部修复（2026-10-21 实测确认），依赖已切回 PyPI。2026-11-25 升级 0.1.0（machines release）：三处 API 改名（`mirage.runtime.sandlock`、`Workspace(machines=)`、`add_machine`）外行为兼容，沙箱测试 42 项全绿；差异实测见 repo 记忆 mirage-010-upgrade.md。
 
 ## 2. 隔离模型
 
@@ -24,7 +24,7 @@ Agent 需要读写文件、执行命令（渲染 HTML、跑 Python 脚本、分�
 
 例外是 **mirage 内置命令**（`curl`/`gh`/`cat`/`head` 等 mirage 自带实现的命令）：它们在宿主 bot 进程内执行，不经 sandlock——文件访问仍经 VFS 判定（界外不可见），但**网络访问走宿主**（实测内置 `curl` 可直接取回 URL 内容；沙箱内受限进程联网仍被 seccomp 拒绝）。bot 自身本就持有宿主网络，这不构成新的密钥泄露面，但评估模型行为与审计网络请求时应知道 `curl` 不受沙箱网络策略约束。未注册的外部命令（如 `ffmpeg`）返回 127。
 
-**免 FUSE 布局**是两者的粘合点：VFS 挂载前缀 = 宿主真实路径（虚拟路径与真实路径一致），sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。该布局下官方 backend 收到相对路径会落到 VFS 根 `/` 的合成视图（0.0.7 实测：overlay 内可读回，但**宿主磁盘无文件、沙箱进程不可见**）——`KanadeWorkspace` 子类把全部文件操作（read/write/stat/list_dir/make_dir/exists/remove/realpath）的相对路径绑定到工作区根，与 shell 会话 cwd 对齐。
+**免 FUSE 布局**是两者的粘合点：VFS 挂载前缀 = 宿主真实路径（虚拟路径与真实路径一致），sandlock 拉起的 native 进程无需 FUSE 即可读写同一批文件。该布局下官方 backend 收到相对路径会落到 VFS 根 `/` 的合成视图（实测：overlay 内可读回，但**宿主磁盘无文件、沙箱进程不可见**）——`KanadeWorkspace` 子类把全部文件操作（read/write/stat/list_dir/make_dir/exists/remove/realpath）的相对路径绑定到工作区根，与 shell 会话 cwd 对齐。
 
 ## 3. 对象模型
 
@@ -42,7 +42,7 @@ SandboxWorkspaceCapability                         # Agent capability
  └─ get_workspace(ctx) → deps.sandbox.backend      # 每会话分发，官方单 workspace 方案不适用
 ```
 
-命令执行语义（官方 `MirageWorkspaceBackend.run`）：每次在会话克隆上执行，`cd`/`export` 不跨命令持久；但会话级 `workspace.shell(..., session_id=)` 的 cwd/env 状态持久，run 的克隆**继承**会话 env——初始化的 `cd 工作区根` 与 venv PATH 注入都靠这条落在会话状态上。
+命令执行语义（官方 `MirageWorkspaceBackend.run`）：每次在会话克隆上执行，`cd`/`export` 不跨命令持久；但会话级 `workspace.shell(..., session_id=)` 的 cwd/env 状态持久，run 的克隆**继承**会话 env——初始化的 `cd 工作区根`、`export HOME` 与 venv PATH 注入都靠这条落在会话状态上。
 
 生命周期为**会话常驻**（演进：TTL/LRU 池 → 每轮建关 → 常驻；池化实测仅省约 5ms/轮的 Python 层构造，常驻是为保留 shell cwd/export 跨轮状态）。关闭时机仅两个：会话重置（close + 删工作区目录）与进程 shutdown；轮次的 finally 不关闭。工作区文件在宿主磁盘持久，关闭只丢 shell 会话状态。
 
@@ -56,7 +56,7 @@ sandlock 受限子进程的统一授权：
 | `fs_writable` | 仅工作区 | |
 | `max_memory` | 512M（配置） | |
 | `PATH` | `{工作区}/.venv/bin` | **不含** /usr/bin 与 /bin——不提供系统 python3，`python3` 只能解析到 venv 解释器（Ubuntu merged-usr 下排除系统 python3 须同时去掉两者） |
-| `HOME`/`XDG_*` | `{工作区}/.home` | `--clean-env` 后需要可写 HOME，否则 fontconfig 缓存无落点 |
+| `HOME`/`XDG_*` | `{工作区}/.home` | `--clean-env` 后需要可写 HOME，否则 fontconfig 缓存无落点；会话同时 `export HOME` 同值对齐（0.1.0 起无 profile 会话为 root，不导出则 `~` 展开为不存在的 `/root`） |
 
 用户图片在发送前写入工作区 `images/`（同图重发复用，冲突加 uuid 前缀），提示词附相对路径说明，工具即可直接访问。
 
@@ -83,7 +83,7 @@ sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）；低于 v6 但 
 
 - **保持默认 symlink 形态**：venv 解释器以 symlink 引用宿主解释器，不复制文件。历史上 sandlock <0.9.0 的 readlink bug 曾使 `--copies` 真文件解释器在沙箱内启动崩溃（CPython getpath 的探测），0.9.0 已修复；symlink 仍是默认且更省空间的形态，无理由切换。
 - **包声明白名单**：`name` / `name[extras]` / `name==version` 纯文本正则，拒绝 URL/git/本地路径——装包命令在宿主侧执行，必须防注入。`--no-build` / `--only-binary` 限制已知情地禁用（需要纯 sdist 包，接受宿主构建风险）。
-- **entry point 注册**：装包后 venv/bin 新增命令（如 pytest）经 `workspace.add_runtime()` 动态挂进沙箱路由（runtime 名 `venv-bin-{n}` 唯一递增），同时会话 `export PATH` 更新；`python3 -m 模块名` 则无需注册。重启后 venv 直接可用，entry point 命令需再次调用工具补注册。
+- **entry point 注册**：装包后 venv/bin 新增命令（如 pytest）经 `workspace.add_machine(name, runtime)` 动态挂进沙箱路由（machine 名 `venv-bin-{n}` 唯一递增；0.0.8 及以前为 `add_runtime(runtime)`），同时会话 `export PATH` 更新；`python3 -m 模块名` 则无需注册。重启后 venv 直接可用，entry point 命令需再次调用工具补注册。
 - **装包后的会话 PATH**：更新为 `{venv}/bin:/usr/bin:/bin`——系统工具目录此时才引入（venv 已就位，`python3` 必然解析到 venv 解释器），与 §4 初始 PATH 只含 venv bin 的策略不矛盾。
 - **回退解释器解析**（无 uv 时）：优先 `python{venv_python}`（常为带完整 ensurepip/pip 的 uv 托管或自装解释器），否则系统 `python3`；选中解释器的安装根在系统目录之外（沙箱未授权）时补进只读授权，保证 venv 的解释器 symlink 在沙箱内可执行。
 - Python 环境不可用时，提示词的 Python 环境段（`sandbox_python.md`）整段不渲染（条件段 `python_env_available`）。
@@ -103,13 +103,14 @@ sandlock 完整规则集要求 Landlock ABI v6（Linux 6.12+）；低于 v6 但 
 | `venv_python` | 3.13 | venv 默认 Python 版本 |
 | `venv_timeout` | 300 | 宿主侧命令超时秒数 |
 
-## 8. 已知限制与边界事实（mirage 0.0.7 实测）
+## 8. 已知限制与边界事实（mirage 0.1.0 实测）
 
 - mirage 内置命令在宿主进程内执行（见 §2），`curl` 的网络访问不受沙箱约束。
+- 0.1.0 起机器进程（python3/venv 命令）的裸 `cmd &` 不再立即返回：`shell()` 阻塞至该程序结束或 10s（上游 `RUN_START_WAIT_SECONDS`）；超时后任务继续后台运行、跨轮可 `jobs`/`ps`/`kill` 管理。提示词应引导长任务改用后台+轮询或分步执行。
 - `MountMode` 必须 EXEC（WRITE 下 python3 → exit 126）。
 - 工作区目录必须 `realpath()`，否则写进 overlay 而宿主目录为空。
 - 官方 backend 裸相对路径仍落 VFS 根 overlay（VFS 内读得到、宿主无文件），而 `remove`/`realpath` 按会话 cwd 解析——`KanadeWorkspace` 统一绑定为绝对路径规避该不一致。
 - AI 敲绝对路径命令会被 basename 化经会话 PATH 重解析（防绕过，属设计而非缺陷）。
 - 受限进程的会话 cwd 不在宿主磁盘上时拒绝执行（exit 126）。
 
-0.0.7 已修复（旧文档记录、现已不适用）：内置 `curl` 的 `-m`/`-k` 误当端口（exit 7）；`/dev` 只读授权下 `>/dev/null` 报 Permission denied（null sink 现可写）；backend 写文件需手动建父目录（现自动创建）；`remove` 可删除会话工作目录（现拒绝 cwd 及其祖先）。
+0.0.7 已修复（历史记录）：内置 `curl` 的 `-m`/`-k` 误当端口（exit 7）；`/dev` 只读授权下 `>/dev/null` 报 Permission denied（null sink 现可写）；backend 写文件需手动建父目录（现自动创建）；`remove` 可删除会话工作目录（现拒绝 cwd 及其祖先）。

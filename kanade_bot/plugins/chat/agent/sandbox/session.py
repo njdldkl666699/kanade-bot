@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 from mirage import Workspace
-from mirage.runtime.sandbox.sandlock import SandlockRuntime
+from mirage.runtime.sandlock import SandlockRuntime
 from nonebot import logger
 
 from ...config import cfg
@@ -150,14 +150,11 @@ class SandboxSession:
             (SandlockRuntime,),
             {"name": f"venv-bin-{self._venv_seq}"},
         )
-        self.workspace.add_runtime(
-            runtime_cls(
-                captures=to_register,
-                config=sandbox_runtime_config(
-                    self.workspace_dir, self.uv_python_dir, self.font_dirs
-                ),
-            )
+        runtime = runtime_cls(
+            captures=to_register,
+            config=sandbox_runtime_config(self.workspace_dir, self.uv_python_dir, self.font_dirs),
         )
+        self.workspace.add_machine(runtime.name, runtime)
         self._venv_cmds.update(to_register)
         return to_register
 

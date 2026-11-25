@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from mirage import DiskVFS, MountMode, Workspace
-from mirage.runtime.sandbox.sandlock import SandlockRuntime
+from mirage.runtime.sandlock import SandlockRuntime
 from nonebot import get_driver, logger
 
 from ...config import cfg
@@ -121,7 +121,7 @@ class SandboxManager:
     async def _create(self, session_id: str) -> SandboxSession:
         """构建 Workspace + mirage 会话 + 官方 Pydantic AI backend
 
-        会话初始化（cd 工作区根 + export 环境变量）写入持久会话状态。
+        会话初始化（cd 工作区根 + export HOME/环境变量）写入持久会话状态。
         """
         workspace_dir = self._workspace_dir(session_id)
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -138,12 +138,18 @@ class SandboxManager:
                 )
             },
             mode=MountMode.EXEC,
-            runtimes=[self._build_runtime(workspace_dir)],
+            machines=[self._build_runtime(workspace_dir)],
         )
         mirage_session = f"kanade-{self._safe_name(session_id)}"
         workspace.create_session(mirage_session)
 
-        init_parts = [f"cd {shlex.quote(str(workspace_dir))}"]
+        # 0.1.0 起无 profile 会话的身份是 root（$HOME=/root、~ 会展开），显式导出
+        # 与 sandlock 子进程一致的 HOME，使内置命令与沙箱 python 的 ~ / $HOME 对齐；
+        # 会话 env 会覆盖 sandlock config env，两层始终同值（用户显式配置优先）
+        init_parts = [
+            f"cd {shlex.quote(str(workspace_dir))}",
+            f"export HOME={shlex.quote(str(sandbox_home))}",
+        ]
         for key, value in cfg.sandbox.environment.items():
             if not ENV_KEY_RE.fullmatch(key):
                 await workspace.close()

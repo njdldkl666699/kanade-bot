@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from mirage import Workspace
 from mirage.agents.pydantic_ai import MirageWorkspaceBackend
-from mirage.runtime.sandbox.sandlock import SandlockConfig
+from mirage.runtime.sandlock import SandlockConfig
 from pydantic_ai import RunContext
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.tools import AgentDepsT
