@@ -47,6 +47,8 @@ class ScopedConfig(AttrDocModel):
     """橘鸦AI早报缓存文件名"""
     juya_daily_image_cache_dir: str = "juya_daily_images"
     """橘鸦AI早报渲染图缓存目录名"""
+    juya_daily_render_images: bool = False
+    """是否下载橘鸦AI早报配图并渲染进长图；关闭时仅渲染文字，速度快且不依赖图床"""
 
     @property
     def fallback_icon_file_path(self) -> Path:

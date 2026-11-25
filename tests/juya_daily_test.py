@@ -6,6 +6,7 @@
 import asyncio
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -119,26 +120,47 @@ async def main():
     assert juya_daily._issues_last_check is not None
     print("persist round-trip: ok")
 
-    # 整期渲染（首次会下载全部配图）与渲染缓存
-    image = await juya_daily.render_juya_daily(latest, markdown)
-    assert image[:3] == b"\xff\xd8\xff", "渲染结果不是 JPEG"
-    print("rendered jpeg bytes:", len(image))
+    # 默认仅渲染文字：配图行被移除，不访问网络
+    assert not juya_daily.render_images_enabled()
+    prepared = await juya_daily._prepare_markdown(
+        "# 标题\n\n![](https://example.com/a.png)\n\n正文\n"
+    )
+    assert "![" not in prepared, "文字模式未移除配图行"
+    assert "data:" not in prepared
+    assert "正文" in prepared
+    print("text prepare: ok")
 
-    cache_path = juya_daily._render_cache_path(latest, markdown)
-    assert cache_path.is_file(), "渲染图未写入缓存"
-    assert await juya_daily.render_juya_daily(latest, markdown) == image, "渲染缓存未命中"
-    print("render cache hit: ok")
+    # 整期渲染（仅文字，无需下载配图）与渲染缓存
+    text_image = await juya_daily.render_juya_daily(latest, markdown)
+    assert text_image[:3] == b"\xff\xd8\xff", "渲染结果不是 JPEG"
+    print("text rendered jpeg bytes:", len(text_image))
+
+    text_cache = juya_daily._render_cache_path(latest, markdown)
+    assert text_cache.is_file(), "渲染图未写入缓存"
+    assert await juya_daily.render_juya_daily(latest, markdown) == text_image, "渲染缓存未命中"
+    print("text render cache hit: ok")
+
+    # 开启配图渲染：缓存键区分模式，整期渲染需下载全部配图
+    with patch.object(juya_daily.cfg, "juya_daily_render_images", True):
+        assert juya_daily.render_images_enabled()
+        img_cache = juya_daily._render_cache_path(latest, markdown)
+        assert img_cache != text_cache
+        image = await juya_daily.render_juya_daily(latest, markdown)
+        assert image[:3] == b"\xff\xd8\xff", "配图模式渲染结果不是 JPEG"
+        assert img_cache.is_file(), "配图模式渲染图未写入缓存"
+        print("image rendered jpeg bytes:", len(image))
 
     # 正文变更后渲染缓存应失效（新文件名）
-    assert juya_daily._render_cache_path(latest, markdown + "\n") != cache_path
+    assert juya_daily._render_cache_path(latest, markdown + "\n") != text_cache
     print("render key changes with markdown: ok")
 
-    # 不再对应缓存中正文的渲染图应被清理
-    stale = cache_path.with_name("stale_0.jpg")
+    # 不再对应缓存中正文的渲染图应被清理（两种模式的图都保留）
+    stale = text_cache.with_name("stale_0.jpg")
     await asyncio.to_thread(stale.write_bytes, b"x")
     juya_daily._prune_render_cache()
     assert not stale.exists(), "陈旧渲染图未被清理"
-    assert cache_path.is_file(), "清理误删了有效渲染图"
+    assert text_cache.is_file(), "清理误删了文字模式渲染图"
+    assert img_cache.is_file(), "清理误删了配图模式渲染图"
     print("render cache prune: ok")
 
     out = "/tmp/juya_daily_latest.jpg"

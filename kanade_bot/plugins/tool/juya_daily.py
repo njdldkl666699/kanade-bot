@@ -1,4 +1,18 @@
-"""橘鸦AI早报：抓取官方 markdown 源，整期渲染为一张长图"""
+"""橘鸦AI早报：抓取官方 markdown 源，整期渲染为一张长图
+
+数据源为早报官方站点 daily.juya.uk（B站互动页面「橘鸦AI早报」的数据来源）：
+- /issues.json：已发布期数列表（新→旧）
+- /markdown/{date}.md：对应日期的早报 markdown
+
+默认仅渲染文字（配置项 tool.juya_daily_render_images 关闭时直接移除配图行，
+渲染不依赖图床且速度更快）；开启后先由 httpx 并发下载配图（带重试），再以
+data URL 内联进 markdown，交给 nonebot_plugin_htmlrender 的 render_markdown
+整体渲染为 JPEG 长图。配图托管在 assets.juya.uk，实测经本机网络加载缓慢且
+不稳定（单张可达数十秒、偶发连接重置），直接让浏览器加载会拖垮渲染等待，
+因此下载失败的配图也会从 markdown 中移除，渲染过程不访问网络。
+markdown 源在段内使用硬换行（约 80 列），合并断行时仅在断点两侧均为字母数字
+且至少一侧为 ASCII 时补空格，避免中文句中出现多余空格。
+"""
 
 import asyncio
 import base64
@@ -59,6 +73,12 @@ RENDER_JPEG_QUALITY = 88
 
 RENDER_TIMEOUT_SECONDS = 120.0
 """整体渲染超时（秒），需覆盖全部内联配图的解码与排版"""
+
+
+def render_images_enabled() -> bool:
+    """是否下载配图并渲染进长图（配置项 tool.juya_daily_render_images，默认仅渲染文字）"""
+    return cfg.juya_daily_render_images
+
 
 _issue_date_re = re.compile(r"\d{4}-\d{2}-\d{2}")
 """期数日期格式"""
@@ -355,10 +375,20 @@ def _reflow_markdown(markdown: str) -> str:
 
 
 async def _prepare_markdown(markdown: str) -> str:
-    """合并硬换行，并将配图替换为 data URL（不可用的图直接移除）"""
+    """合并硬换行，并按配置处理配图
+
+    开启 tool.juya_daily_render_images 时下载配图并以 data URL 内联（不可用的图
+    移除）；关闭时直接移除全部配图行，仅渲染文字。
+    """
+    reflowed = _reflow_markdown(markdown).splitlines()
+    if not render_images_enabled():
+        return "\n".join(
+            line for line in reflowed if _image_line_re.fullmatch(line.strip()) is None
+        )
+
     images = await download_juya_images(markdown)
     lines: list[str] = []
-    for line in _reflow_markdown(markdown).splitlines():
+    for line in reflowed:
         matched = _image_line_re.fullmatch(line.strip())
         if matched is None:
             lines.append(line)
@@ -380,23 +410,29 @@ _render_cache_dir: Path = cfg.juya_daily_image_cache_dir_path
 """渲染图缓存目录"""
 
 
-def _render_cache_path(issue_date: date, markdown: str) -> Path:
-    """渲染图缓存路径：文件名含日期、正文摘要与渲染参数，正文更正或参数变更后自动失效"""
+def _render_cache_path(issue_date: date, markdown: str, *, images: bool | None = None) -> Path:
+    """渲染图缓存路径：文件名含日期、正文摘要、渲染模式与参数，正文更正或配置变更后自动失效
+
+    images 为 None 时取当前配置（tool.juya_daily_render_images）。
+    """
     digest = hashlib.sha1(markdown.encode("utf-8")).hexdigest()[:12]
-    render_key = f"{RENDER_WIDTH}x{RENDER_DEVICE_SCALE_FACTOR:g}q{RENDER_JPEG_QUALITY}"
+    if images is None:
+        images = render_images_enabled()
+    mode = "img" if images else "text"
+    render_key = f"{RENDER_WIDTH}x{RENDER_DEVICE_SCALE_FACTOR:g}q{RENDER_JPEG_QUALITY}_{mode}"
     return _render_cache_dir / f"{issue_date:%Y-%m-%d}_{digest}_{render_key}.jpg"
 
 
 def is_render_cached(issue_date: date, markdown: str) -> bool:
-    """该期早报的渲染长图是否已缓存（未缓存时首次生成约需一分钟）"""
+    """该期早报的渲染长图是否已缓存（未缓存时开启配图渲染首次约需一分钟）"""
     return _render_cache_path(issue_date, markdown).is_file()
 
 
 async def render_juya_daily(issue_date: date, markdown: str) -> bytes:
-    """将整期早报渲染为 JPEG 长图（按日期与正文缓存，命中时不再渲染）
+    """将整期早报渲染为 JPEG 长图（按日期、正文与渲染模式缓存，命中时不再渲染）
 
-    配图先下载再以 data URL 内联，渲染过程不访问网络；同一期的并发渲染共用
-    该期锁去重。
+    开启配图渲染时先下载再以 data URL 内联，渲染过程不访问网络；同一期的并发
+    渲染共用该期锁去重。
     """
     cache_path = _render_cache_path(issue_date, markdown)
     if cache_path.is_file():
@@ -421,12 +457,16 @@ async def render_juya_daily(issue_date: date, markdown: str) -> bytes:
 
 
 def _prune_render_cache() -> None:
-    """清理不再对应缓存中正文的渲染图（含旧版本正文与过期期数的图）"""
+    """清理不再对应缓存中正文的渲染图（含旧版本正文与过期期数的图）
+
+    同期正文同时保留文字与配图两种模式的渲染图，切换配置后无需重新渲染。
+    """
     if not _markdowns or not _render_cache_dir.is_dir():
         return
     expected = {
-        _render_cache_path(issue_date, markdown).name
+        _render_cache_path(issue_date, markdown, images=images).name
         for issue_date, (_, markdown) in _markdowns.items()
+        for images in (False, True)
     }
     for file in _render_cache_dir.iterdir():
         if file.name not in expected:

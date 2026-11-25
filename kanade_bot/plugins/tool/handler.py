@@ -36,6 +36,7 @@ from .juya_daily import (
     issue_page_url,
     overview_text,
     parse_days_ago,
+    render_images_enabled,
     render_juya_daily,
     resolve_issue_date,
 )
@@ -615,7 +616,8 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
 
     if isinstance(event, OneBotMessageEvent):
         if not is_render_cached(issue_date, markdown):
-            await juya_daily.send("这期长图还没生成过，正在下载配图并渲染，约需一分钟，请稍候…")
+            hint = "正在下载配图并渲染，约需一分钟" if render_images_enabled() else "正在渲染"
+            await juya_daily.send(f"这期长图还没生成过，{hint}，请稍候…")
         try:
             image = await render_juya_daily(issue_date, markdown)
         except Exception:

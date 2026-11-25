@@ -2751,6 +2751,12 @@
           "description": "橘鸦AI早报渲染图缓存目录名",
           "title": "Juya Daily Image Cache Dir",
           "type": "string"
+        },
+        "juya_daily_render_images": {
+          "default": false,
+          "description": "是否下载橘鸦AI早报配图并渲染进长图；关闭时仅渲染文字，速度快且不依赖图床",
+          "title": "Juya Daily Render Images",
+          "type": "boolean"
         }
       },
       "title": "ScopedConfig",
@@ -4087,7 +4093,8 @@
         "gpu_daily_cache_file": "gpu_daily_cache.json",
         "gpu_daily_image_cache_dir": "gpu_daily_images",
         "juya_daily_cache_file": "juya_daily_cache.json",
-        "juya_daily_image_cache_dir": "juya_daily_images"
+        "juya_daily_image_cache_dir": "juya_daily_images",
+        "juya_daily_render_images": false
       }
     },
     "tts": {
