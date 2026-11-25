@@ -2733,6 +2733,24 @@
           "description": "显卡日报缓存文件名",
           "title": "Gpu Daily Cache File",
           "type": "string"
+        },
+        "gpu_daily_image_cache_dir": {
+          "default": "gpu_daily_images",
+          "description": "显卡日报渲染图缓存目录名",
+          "title": "Gpu Daily Image Cache Dir",
+          "type": "string"
+        },
+        "juya_daily_cache_file": {
+          "default": "juya_daily_cache.json",
+          "description": "橘鸦AI早报缓存文件名",
+          "title": "Juya Daily Cache File",
+          "type": "string"
+        },
+        "juya_daily_image_cache_dir": {
+          "default": "juya_daily_images",
+          "description": "橘鸦AI早报渲染图缓存目录名",
+          "title": "Juya Daily Image Cache Dir",
+          "type": "string"
         }
       },
       "title": "ScopedConfig",
@@ -4066,7 +4084,10 @@
         "agnes_base_url": "https://api.agnes-ai.cn/v1",
         "security_daily_cache_file": "security_daily_cache.json",
         "security_weekly_cache_file": "security_weekly_cache.json",
-        "gpu_daily_cache_file": "gpu_daily_cache.json"
+        "gpu_daily_cache_file": "gpu_daily_cache.json",
+        "gpu_daily_image_cache_dir": "gpu_daily_images",
+        "juya_daily_cache_file": "juya_daily_cache.json",
+        "juya_daily_image_cache_dir": "juya_daily_images"
       }
     },
     "tts": {

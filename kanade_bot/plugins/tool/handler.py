@@ -1,6 +1,7 @@
 import base64
 import binascii
 import random
+from datetime import timedelta
 
 import emoji
 from mcstatus import JavaServer
@@ -27,11 +28,23 @@ from .gpu_daily import (
     get_gpu_daily_reports,
     render_gpu_daily,
 )
+from .juya_daily import (
+    extract_video_url,
+    get_juya_daily_markdown,
+    get_juya_issues,
+    is_render_cached,
+    issue_page_url,
+    overview_text,
+    parse_days_ago,
+    render_juya_daily,
+    resolve_issue_date,
+)
 from .matcher import (
     add_a_schedule,
     gpu_daily,
     image_edit,
     image_generation,
+    juya_daily,
     list_schedules,
     mc_skin,
     mc_status,
@@ -571,3 +584,48 @@ async def _(event: Event, arg_msg: Message = CommandArg()):
             await gpu_daily.finish(message)
 
     await gpu_daily.finish(f"{header}\n{footer}")
+
+
+@juya_daily.handle()
+async def _(event: Event, arg_msg: Message = CommandArg()):
+    days_ago = parse_days_ago(arg_msg.extract_plain_text())
+    if days_ago is None:
+        await juya_daily.finish("参数无效：留空看当天，或用数字回看几天前的早报（如 3 或 3天前）")
+
+    issues = await get_juya_issues()
+    if not issues:
+        await juya_daily.finish("暂时拿不到早报列表，稍后再试试吧")
+
+    target = asia_shanghai_now().date() - timedelta(days=days_ago)
+    issue_date = resolve_issue_date(issues, target)
+    if issue_date is None:
+        await juya_daily.finish(f"最早只能看到 {issues[-1]:%Y年%m月%d日} 的早报")
+    header = ""
+    if issue_date != target:
+        unpublished = "今日早报还未发布" if days_ago == 0 else f"{target:%m月%d日} 未发布早报"
+        header = f"{unpublished}，先看看 {issue_date:%m月%d日} 的\n"
+
+    markdown = await get_juya_daily_markdown(issue_date)
+    if markdown is None:
+        await juya_daily.finish("这期早报暂时拿不到，稍后再试试吧")
+
+    footer = f"详情: {issue_page_url(issue_date)}"
+    if video_url := extract_video_url(markdown):
+        footer = f"视频版: {video_url}\n{footer}"
+
+    if isinstance(event, OneBotMessageEvent):
+        if not is_render_cached(issue_date, markdown):
+            await juya_daily.send("这期长图还没生成过，正在下载配图并渲染，约需一分钟，请稍候…")
+        try:
+            image = await render_juya_daily(issue_date, markdown)
+        except Exception:
+            logger.exception("渲染橘鸦AI早报失败")
+        else:
+            message = OneBotMessage(header)
+            message += MessageSegment.image(image)
+            message += OneBotMessage(f"\n{footer}")
+            await juya_daily.finish(message)
+
+    await juya_daily.finish(
+        f"{header}AI 早报 {issue_date}\n\n{overview_text(markdown)}\n\n{footer}"
+    )

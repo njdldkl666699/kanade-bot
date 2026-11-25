@@ -43,6 +43,10 @@ class ScopedConfig(AttrDocModel):
     """显卡日报缓存文件名"""
     gpu_daily_image_cache_dir: str = "gpu_daily_images"
     """显卡日报渲染图缓存目录名"""
+    juya_daily_cache_file: str = "juya_daily_cache.json"
+    """橘鸦AI早报缓存文件名"""
+    juya_daily_image_cache_dir: str = "juya_daily_images"
+    """橘鸦AI早报渲染图缓存目录名"""
 
     @property
     def fallback_icon_file_path(self) -> Path:
@@ -83,6 +87,16 @@ class ScopedConfig(AttrDocModel):
     def gpu_daily_image_cache_dir_path(self) -> Path:
         """显卡日报渲染图缓存目录路径"""
         return get_plugin_cache_file(self.gpu_daily_image_cache_dir)
+
+    @property
+    def juya_daily_cache_file_path(self) -> Path:
+        """橘鸦AI早报缓存文件路径"""
+        return get_plugin_cache_file(self.juya_daily_cache_file)
+
+    @property
+    def juya_daily_image_cache_dir_path(self) -> Path:
+        """橘鸦AI早报渲染图缓存目录路径"""
+        return get_plugin_cache_file(self.juya_daily_image_cache_dir)
 
 
 class Config(BaseModel):

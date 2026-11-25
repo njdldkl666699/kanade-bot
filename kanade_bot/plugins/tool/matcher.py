@@ -181,3 +181,11 @@ gpu_daily = on_command(
     block=True,
 )
 register_matcher(gpu_daily, "显卡日报")
+
+juya_daily = on_command(
+    "橘鸦AI早报",
+    aliases={"juya"},
+    priority=2,
+    block=True,
+)
+register_matcher(juya_daily, "橘鸦AI早报")
