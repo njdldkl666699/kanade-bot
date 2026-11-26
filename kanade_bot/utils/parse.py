@@ -228,6 +228,13 @@ async def parse_onebot_message_for_ai(
     if len(message) == 1 and message[0].type == "forward" and bot:
         return await format_forward_message_for_ai(bot, message[0], fetch_images=fetch_images)
 
+    if isinstance(event_or_reply, OneBotMessageEvent) and (reply := event_or_reply.reply):
+        sender = reply.sender
+        sender_info = build_sender_info(sender.card or sender.nickname, str(sender.user_id))
+        # TODO 未来可以添加消息id引用
+        # reply_view = reply.message.to_rich_text()
+        text_parts.append(f"[引用 {sender_info} 的消息]")
+
     # 逐段处理消息：图片解析为附件并留下占位文本，其余消息段按类型格式化为文字
     for segment in message:
         if segment.type == "image":
